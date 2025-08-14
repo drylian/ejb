@@ -1,11 +1,47 @@
 import { ESCAPE_HTML, ESPACE_HTML_REGEX } from "./constants";
-import type { Ejb } from "./ejb";
 import type { AnyEjb } from "./types";
 
 export const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
 export function escapeRegExp(string: string) {
     // From MDN
     return string.replace(/[.*+\-?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function returnEjbRes(ejb: AnyEjb, str: string) {
+    return `(${ejb.async ? "await" : ''}(${ejb.async ? 'async' : ''}($ejb) => {${str}; return $ejb.res})({...$ejb, res:''}))`;
+}
+export function join(...segments: string[]) {
+    let path = segments.join('/');
+
+    const parts = [];
+
+    const splitPath = path.split('/');
+
+    for (let part of splitPath) {
+        if (part === '' || part === '.') continue;
+
+        if (part === '..') {
+            if (parts.length > 0) {
+                parts.pop();
+            }
+            continue;
+        }
+
+        parts.push(part);
+    }
+
+    path = parts.join('/');
+
+    if (segments[0]?.startsWith('/') && !path.startsWith('/')) {
+        path = '/' + path;
+    }
+
+    const isWindowsPath = segments.some(segment => segment.includes('\\'));
+    if (isWindowsPath) {
+        path = path.replace(/\//g, '\\');
+    }
+
+    return path || '.';
 }
 
 export const escapeJs = (str: string) => str

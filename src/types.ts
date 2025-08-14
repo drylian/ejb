@@ -6,11 +6,11 @@ export type IfAsync<Async extends boolean, T> = Async extends true ? Promise<T> 
 
 export type AnyEjb = Ejb<boolean>;
 export type EjbAnyReturn<type> = type | Promise<type>;
-export interface EjbContructor {
+export interface EjbContructor<Async extends boolean> {
     aliases: Record<string, string>;
     extension: string;
-    async: boolean;
-    resolver: (path: string) => EjbAnyReturn<string>;
+    async: Async;
+    resolver: (path: string) => IfAsync<Async, string>;
     globals: Record<string, any>;
     directives: Record<string, EjbDirectivePlugin>;
     prefix: {
@@ -28,31 +28,26 @@ export interface EjbFunctionContext {
     EjbFunction: (...args: any[]) => any;
 }
 
-export interface EjbContext {
-    code: string;
-    end: (endstr: string) => void;
-}
-
-export interface EjbChildrenContext extends EjbContext {
-    children: string;
+export interface EjbChildrenContext {
+    children: AstNode[];
 }
 
 export interface EjbDirectiveBasement { 
     name: string;
-    onParams?: (ejb: AnyEjb, expression: string, opts: EjbContext) => EjbAnyReturn<string | undefined>;
+    onParams?: (ejb: AnyEjb, expression: string) => EjbAnyReturn<string | undefined>;
     onChildren?: (ejb: AnyEjb, opts: EjbChildrenContext) => EjbAnyReturn<string>;
 }
 
 export interface EjbDirectiveParent extends EjbDirectiveBasement {};
 export interface EjbDirectivePlugin extends EjbDirectiveBasement {
     children?: boolean;
+    childrenRaw?:boolean;
     priority?:number;
-    parents?: Record<string, EjbDirectiveParent>;
-    onInitFile?: (ejb: AnyEjb, opts: Omit<EjbContext, 'compileNode'>) => EjbAnyReturn<string>;
-    onEndFile?: (ejb: AnyEjb, opts: Omit<EjbContext, 'compileNode'>) => EjbAnyReturn<string>;
-    onInit?: (ejb: AnyEjb, opts: EjbContext) => EjbAnyReturn<string>;
-    onPre?: (ejb: AnyEjb, block: (endstr: string) => void) => EjbAnyReturn<unknown>;
-    onEnd?: (ejb: AnyEjb, opts: EjbContext) => EjbAnyReturn<string>;
+    parents?: EjbDirectiveParent[];
+    onInitFile?: (ejb: AnyEjb) => EjbAnyReturn<string>;
+    onEndFile?: (ejb: AnyEjb) => EjbAnyReturn<string>;
+    onInit?: (ejb: AnyEjb) => EjbAnyReturn<string>;
+    onEnd?: (ejb: AnyEjb) => EjbAnyReturn<string>;
 }
 
 export type AstNode = RootNode | TextNode | DirectiveNode | InterpolationNode;

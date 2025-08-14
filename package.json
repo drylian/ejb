@@ -1,11 +1,57 @@
 {
-  "name": "ejb",
-  "module": "src/index.ts",
+  "name": "@caeljs/ejb",
   "type": "module",
-  "devDependencies": {
-    "@types/bun": "latest"
+  "description": "A simple view system inspired by Blade.",
+  "version": "0.1.0",
+  "main": "cjs/index.cjs",
+  "module": "esm/index.js",
+  "types": "index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/drylian/configjs.git"
   },
-  "peerDependencies": {
-    "typescript": "^5"
+  "typesVersions": {
+    "*": {
+      ".": [
+        "./index.d.ts"
+      ]
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./esm/index.js",
+      "require": "./cjs/index.cjs"
+    }
+  },
+  "keywords": [
+    "backend",
+    "standardization",
+    "standard",
+    "blade",
+    "npm",
+    "node",
+    "bun",
+    "deno",
+    "typescript",
+    "debug",
+    "output",
+    "performance"
+  ],
+  "author": "Drylian",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/drylian/ejb/issues"
+  },
+  "homepage": "https://github.com/drylian/ejb#readme",
+  "scripts": {
+    "build": "bun run build.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.10",
+    "@types/node": "^22.15.2",
+    "dts-bundle-generator": "^9.5.1",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.3"
   }
 }
