@@ -63,8 +63,8 @@ export const DEFAULT_DIRECTIVES = Object.assign({},
         onChildren(ejb, opts) {
             const promise = ejb.compileNode(opts.children, true);
             const processing = isPromise(promise)
-                ? promise.then(i => `\`${i}\``)
-                : `\`${promise}\``
+                ? promise.then(i => returnEjbRes(ejb, i))
+                : returnEjbRes(ejb, promise)
             return `$ejb.css.add(
                 ${processing}
             );`
