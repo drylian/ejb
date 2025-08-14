@@ -50,7 +50,7 @@ export interface EjbDirectivePlugin extends EjbDirectiveBasement {
     onEnd?: (ejb: AnyEjb) => EjbAnyReturn<string>;
 }
 
-export type AstNode = RootNode | TextNode | DirectiveNode | InterpolationNode | CssBlockNode;
+export type AstNode = RootNode | TextNode | DirectiveNode | InterpolationNode;
 
 export interface AstNodeBase {
     type: EjbAst;
@@ -77,9 +77,4 @@ export interface InterpolationNode extends AstNodeBase {
     type: EjbAst.Interpolation;
     expression: string;
     escaped: boolean;
-}
-
-export interface CssBlockNode extends AstNodeBase {
-    type: EjbAst.CssBlock;
-    content: string;
 }

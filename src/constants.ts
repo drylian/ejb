@@ -10,7 +10,6 @@ export enum EjbAst {
     Text,
     Interpolation,
     Directive,
-    CssBlock,
 }
 
 export function ejbDirective(opts: EjbDirectivePlugin) {
