@@ -61,7 +61,7 @@ export const DEFAULT_DIRECTIVES = Object.assign({},
         children: true,
         onInitFile: () => `$ejb.css = new Set();`,
         onChildren(ejb, opts) {
-            const promise = ejb.compileNode(opts.children, true);
+            const promise = ejb.compileNode(opts.children);
             const processing = isPromise(promise)
                 ? promise.then(i => returnEjbRes(ejb, i))
                 : returnEjbRes(ejb, promise)
@@ -69,7 +69,7 @@ export const DEFAULT_DIRECTIVES = Object.assign({},
                 ${processing}
             );`
         },
-        onEndFile: () => `$ejb.head.add($ejb.css.values().toArray().join("\\n"))`,
+        onEndFile: () => `$ejb.head.add(\`<style>\${$ejb.css.values().toArray().join("\\n")}</style>\`)`,
     }),
     /**
      * Import directive

@@ -10,74 +10,86 @@ export function escapeRegExp(string: string) {
 export function returnEjbRes(ejb: AnyEjb, str: string) {
     return `(${ejb.async ? "await" : ''}(${ejb.async ? 'async' : ''}($ejb) => {${str}; return $ejb.res})({...$ejb, res:''}))`;
 }
-export function join(...segments: string[]) {
-    let path = segments.join('/');
 
-    const parts = [];
+export function join(...segments: string[]): string {
+    if (!segments.length) return '.';
 
-    const splitPath = path.split('/');
+    const windowsAbsoluteRegex = /^[a-zA-Z]:[\\/]/;
+    const isWindowsAbsolute = segments.some(s => windowsAbsoluteRegex.test(s));
+    const driveLetter = isWindowsAbsolute
+        ? segments.find(s => windowsAbsoluteRegex.test(s))?.charAt(0).toUpperCase()
+        : null;
 
-    for (let part of splitPath) {
-        if (part === '' || part === '.') continue;
+    let normalized = segments
+        .map(s => s.replace(/\\/g, '/').replace(/\/+/g, '/'))
+        .join('/')
+        .replace(/\/+/g, '/');
 
-        if (part === '..') {
-            if (parts.length > 0) {
-                parts.pop();
-            }
-            continue;
-        }
+    if (isWindowsAbsolute && driveLetter) {
+        normalized = normalized.replace(/^[a-zA-Z]:/, driveLetter);
+    }
+    const isAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(normalized);
 
-        parts.push(part);
+    const parts = normalized
+        .split('/')
+        .filter(part => part && part !== '.')
+        .reduce((acc, part) => {
+            return part === '..'
+                ? (acc.length && acc[acc.length - 1] !== '..')
+                    ? acc.slice(0, -1)
+                    : [...acc, part]
+                : [...acc, part];
+        }, [] as string[]);
+
+    let path = parts.join('/');
+
+    if (isWindowsAbsolute) {
+        path = path.replace(/^([a-zA-Z]:)/, (_, drive) => `${drive.toUpperCase()}/`)
+            .replace(/^\//, `${driveLetter}:/`)
+            .replace(/\//g, '\\');
+
+        path = path.replace(/\\+/g, '\\');
+        return path || '.';
     }
 
-    path = parts.join('/');
+    if (isAbsolute) path = '/' + path.replace(/^\//, '');
+    if (path === '') return '.';
 
-    if (segments[0]?.startsWith('/') && !path.startsWith('/')) {
-        path = '/' + path;
-    }
-
-    const isWindowsPath = segments.some(segment => segment.includes('\\'));
-    if (isWindowsPath) {
-        path = path.replace(/\//g, '\\');
-    }
-
-    return path || '.';
+    return path;
 }
+
+export const filepathResolver = (ejb: AnyEjb, filepath: string, currentFile?: string): string => {
+    if (!filepath) return filepath;
+
+    filepath = filepath.replace(/\\/g, '/').replace(/\/+/g, '/');
+    const root = (ejb.root || '.').replace(/\\/g, '/').replace(/\/$/, '');
+
+    const isAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(filepath);
+
+    const aliasMatch = Object.entries(ejb.aliases)
+        .sort(([a], [b]) => b.length - a.length)
+        .find(([alias]) => new RegExp(`^${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(filepath));
+
+    if (aliasMatch) {
+        const [alias, replacement] = aliasMatch;
+        filepath = join(replacement, filepath.slice(alias.length));
+    } else if (!isAbsolute) {
+        const base = currentFile ? currentFile.replace(/\/[^/]*$/, '') : root;
+        filepath = join(base, filepath);
+    }
+
+    if (ejb.extension && !/\.[^/.]+$/.test(filepath)) {
+        const ext = ejb.extension.startsWith('.') ? ejb.extension : `.${ejb.extension}`;
+        filepath = filepath + ext;
+    }
+
+    return filepath.replace(/\/+/g, '/');
+};
 
 export const escapeJs = (str: string) => str
     .replace(/\\/g, '\\\\')
     .replace(/`/g, '\\`')
     .replace(/\$\{/g, '\\${');
-
-export const filepathResolver = (ejb: AnyEjb, filepath: string) => {
-    // normalize filepath
-    filepath = filepath.replace(/\\/g, '/');
-
-    // This avoids problems when one alias is a prefix of another. (e.j: '@' and '@components')
-    const aliases = Object.entries(ejb.aliases)
-        .sort(([a], [b]) => b.length - a.length);
-
-    for (const [alias, replacement] of aliases) {
-        if (filepath.startsWith(alias)) {
-            filepath = replacement + filepath.slice(alias.length);
-            break;
-        }
-    }
-
-    if (ejb.extension && !filepath.endsWith(ejb.extension)) {
-        const lastDotIndex = filepath.lastIndexOf('.');
-        const lastSlashIndex = filepath.lastIndexOf('/');
-
-        if (lastDotIndex > lastSlashIndex) {
-            filepath = filepath.slice(0, lastDotIndex);
-        }
-
-        filepath += ejb.extension.startsWith('.') ? ejb.extension : `.${ejb.extension}`;
-    }
-
-    return filepath;
-};
-
 
 export function simpleHash(str: string): string {
     let hash = 0;

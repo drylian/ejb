@@ -2,7 +2,7 @@ import { EJB_DEFAULT_PREFIX_GLOBAL, EJB_DEFAULT_PREFIX_DIRECTIVE, EJB_DEFAULT_PR
 import type { AstNode, EjbContructor, EjbDirectivePlugin, IfAsync } from "./types";
 import { ejbParser } from './parser';
 import { compile, generateNodeCode, generateNodeString } from './compiler';
-import { AsyncFunction, escapeHtml, escapeJs, isPromise } from './utils';
+import { AsyncFunction, escapeHtml, escapeJs, filepathResolver, isPromise } from './utils';
 import { DEFAULT_DIRECTIVES } from "./directives";
 
 export class Ejb<Async extends boolean = false> {
@@ -11,6 +11,8 @@ export class Ejb<Async extends boolean = false> {
     public globals: EjbContructor<Async>['globals'];
     public prefix: EjbContructor<Async>['prefix'];
     public aliases: EjbContructor<Async>['aliases'];
+    public root: EjbContructor<Async>['root'];
+
     public async: Async;
     public getFunction = () => this.async ? AsyncFunction : Function;
     public directives: EjbContructor<Async>['directives'] = {};
@@ -40,32 +42,30 @@ export class Ejb<Async extends boolean = false> {
     }
 
     public render(template: string, locals: Record<string, any> = {}): IfAsync<Async, string> {
-        if (template.trim().split('\n').length === 1) {
-            const ptpath = template.trim();
-            if (ptpath.includes('/') ||
-                ptpath.includes('\\') ||
-                ptpath.includes('.')) {
-                try {
-                    const resolvedContent = this.resolver
-                        ? this.resolver(ptpath)
-                        : ptpath;
+        const isPotentialPath = template.trim().split('\n').length === 1 &&
+            (template.includes('/') || template.includes('\\') || template.includes('.'));
 
-                    if (isPromise(resolvedContent)) {
-                        if (!this.async) {
-                            throw new Error('[EJB] Async template loading in sync mode. Enable async or provide sync resolver.');
-                        }
-                        return (async () => {
-                            const code = (await Promise.resolve(resolvedContent)) as string;
-                            return await this.render(code, locals);
-                        })() as unknown as IfAsync<Async, string>;
+        if (isPotentialPath) {
+            try {
+                const resolvedPath = filepathResolver(this, template);
+                const resolvedContent = this.resolver?.(resolvedPath) ?? template;
+
+                if (isPromise(resolvedContent)) {
+                    if (!this.async) {
+                        throw new Error('[EJB] Async template loading in sync mode');
                     }
-
-                    template = resolvedContent;
-                } catch (e) {
-                    console.warn(`[EJB] Could not resolve template path "${ptpath}", using as literal template.`);
+                    return (async () => {
+                        const content = await resolvedContent;
+                        return this.render(content as string, locals);
+                    })() as unknown as IfAsync<Async, string>;
                 }
+
+                template = resolvedContent as string;
+            } catch (e) {
+                console.warn(`[EJB] Template path resolution failed, using as literal: ${template}`);
             }
         }
+
 
         const ast = ejbParser(this, template);
         const codeResult = compile(this, ast);
@@ -111,6 +111,7 @@ export class Ejb<Async extends boolean = false> {
         this.extension = opts.extension ?? 'ejb';
         this.globals = opts.globals ?? {};
         this.async = (opts.async ?? false) as Async;
+        this.root = opts.root ?? './';
         //@ts-expect-error ignore
         this.resolver = opts.resolver ?? ((path: string) => {
             const content = `[EJB]: Resolver not defined, but was required for path: ${path}`;

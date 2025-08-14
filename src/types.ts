@@ -10,6 +10,7 @@ export interface EjbContructor<Async extends boolean> {
     aliases: Record<string, string>;
     extension: string;
     async: Async;
+    root:string;
     resolver: (path: string) => IfAsync<Async, string>;
     globals: Record<string, any>;
     directives: Record<string, EjbDirectivePlugin>;
