@@ -1,6 +1,6 @@
 import { EjbAst } from "./constants";
 import type { Ejb } from "./ejb";
-import type { RootNode, AstNode, TextNode, InterpolationNode, DirectiveNode, IfAsync } from "./types";
+import type { RootNode, AstNode, TextNode, InterpolationNode, DirectiveNode, CssBlockNode, IfAsync } from "./types";
 import { escapeJs, isPromise } from "./utils";
 
 function processNode(
@@ -40,6 +40,9 @@ export function generateNodeString(ejb: Ejb<boolean>, node: AstNode): string | P
     case EjbAst.Text:
       return escapeJs((node as TextNode).value);
     
+    case EjbAst.CssBlock:
+      return escapeJs((node as CssBlockNode).content);
+    
     default:
       return '';
   }
@@ -52,6 +55,9 @@ export function generateNodeCode(ejb: Ejb<boolean>, node: AstNode): string | Pro
 
     case EjbAst.Text:
       return `$ejb.res += \`${escapeJs((node as TextNode).value)}\`;\n`;
+
+    case EjbAst.CssBlock:
+      return `$ejb.res += \`${escapeJs((node as CssBlockNode).content)}\`;\n`;
 
     case EjbAst.Interpolation: {
       const { expression, escaped } = node as InterpolationNode;
