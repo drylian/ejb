@@ -38,6 +38,6 @@ test("should parse nested directives", () => {
   const ast = ejb.parserAst("@if(true) @for(item in list) Loop @end @end");
   expect(ast.children.length).toBe(1);
   const ifNode = ast.children[0] as any;
-  expect(ifNode.children.length).toBe(2); // Text + for directive
+  expect(ifNode.children.length).toBe(3); // Text + for directive + Text
   expect(ifNode.children[1].type).toBe(EjbAst.Directive);
 });

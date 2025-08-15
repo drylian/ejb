@@ -1,4 +1,4 @@
-import { EJB_DEFAULT_PREFIX_GLOBAL, EJB_DEFAULT_PREFIX_DIRECTIVE, EJB_DEFAULT_PREFIX_VARIABLE } from "./constants";
+import { EJB_DEFAULT_PREFIX_GLOBAL, EJB_DEFAULT_PREFIX_DIRECTIVE, EJB_DEFAULT_PREFIX_VARIABLE, ejbDirective } from "./constants";
 import type { AstNode, EjbContructor, EjbDirectivePlugin, IfAsync } from "./types";
 import { ejbParser } from './parser';
 import { compile, generateNodeCode, generateNodeString } from './compiler';
@@ -43,7 +43,7 @@ export class Ejb<Async extends boolean = false> {
 
     public render(template: string, locals: Record<string, any> = {}): IfAsync<Async, string> {
         const isPotentialPath = template.trim().split('\n').length === 1 &&
-            (template.includes('/') || template.includes('\\') || template.includes('.'));
+            (template.includes('/') || template.includes('\\'));
 
         if (isPotentialPath) {
             try {
@@ -71,7 +71,6 @@ export class Ejb<Async extends boolean = false> {
         const codeResult = compile(this, ast);
 
         const execute = (code: string) => {
-            console.log(code)
             const executor = new (this.getFunction())(
                 '$ejb',
                 this.prefix.global,
@@ -102,7 +101,8 @@ export class Ejb<Async extends boolean = false> {
     }
 
     public register(...directives: EjbDirectivePlugin[]) {
-        this.directives = Object.assign(this.directives, ...directives);
+        const formatted = directives.map(i => Object.keys(i).length == 1 ? i : ejbDirective(i))
+        this.directives = Object.assign(this.directives, ...formatted);
         return this;
     }
 

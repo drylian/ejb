@@ -1,2 +1,2 @@
-@import('./imported.ejb')
+@import('@/imported')
 <div>Main content.</div>

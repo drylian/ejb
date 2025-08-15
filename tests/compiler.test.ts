@@ -37,6 +37,6 @@ test("should compile if directive", () => {
 test("should compile root node", () => {
   const ejb = new Ejb();
   const ast = { type: EjbAst.Root, children: [] };
-  const result = compile(ejb, ast);
+  const result = compile(ejb, ast as any);
   expect(result).toContain("return $ejb");
 });

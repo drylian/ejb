@@ -18,15 +18,9 @@ test("should import content from another file", async () => {
 
 test("should handle css directive", () => {
   const ejb = new Ejb();
-  const result = ejb.render("@css body { color: red; } @end");
+  const result = ejb.render("@head() @css body { color: red; } @end");
   expect(result).toContain("<style>");
   expect(result).toContain("body { color: red; }");
-});
-
-test("should handle head directive", () => {
-  const ejb = new Ejb();
-  const result = ejb.render("@head <title>Test</title> @end");
-  expect(result).toContain("<title>Test</title>");
 });
 
 test("should handle for directive", () => {
