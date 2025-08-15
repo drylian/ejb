@@ -1,12 +1,12 @@
 import type { Ejb } from "./ejb";
-import type { RootNode, DirectiveNode } from "./types";
+import type { RootNode, DirectiveNode, SubDirectiveNode } from "./types";
 import { EJB_DEFAULT_PREFIX_VARIABLE, EjbAst } from "./constants";
 
 const DIRECTIVE_REGEX = /^\s*([a-zA-Z0-9]+)(?:\s*\(([\s\S]*?)\))?/;
 
 export function ejbParser<A extends boolean>(ejb: Ejb<A>, template: string): RootNode {
     const root: RootNode = { type: EjbAst.Root, children: [] };
-    const stack: (RootNode | DirectiveNode)[] = [root];
+    const stack: (RootNode | DirectiveNode | SubDirectiveNode)[] = [root];
     let cursor = 0;
 
     const [interpStart, interpEnd] = (ejb.prefix.variable || EJB_DEFAULT_PREFIX_VARIABLE).split('*');
@@ -55,33 +55,74 @@ export function ejbParser<A extends boolean>(ejb: Ejb<A>, template: string): Roo
             cursor += matched_str.length;
 
             if (name === 'end') {
-                if (stack.length === 1) throw new Error("Unexpected @end directive");
+                if (stack.length === 1) throw new Error("Unexpected ${ejb.prefix.directive}end directive");
                 stack.pop();
             } else {
-                const directiveDef = ejb.directives[name!];
-                if (!directiveDef) {
-                     throw new Error(`[EJB] Directive not found: @${name}`);
+                // Check if this is a parent directive from current context
+                const currentParent = stack[stack.length - 1];
+                let isSubDirective = false;
+                let parentDirectiveName = '';
+
+                if (currentParent && (currentParent.type === EjbAst.Directive || currentParent.type === EjbAst.SubDirective)) {
+                    const parentName = currentParent.type === EjbAst.Directive 
+                        ? (currentParent as DirectiveNode).name 
+                        : (currentParent as SubDirectiveNode).parentName;
+                    
+                    const parentDirectiveDef = ejb.directives[parentName];
+                    if (parentDirectiveDef?.parents) {
+                        const parentDef = parentDirectiveDef.parents.find(p => p.name === name);
+                        if (parentDef) {
+                            isSubDirective = true;
+                            parentDirectiveName = parentName;
+                        }
+                    }
                 }
 
-                const directiveNode: DirectiveNode = {
-                    type: EjbAst.Directive,
-                    name: name!,
-                    expression: expr.trim(),
-                    children: []
-                };
-                parent!.children.push(directiveNode);
+                if (isSubDirective) {
+                    const subDirectiveNode: SubDirectiveNode = {
+                        type: EjbAst.SubDirective,
+                        name: name!,
+                        expression: expr.trim(),
+                        children: [],
+                        parentName: parentDirectiveName
+                    };
+                    parent!.children.push(subDirectiveNode);
 
-                // Only push directives that expect children onto the stack
-                if (directiveDef.children) {
-                    stack.push(directiveNode);
+                    // Check if the parent directive definition has internal: true
+                    const parentDirectiveDef = ejb.directives[parentDirectiveName];
+                    const parentDef = parentDirectiveDef?.parents?.find(p => p.name === name);
+                    if (parentDef?.internal) {
+                        stack.push(subDirectiveNode);
+                    }
+                } else {
+                    const directiveDef = ejb.directives[name!];
+                    if (!directiveDef) {
+                        throw new Error(`[EJB] Directive not found: ${ejb.prefix.directive}${name}`);
+                    }
+
+                    const directiveNode: DirectiveNode = {
+                        type: EjbAst.Directive,
+                        name: name!,
+                        expression: expr.trim(),
+                        children: []
+                    };
+                    parent!.children.push(directiveNode);
+
+                    // Only push directives that expect children onto the stack
+                    if (directiveDef.children) {
+                        stack.push(directiveNode);
+                    }
                 }
             }
         }
     }
 
     if (stack.length > 1) {
-        const openDirective = stack[stack.length - 1] as DirectiveNode;
-        throw new Error(`Unclosed ${directivePrefix}${openDirective.name} directive.`);
+        const openDirective = stack[stack.length - 1];
+        const name = openDirective.type === EjbAst.Directive 
+            ? (openDirective as DirectiveNode).name 
+            : (openDirective as SubDirectiveNode).name;
+        throw new Error(`Unclosed ${directivePrefix}${name} directive.`);
     }
 
     return root;

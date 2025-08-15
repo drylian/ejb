@@ -1,8 +1,8 @@
-import { EJB_DEFAULT_PREFIX_GLOBAL, EJB_DEFAULT_PREFIX_DIRECTIVE, EJB_DEFAULT_PREFIX_VARIABLE, ejbDirective } from "./constants";
+import { EJB_DEFAULT_PREFIX_GLOBAL, EJB_DEFAULT_PREFIX_DIRECTIVE, EJB_DEFAULT_PREFIX_VARIABLE, ejbDirective, DIRECTIVE_REGEX } from "./constants";
 import type { AstNode, EjbContructor, EjbDirectivePlugin, IfAsync } from "./types";
 import { ejbParser } from './parser';
 import { compile, generateNodeCode, generateNodeString } from './compiler';
-import { AsyncFunction, escapeHtml, escapeJs, filepathResolver, isPromise } from './utils';
+import { AsyncFunction, escapeHtml, escapeJs, escapeRegExp, filepathResolver, isPromise } from './utils';
 import { DEFAULT_DIRECTIVES } from "./directives";
 
 export class Ejb<Async extends boolean = false> {
@@ -42,8 +42,7 @@ export class Ejb<Async extends boolean = false> {
     }
 
     public render(template: string, locals: Record<string, any> = {}): IfAsync<Async, string> {
-        const isPotentialPath = template.trim().split('\n').length === 1 &&
-            (template.includes('/') || template.includes('\\'));
+        const isPotentialPath = this.isTemplatePath(template);
 
         if (isPotentialPath) {
             try {
@@ -65,7 +64,6 @@ export class Ejb<Async extends boolean = false> {
                 console.warn(`[EJB] Template path resolution failed, using as literal: ${template}`);
             }
         }
-
 
         const ast = ejbParser(this, template);
         const codeResult = compile(this, ast);
@@ -99,6 +97,32 @@ export class Ejb<Async extends boolean = false> {
             return result.res as IfAsync<Async, string>;
         }
     }
+
+    private isTemplatePath(template: string): boolean {
+        const trimmed = template.trim();
+
+        // Definitely not a path if it has multiple lines
+        if (trimmed.split('\n').length > 1) {
+            return false;
+        }
+
+        // Not a path if it's clearly a directive
+        const directivePattern = new RegExp(`^\\s*${escapeRegExp(this.prefix.directive)}`);
+        if (directivePattern.test(trimmed)) {
+            return false;
+        }
+
+        // Not a path if it contains template syntax
+        const [interpStart] = (this.prefix.variable || EJB_DEFAULT_PREFIX_VARIABLE).split('*');
+        if (trimmed.includes(interpStart)) {
+            return false;
+        }
+
+        // Consider it a path if it contains path characters
+        return trimmed.includes('/') || trimmed.includes('\\') ||
+            trimmed.startsWith('@/') || trimmed.startsWith('@\\');
+    }
+
 
     public register(...directives: EjbDirectivePlugin[]) {
         const formatted = directives.map(i => Object.keys(i).length == 1 ? i : ejbDirective(i))

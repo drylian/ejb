@@ -1,15 +1,14 @@
 import { EjbAst } from "./constants";
 import type { Ejb } from "./ejb";
-import type { RootNode, AstNode, TextNode, InterpolationNode, DirectiveNode, IfAsync } from "./types";
-import { escapeJs, isPromise } from "./utils";
+import type { RootNode, AstNode, TextNode, InterpolationNode, DirectiveNode, IfAsync, SubDirectiveNode } from "./types";
+import { escapeJs, isPromise, PromiseResolver } from "./utils";
 
 function processNode(
   ejb: Ejb<boolean>, 
   node: AstNode,
   stringMode: boolean
 ): string | Promise<string> {
-  const generator = stringMode ? generateNodeString : generateNodeCode;
-  return generator(ejb, node);
+  return stringMode ? generateNodeString(ejb, node) : generateNodeCode(ejb, node);
 }
 
 function processChildren(
@@ -20,12 +19,8 @@ function processChildren(
   if (!children.length) return '';
   
   const results = children.map(child => processNode(ejb, child, stringMode));
-  const promises = results.filter(isPromise);
-
-  if (promises.length > 0) {
-    if (!ejb.async) {
-      throw new Error('[EJB] Async operation in sync mode during child processing');
-    }
+  if (results.some(isPromise)) {
+    if (!ejb.async) throw new Error('[EJB] Async operation in sync mode');
     return Promise.all(results).then(resolved => resolved.join(''));
   }
   
@@ -34,106 +29,87 @@ function processChildren(
 
 export function generateNodeString(ejb: Ejb<boolean>, node: AstNode): string | Promise<string> {
   switch (node.type) {
-    case EjbAst.Root:
-      return processChildren(ejb, node.children, true);
-
-    case EjbAst.Text:
-      return escapeJs((node as TextNode).value);
-    
-    default:
-      return '';
+    case EjbAst.Root: return processChildren(ejb, node.children, true);
+    case EjbAst.Text: return escapeJs((node as TextNode).value);
+    default: return '';
   }
 }
 
 export function generateNodeCode(ejb: Ejb<boolean>, node: AstNode): string | Promise<string> {
   switch (node.type) {
-    case EjbAst.Root:
-      return processChildren(ejb, node.children);
-
-    case EjbAst.Text:
-      return `$ejb.res += \`${escapeJs((node as TextNode).value)}\`;\n`;
-
+    case EjbAst.Root: return processChildren(ejb, node.children);
+    case EjbAst.Text: return `$ejb.res += \`${escapeJs((node as TextNode).value)}\`;\n`;
     case EjbAst.Interpolation: {
       const { expression, escaped } = node as InterpolationNode;
       const value = escaped ? `$ejb.escapeHtml(${expression})` : expression;
       return `$ejb.res += ${value};\n`;
     }
-    
-    case EjbAst.Directive:
-      return handleDirective(ejb, node, false);
-    
-    default:
-      return '';
+    case EjbAst.Directive: return handleDirective(ejb, node, false);
+    case EjbAst.SubDirective: return handleDirective(ejb, node, false);
+    default: return '';
   }
 }
 
 function handleDirective(
   ejb: Ejb<boolean>,
-  node: DirectiveNode,
+  node: DirectiveNode | SubDirectiveNode,
   stringMode: boolean
 ): string | Promise<string> {
   const { name, expression, children } = node;
-  const directive = ejb.directives[name];
-
-  if (!directive) {
-    throw new Error(`[EJB] Directive not found: @${name}`);
+  
+  // Get the appropriate directive definition
+  let directive;
+  if (node.type === EjbAst.SubDirective) {
+    const parentDirective = ejb.directives[(node as SubDirectiveNode).parentName];
+    directive = parentDirective?.parents?.find(p => p.name === name);
+  } else {
+    directive = ejb.directives[name];
   }
+  
+  if (!directive) throw new Error(`[EJB] Directive not found: @${name}`);
 
-  // Processa onParams se existir
-  const processParams = () => {
-    if (!directive.onParams) return '';
-    const result = directive.onParams(ejb, expression);
-    if (isPromise(result) && !ejb.async) {
-      throw new Error(`[EJB] Directive '@${name}' is async (onParams) in sync mode`);
-    }
-    return result || '';
-  };
-
-  // Processa children conforme definido pela diretiva
-  const processDirectiveChildren = (paramsResult: string) => {
-    if (!directive.children) return paramsResult;
-
-    if (directive.onChildren) {
-      const result = directive.onChildren(ejb, { children });
+  const buildProcessor = (handler: Function, ...args: any[]) => {
+    return (prev: string) => {
+      const result = handler(...args);
       if (isPromise(result) && !ejb.async) {
-        throw new Error(`[EJB] Directive '@${name}' is async (onChildren) in sync mode`);
+        throw new Error(`[EJB] Async operation in sync mode for @${name}`);
       }
-      return isPromise(result)
-        ? result.then(childrenResult => paramsResult + childrenResult)
-        : paramsResult + result;
-    }
-
-    const childrenResult = processChildren(ejb, children, stringMode);
-    return isPromise(childrenResult)
-      ? childrenResult.then(cr => paramsResult + cr)
-      : paramsResult + childrenResult;
+      return PromiseResolver(result, (res: string) => prev + (res || ''));
+    };
   };
 
-  // Processa onEnd se existir
-  const processEnd = (currentCode: string) => {
-    if (!directive.onEnd) return currentCode;
+  const processors: Array<(input: string) => string | Promise<string>> = [];
+  
+  // Handle directive initialization
+  if (directive.onInit) processors.push(buildProcessor(directive.onInit, ejb));
+  
+  // Handle parameters processing
+  if (directive.onParams) processors.push(buildProcessor(directive.onParams, ejb, expression));
+  
+  // Handle children processing
+  processors.push((prev) => {
+    //@ts-expect-error ignore
+    if (!directive.children && !(directive.internal && children.length)) return prev;
     
-    const result = directive.onEnd(ejb);
-    if (isPromise(result) && !ejb.async) {
-      throw new Error(`[EJB] Directive '@${name}' is async (onEnd) in sync mode`);
+    if (directive.onChildren) {
+      return buildProcessor(directive.onChildren, ejb, { children })(prev);
     }
-    return isPromise(result)
-      ? result.then(endResult => currentCode + endResult)
-      : currentCode + result;
-  };
+    
+    return PromiseResolver(
+      processChildren(ejb, children, stringMode),
+      (res) => prev + res
+    );
+  });
 
-  // Encadeia todo o processamento
-  const paramsResult = processParams();
-  if (isPromise(paramsResult)) {
-    return (paramsResult as Promise<string>)
-      .then(processDirectiveChildren)
-      .then(processEnd);
+  // Handle directive finalization
+  if (directive.onEnd) processors.push(buildProcessor(directive.onEnd, ejb));
+
+  let result: string | Promise<string> = '';
+  for (const processor of processors) {
+    result = PromiseResolver(result, processor);
   }
 
-  const childrenResult = processDirectiveChildren(paramsResult);
-  return isPromise(childrenResult)
-    ? childrenResult.then(processEnd)
-    : processEnd(childrenResult);
+  return result;
 }
 
 export function compile<Async extends boolean>(
@@ -141,50 +117,35 @@ export function compile<Async extends boolean>(
   ast: RootNode
 ): IfAsync<Async, string> {
   const bodyCode = generateNodeCode(ejb, ast);
-  const endFns: Function[] = [];
-  const initCodes: (string | Promise<string>)[] = [];
+  const endFns = Object.values(ejb.directives)
+    .filter(d => d.onEndFile)
+    .map(d => d.onEndFile);
 
-  // Processa inicializações e finalizações das diretivas
-  Object.values(ejb.directives).forEach(directive => {
-    if (directive.onEndFile) endFns.push(directive.onEndFile);
-    if (directive.onInitFile) {
-      const initCode = directive.onInitFile(ejb);
-      if (initCode) initCodes.push(initCode);
-    }
-  });
+  const initCodes = Object.values(ejb.directives)
+    .filter(d => d.onInitFile)
+    .map(d => d?.onInitFile?.(ejb))
+    .filter(Boolean);
 
-  const constructFinalCode = (mainCode: string) => {
-    const initCode = initCodes
-      .filter(Boolean)
-      .map(code => typeof code === 'string' ? code : '')
-      .join('\n');
+  const buildFinalCode = (init: string, body: string) => 
+    `${init}\n${body}${endFns.length ? `\n${endFns.map(fn => fn?.(ejb)).join('\n')}` : ''}\nreturn $ejb;`;
 
-    const endCode = endFns.length > 0
-      ? `\n${endFns.map(fn => fn(ejb)).join('\n')}`
-      : '';
-
-    return `${initCode}\n${mainCode}${endCode}\nreturn $ejb;`;
-  };
-
-  if (isPromise(bodyCode) || initCodes.some(isPromise)) {
-    if (!ejb.async) {
-      throw new Error('[EJB] Async compilation in sync mode');
-    }
-    
-    return (async () => {
-      const [resolvedBody, ...resolvedInits] = await Promise.all([
-        bodyCode,
-        ...initCodes.filter(isPromise)
-      ]);
-
-      let initIdx = 0;
-      const resolvedInitCode = initCodes
-        .map(code => isPromise(code) ? resolvedInits[initIdx++] : code)
-        .join('\n');
-
-      return constructFinalCode(`${resolvedInitCode}\n${resolvedBody}`);
-    })() as IfAsync<Async, string>;
+  if (!isPromise(bodyCode) && !initCodes.some(isPromise)) {
+    return buildFinalCode(initCodes.join('\n'), bodyCode as string) as IfAsync<Async, string>;
   }
 
-  return constructFinalCode(bodyCode as string) as IfAsync<Async, string>;
+  if (!ejb.async) throw new Error('[EJB] Async compilation in sync mode');
+
+  return (async () => {
+    const [resolvedBody, ...resolvedInits] = await Promise.all([
+      bodyCode,
+      ...initCodes.filter(isPromise)
+    ]);
+
+    let initIdx = 0;
+    const init = initCodes
+      .map(code => isPromise(code) ? resolvedInits[initIdx++] : code)
+      .join('\n');
+
+    return buildFinalCode(init, resolvedBody);
+  })() as IfAsync<Async, string>;
 }

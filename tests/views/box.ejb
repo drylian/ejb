@@ -1,0 +1,7 @@
+<div>
+@if($children)
+ {{$children}}
+@elseif($slot)
+ {{$slot}}
+@end
+</div>

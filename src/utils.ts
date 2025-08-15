@@ -11,6 +11,23 @@ export function returnEjbRes(ejb: AnyEjb, str: string) {
     return `(${ejb.async ? "await" : ''}(${ejb.async ? 'async' : ''}($ejb) => {${str}; return $ejb.res})({...$ejb, res:''}))`;
 }
 
+export function PromiseResolver<Input, Output = Input>(
+    data: Input | Promise<Input>,
+    ...transformers: Array<(value: any) => any>
+): Output | Promise<Output> {
+    const apply = (value: any, index = 0): any => {
+        if (index >= transformers.length) return value;
+        const transformed = transformers[index](value);
+        return isPromise(transformed)
+            ? transformed.then(v => apply(v, index + 1))
+            : apply(transformed, index + 1);
+    };
+
+    return isPromise(data)
+        ? data.then(v => apply(v))
+        : apply(data);
+}
+
 export function join(...segments: string[]): string {
     if (!segments.length) return '.';
 

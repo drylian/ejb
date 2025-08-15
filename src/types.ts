@@ -10,7 +10,7 @@ export interface EjbContructor<Async extends boolean> {
     aliases: Record<string, string>;
     extension: string;
     async: Async;
-    root:string;
+    root: string;
     resolver: (path: string) => IfAsync<Async, string>;
     globals: Record<string, any>;
     directives: Record<string, EjbDirectivePlugin>;
@@ -33,17 +33,21 @@ export interface EjbChildrenContext {
     children: AstNode[];
 }
 
-export interface EjbDirectiveBasement { 
+export interface EjbDirectiveBasement {
     name: string;
     onParams?: (ejb: AnyEjb, expression: string) => EjbAnyReturn<string | undefined>;
     onChildren?: (ejb: AnyEjb, opts: EjbChildrenContext) => EjbAnyReturn<string>;
 }
 
-export interface EjbDirectiveParent extends EjbDirectiveBasement {};
+export interface EjbDirectiveParent extends EjbDirectiveBasement {
+    onInit?: (ejb: AnyEjb) => EjbAnyReturn<string>;
+    onEnd?: (ejb: AnyEjb) => EjbAnyReturn<string>;
+    internal?: boolean;
+};
 export interface EjbDirectivePlugin extends EjbDirectiveBasement {
     children?: boolean;
-    childrenRaw?:boolean;
-    priority?:number;
+    childrenRaw?: boolean;
+    priority?: number;
     parents?: EjbDirectiveParent[];
     onInitFile?: (ejb: AnyEjb) => EjbAnyReturn<string>;
     onEndFile?: (ejb: AnyEjb) => EjbAnyReturn<string>;
@@ -51,7 +55,7 @@ export interface EjbDirectivePlugin extends EjbDirectiveBasement {
     onEnd?: (ejb: AnyEjb) => EjbAnyReturn<string>;
 }
 
-export type AstNode = RootNode | TextNode | DirectiveNode | InterpolationNode;
+export type AstNode = RootNode | TextNode | DirectiveNode | InterpolationNode | SubDirectiveNode;
 
 export interface AstNodeBase {
     type: EjbAst;
@@ -78,4 +82,12 @@ export interface InterpolationNode extends AstNodeBase {
     type: EjbAst.Interpolation;
     expression: string;
     escaped: boolean;
+}
+
+export interface SubDirectiveNode extends AstNodeBase {
+    type: EjbAst.SubDirective;
+    name: string;
+    expression: string;
+    children: AstNode[];
+    parentName: string;
 }
