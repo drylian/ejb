@@ -4,19 +4,45 @@ import { ejbParser } from './parser';
 import { compile, generateNodeCode, generateNodeString } from './compiler';
 import { AsyncFunction, escapeHtml, escapeJs, escapeRegExp, filepathResolver, isPromise } from './utils';
 import { DEFAULT_DIRECTIVES } from "./directives";
+import { writeFileSync } from "fs";
 
+/**
+ * EJB Template Engine class
+ * @template Async - Boolean indicating if the instance should work in async mode
+ */
 export class Ejb<Async extends boolean = false> {
+    /** File resolver function */
     public resolver: EjbContructor<Async>['resolver'];
+    /** Default file extension */
     public extension: EjbContructor<Async>['extension'];
+    /** Global variables available in templates */
     public globals: EjbContructor<Async>['globals'];
+    /** Prefix configuration */
     public prefix: EjbContructor<Async>['prefix'];
+    /** Path aliases mapping */
     public aliases: EjbContructor<Async>['aliases'];
+    /** Root directory for file resolution */
     public root: EjbContructor<Async>['root'];
 
+    /** Async mode flag */
     public async: Async;
+    
+    /**
+     * Returns the appropriate function constructor (AsyncFunction or Function)
+     * based on async mode
+     * @returns {FunctionConstructor} The function constructor to use
+     */
     public getFunction = () => this.async ? AsyncFunction : Function;
+    
+    /** Registered directives */
     public directives: EjbContructor<Async>['directives'] = {};
 
+    /**
+     * Compiles AST node(s) to executable code or string
+     * @param node - AST node or array of nodes to compile
+     * @param stringMode - Whether to generate string output instead of executable code
+     * @returns Compiled code or string (wrapped in Promise if async)
+     */
     public compileNode(
         node: AstNode | AstNode[],
         stringMode = false
@@ -37,10 +63,21 @@ export class Ejb<Async extends boolean = false> {
         return Promise.all(codes).then(resolvedCodes => resolvedCodes.join('')) as IfAsync<Async, string>;
     }
 
+    /**
+     * Parses template string into AST
+     * @param code - Template string to parse
+     * @returns Root AST node
+     */
     public parserAst(code: string) {
         return ejbParser(this, code);
     }
 
+    /**
+     * Renders a template with provided locals
+     * @param template - Template string or path to template file
+     * @param locals - Variables to make available during rendering
+     * @returns Rendered output (wrapped in Promise if async)
+     */
     public render(template: string, locals: Record<string, any> = {}): IfAsync<Async, string> {
         const isPotentialPath = this.isTemplatePath(template);
 
@@ -93,11 +130,18 @@ export class Ejb<Async extends boolean = false> {
             if (isPromise(codeResult)) {
                 throw new Error('[EJB] Compilation resulted in a Promise in sync mode. Use renderAsync or configure sync resolver/directives.');
             }
+            console.log(codeResult)
+            writeFileSync('result.js', codeResult)
             const result = execute(codeResult as string);
             return result.res as IfAsync<Async, string>;
         }
     }
 
+    /**
+     * Determines if a string is likely a template path
+     * @param template - String to check
+     * @returns True if string appears to be a path
+     */
     private isTemplatePath(template: string): boolean {
         const trimmed = template.trim();
 
@@ -123,13 +167,21 @@ export class Ejb<Async extends boolean = false> {
             trimmed.startsWith('@/') || trimmed.startsWith('@\\');
     }
 
-
+    /**
+     * Registers one or more directives
+     * @param directives - Directives to register
+     * @returns The Ejb instance for chaining
+     */
     public register(...directives: EjbDirectivePlugin[]) {
         const formatted = directives.map(i => Object.keys(i).length == 1 ? i : ejbDirective(i))
         this.directives = Object.assign(this.directives, ...formatted);
         return this;
     }
 
+    /**
+     * Creates an Ejb instance
+     * @param opts - Configuration options
+     */
     constructor(opts: Partial<EjbContructor<Async>> & { async?: Async } = {}) {
         this.aliases = opts.aliases ?? {};
         this.extension = opts.extension ?? 'ejb';

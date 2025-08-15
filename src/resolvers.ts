@@ -2,6 +2,18 @@ import { readFileSync } from "node:fs";
 import type { IfAsync } from "./types";
 import { readFile } from "node:fs/promises";
 
+/**
+ * Creates a file resolver function for Node.js environments
+ * @template Async - Boolean indicating if resolver should work in async mode
+ * @param async - Optional flag to force async/sync mode (defaults to generic type)
+ * @returns A resolver function that handles file reading
+ * 
+ * @example
+ * // Async resolver
+ * const asyncResolver = EJBNodeJSResolver<true>();
+ * // Sync resolver
+ * const syncResolver = EJBNodeJSResolver<false>();
+ */
 export const EJBNodeJSResolver = <Async extends boolean = false>(async?: Async) => {
     return (importpath: string) => {
         try {
@@ -17,7 +29,15 @@ export const EJBNodeJSResolver = <Async extends boolean = false>(async?: Async) 
     }
 }
 
-export const EJBBunResolver = async (importpath: string) => {
+/**
+ * File resolver implementation for Bun runtime environment
+ * @param importpath - Path to the file to resolve
+ * @returns Promise resolving to file contents or empty string on error
+ * 
+ * @example
+ * const content = await EJBBunResolver('./template.ejb');
+ */
+export const EJBBunResolver = async (importpath: string): Promise<string> => {
     try {
         const file = Bun.file(importpath);
         return await file.exists() ? await file.text() : '';

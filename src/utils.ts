@@ -1,16 +1,39 @@
 import { ESCAPE_HTML, ESPACE_HTML_REGEX } from "./constants";
 import type { AnyEjb } from "./types";
 
+/**
+ * Reference to the AsyncFunction constructor
+ */
 export const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
-export function escapeRegExp(string: string) {
+
+/**
+ * Escapes special regex characters in a string
+ * @param string - The string to escape
+ * @returns The escaped string
+ */
+export function escapeRegExp(string: string): string {
     // From MDN
     return string.replace(/[.*+\-?^${}()|[\]\\]/g, "\\$&");
 }
 
-export function returnEjbRes(ejb: AnyEjb, str: string) {
+/**
+ * Wraps template code in an Ejb function wrapper
+ * @param ejb - The Ejb instance
+ * @param str - The code string to wrap
+ * @returns Wrapped function code
+ */
+export function returnEjbRes(ejb: AnyEjb, str: string): string {
     return `(${ejb.async ? "await" : ''}(${ejb.async ? 'async' : ''}($ejb) => {${str}; return $ejb.res})({...$ejb, res:''}))`;
 }
 
+/**
+ * Resolves promises and applies transformers in sequence
+ * @template Input - Input type
+ * @template Output - Output type (defaults to Input)
+ * @param data - Input data (can be promise)
+ * @param transformers - Array of transformation functions
+ * @returns Transformed output (wrapped in promise if async)
+ */
 export function PromiseResolver<Input, Output = Input>(
     data: Input | Promise<Input>,
     ...transformers: Array<(value: any) => any>
@@ -28,6 +51,11 @@ export function PromiseResolver<Input, Output = Input>(
         : apply(data);
 }
 
+/**
+ * Joins path segments and normalizes the resulting path
+ * @param segments - Path segments to join
+ * @returns Normalized path string
+ */
 export function join(...segments: string[]): string {
     if (!segments.length) return '.';
 
@@ -75,6 +103,13 @@ export function join(...segments: string[]): string {
     return path;
 }
 
+/**
+ * Resolves file paths with aliases and extensions
+ * @param ejb - The Ejb instance
+ * @param filepath - The path to resolve
+ * @param currentFile - Optional current file path for relative resolution
+ * @returns Resolved file path
+ */
 export const filepathResolver = (ejb: AnyEjb, filepath: string, currentFile?: string): string => {
     if (!filepath) return filepath;
 
@@ -103,11 +138,21 @@ export const filepathResolver = (ejb: AnyEjb, filepath: string, currentFile?: st
     return filepath.replace(/\/+/g, '/');
 };
 
-export const escapeJs = (str: string) => str
+/**
+ * Escapes JavaScript string content for template literals
+ * @param str - The string to escape
+ * @returns Escaped string
+ */
+export const escapeJs = (str: string): string => str
     .replace(/\\/g, '\\\\')
     .replace(/`/g, '\\`')
     .replace(/\$\{/g, '\\${');
 
+/**
+ * Generates a simple hash from a string
+ * @param str - Input string
+ * @returns Numeric hash string
+ */
 export function simpleHash(str: string): string {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -118,12 +163,22 @@ export function simpleHash(str: string): string {
     return String(Math.abs(hash));
 }
 
+/**
+ * Generates a unique ID with prefix
+ * @param prefix - ID prefix
+ * @returns Generated unique ID
+ */
 export function generateId(prefix: string): string {
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).substring(2, 8);
     return `${prefix.replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}_${random}`.toLowerCase();
 }
 
+/**
+ * Escapes HTML special characters
+ * @param value - Value to escape
+ * @returns Escaped HTML string
+ */
 export function escapeHtml(value: any): string {
     if (value === null || value === undefined) return '';
     return String(value).replace(
@@ -132,6 +187,12 @@ export function escapeHtml(value: any): string {
     );
 }
 
+/**
+ * Type guard for Promise objects
+ * @template T - Promise result type
+ * @param p - Value to check
+ * @returns True if value is a Promise
+ */
 export function isPromise<T>(p: any): p is Promise<T> {
     return p !== null && typeof p === 'object' && typeof p.then === 'function';
 }

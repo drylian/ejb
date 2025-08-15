@@ -5,6 +5,6 @@
 <div>Main content.</div>
 @for(const item in items) {
     @component('@/box')
-        {{ item }}
+         {{ item }}
     @end
 }

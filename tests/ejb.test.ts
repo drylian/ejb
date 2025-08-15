@@ -22,9 +22,11 @@ test("should handle async operations", async () => {
 });
 
 test("should throw on async in sync mode", () => {
-  const ejb = new Ejb();
-  expect(() => ejb.render("Hello {{name}}", { name: "World" }))
-    .toThrow("name is not defined");
+  const ejb = new Ejb({
+    resolver: () => Promise.resolve(""),
+  });
+  expect(() => ejb.render("template.ejb"))
+    .toThrow("[EJB] Async template loading in sync mode");
 });
 
 test("should register custom directives", () => {
@@ -34,4 +36,18 @@ test("should register custom directives", () => {
   });
   const result = ejb.render("@custom()");
   expect(result).toInclude("CUSTOM_CODE");
+});
+
+test("should determine if a string is a template path", () => {
+    const ejb = new Ejb();
+    expect(ejb['isTemplatePath']('path/to/template.ejb')).toBe(true);
+    expect(ejb['isTemplatePath']('Hello {{it.name}}')).toBe(false);
+    expect(ejb['isTemplatePath']('@if(true) Hello @end')).toBe(false);
+});
+
+test("should compile node", () => {
+    const ejb = new Ejb();
+    const ast = ejb.parserAst("Hello World");
+    const result = ejb.compileNode(ast);
+    expect(result).toContain("$ejb.res += `Hello World`;");
 });

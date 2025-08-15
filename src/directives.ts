@@ -104,21 +104,22 @@ export const DEFAULT_DIRECTIVES = Object.assign({},
     ejbDirective({
         name: 'component',
         priority: 10,
-        children: false,
+        children: true,
         parents: [{
             name: 'slot',
-            internal:true,
+            internal: true,
             onParams: (ejb, exp) => {
-                return `const $${exp} = ${ejb.async ? 'await' : ''} (${ejb.async ? 'async' : ''} ($ejb) => {`
+                return `$slots["$" + ${exp}] = ${ejb.async ? 'await' : ''} (${ejb.async ? 'async' : ''} ($ejb) => {`
             },
+            onEnd: () => "\nreturn $ejb.res;})({ ...$ejb, res:'' });",
         }],
         // onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
         // onInit + onEnd + sync = $ejb.res += (($ejb) => { ...content })({ ...$ejb, res: ''});
-        onInit: (ejb) => `$ejb.res += ${ejb.async ? 'await' : ''} (${ejb.async ? 'async' : ''} ($ejb) => {`,
-        onEnd: () => "})({ ...$ejb, res:'' });",
-        onChildren: (ejb, { children }) => {
+        onInit: (ejb) => `$ejb.res += ${ejb.async ? 'await' : ''} (${ejb.async ? 'async' : ''} ($ejb) => { const $slots = {};\n`,
+        onEnd: () => "return $_component($_import, {...$_variables, ...$slots}); })({ ...$ejb, res:'' });",
+        onChildren: (ejb, { children, parents }) => {
             return PromiseResolver(ejb.compileNode(children), (content: string) => {
-                return `const $slot = ${returnEjbRes(ejb, content)} ?? ""`;
+                return `$slots.$slot = ${returnEjbRes(ejb, content)} ?? "";\n ${parents ?? ""}\n`;
             })
         },
         onParams: (ejb, exp) => {
@@ -127,7 +128,7 @@ export const DEFAULT_DIRECTIVES = Object.assign({},
             const params = (expIdx === -1 ? '{}' : exp.slice(expIdx + 1)).trim();
 
             if (!ejb.resolver) {
-                throw new Error(`[EJB] @import directive requires a resolver to be configured.`);
+                throw new Error(`[EJB] @ directive requires a resolver to be configured.`);
             }
 
             try {
@@ -149,7 +150,7 @@ export const DEFAULT_DIRECTIVES = Object.assign({},
                         return [
                             "const $_import = { ...$ejb, res: '' };",
                             `const $_variables = { ...${ejb.prefix.global}, ...(${params}) };`,
-                            `return new $ejb.EjbFunction('$ejb', $ejb.ins.prefix.global, \`${escapeJs(code)}\\nreturn $ejb.res;\`)($_import, $_variables)`
+                            `const $_component = new $ejb.EjbFunction('$ejb', $ejb.ins.prefix.global, \`${escapeJs(code)}\\nreturn $ejb.res;\`);\n`
                         ].join('\n');
                     });
                 });
@@ -158,6 +159,13 @@ export const DEFAULT_DIRECTIVES = Object.assign({},
                 return `return \`<!-- EJB Import Error: ${escapeJs(e.message)} -->\`;`;
             }
         }
+    }),
+    ejbDirective({
+        name:"isset",
+        priority:1,
+        onParams(_, expression) {
+            return `if(typeof ${expression} !== "undefined" && ${expression}) $ejb.res += ${expression};`
+        },
     }),
     /**
      * css directive

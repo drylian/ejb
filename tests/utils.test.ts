@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { Ejb } from "../src/ejb";
-import { escapeJs, escapeHtml, isPromise, filepathResolver } from "../src/utils";
+import { escapeJs, escapeHtml, isPromise, filepathResolver, escapeRegExp, returnEjbRes, PromiseResolver, join, simpleHash, generateId } from "../src/utils";
 
 test("should escape JS strings", () => {
-  expect(escapeJs("Hello `world` ${name}")).toBe("Hello \\`world\\` \\${name}");
+  expect(escapeJs("Hello `world` ${name}")).toBe("Hello \`world\` \${name}");
 });
 
 test("should escape HTML", () => {
@@ -27,3 +27,30 @@ test("should resolve file paths with aliases", () => {
   expect(filepathResolver(ejb, "utils/helper", "/project/main.ejb"))
     .toBe("/project/utils/helper.ejb");
 });
+
+test("should escape regex characters", () => {
+    expect(escapeRegExp("[.*+?^${}()|[\\]\\")).toBe("\\[.\\*\\+\\?\\_\\^\\$\\{\\\\}\\(|\\[\\]\\\\\\\\");
+});
+
+test("should return ejb response", () => {
+    const ejb = new Ejb();
+    expect(returnEjbRes(ejb, "test")).toBe("((($ejb) => {test; return $ejb.res})({...$ejb, res:''}))");
+});
+
+test("should resolve promises", async () => {
+    const result = await PromiseResolver(Promise.resolve(1), (v) => v + 1);
+    expect(result).toBe(2);
+});
+
+test("should join paths", () => {
+    expect(join("a", "b", "c")).toBe("a/b/c");
+});
+
+test("should create a simple hash", () => {
+    expect(simpleHash("test")).toBe("3556498");
+});
+
+test("should generate an id", () => {
+    expect(generateId("prefix")).toContain("prefix");
+});
+
