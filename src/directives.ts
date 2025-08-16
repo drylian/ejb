@@ -31,7 +31,7 @@ export const DEFAULT_DIRECTIVES = Object.assign({},
             },
             {
                 name: 'else',
-                onChildren: (_, ctx) => `} else {\n ${ctx.children}`,
+                onChildren: (_, ctx) => PromiseResolver(_.compileNode(ctx.children), (res) =>`} else {\n ${res}`),
             }
         ],
         onEnd: () => {

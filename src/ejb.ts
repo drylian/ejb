@@ -4,7 +4,6 @@ import { ejbParser } from './parser';
 import { compile, generateNodeCode, generateNodeString } from './compiler';
 import { AsyncFunction, escapeHtml, escapeJs, escapeRegExp, filepathResolver, isPromise } from './utils';
 import { DEFAULT_DIRECTIVES } from "./directives";
-import { writeFileSync } from "fs";
 
 /**
  * EJB Template Engine class
@@ -98,7 +97,12 @@ export class Ejb<Async extends boolean = false> {
 
                 template = resolvedContent as string;
             } catch (e) {
-                console.warn(`[EJB] Template path resolution failed, using as literal: ${template}`);
+                console.log(e)
+                if(e && typeof e == "object" && 'code' in e && e.code == 'ENOENT') {
+                    console.warn(`[EJB] Template path resolution failed, using as literal: ${template}`);
+                } else {
+                    throw e;
+                }
             }
         }
 
@@ -130,8 +134,6 @@ export class Ejb<Async extends boolean = false> {
             if (isPromise(codeResult)) {
                 throw new Error('[EJB] Compilation resulted in a Promise in sync mode. Use renderAsync or configure sync resolver/directives.');
             }
-            console.log(codeResult)
-            writeFileSync('result.js', codeResult)
             const result = execute(codeResult as string);
             return result.res as IfAsync<Async, string>;
         }
@@ -172,8 +174,8 @@ export class Ejb<Async extends boolean = false> {
      * @param directives - Directives to register
      * @returns The Ejb instance for chaining
      */
-    public register(...directives: EjbDirectivePlugin[]) {
-        const formatted = directives.map(i => Object.keys(i).length == 1 ? i : ejbDirective(i))
+    public register(...directives: (EjbDirectivePlugin | Record<string, EjbDirectivePlugin>)[]) {
+        const formatted = directives.map(i => Object.keys(i).length == 1 ? i : ejbDirective(i as EjbDirectivePlugin));
         this.directives = Object.assign(this.directives, ...formatted);
         return this;
     }

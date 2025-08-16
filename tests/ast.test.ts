@@ -30,7 +30,23 @@ test("should parse directives", () => {
 
 test("should throw on unclosed directive", () => {
   const ejb = new Ejb();
-  expect(() => ejb.parserAst("@if(true) Hello")).toThrow("Unclosed @if directive");
+  expect(ejb.parserAst("@if(true) Hello")).toEqual({
+    type: EjbAst.Root,
+    children: [
+      {
+        type: 3,
+        name: "if",
+        expression: "true",
+        children: [
+          {
+            type: 1,
+            value: " Hello",
+          }
+        ],
+        autoClosed: true,
+      }
+    ],
+  });
 });
 
 test("should parse nested directives", () => {

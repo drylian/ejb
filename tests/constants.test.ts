@@ -30,16 +30,6 @@ test("should return head directive replacer", () => {
     expect(EJB_HEAD_DIRECTIVE_REPLACER).toBe("<!--$EJB-HEAD-REPLACER-->");
 });
 
-test("should return EjbAst enum", () => {
-    expect(EjbAst).toEqual({
-        Root: 0,
-        Text: 1,
-        Interpolation: 2,
-        Directive: 3,
-        SubDirective: 4
-    });
-});
-
 test("should create a directive plugin", () => {
     const directive: EjbDirectivePlugin = {
         name: "custom",

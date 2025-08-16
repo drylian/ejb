@@ -1,7 +1,5 @@
 import { expect, test } from "bun:test";
 import { Ejb } from "../src/ejb";
-import { EJBNodeJSResolver } from "../src/resolvers";
-import { join } from "path";
 
 test("should render simple template", () => {
   const ejb = new Ejb();
@@ -11,7 +9,7 @@ test("should render simple template", () => {
 
 test("should handle if directive", () => {
   const ejb = new Ejb();
-  const result = ejb.render("@if(it.show) Hello @end", { show: true });
+  const result = ejb.render("@if(it.show) Hello", { show: true });
   expect(result).toBe(" Hello ");
 });
 
@@ -23,9 +21,10 @@ test("should handle async operations", async () => {
 
 test("should throw on async in sync mode", () => {
   const ejb = new Ejb({
-    resolver: () => Promise.resolve(""),
+    //@ts-expect-error simulate error resolver
+    resolver: async () => "",
   });
-  expect(() => ejb.render("template.ejb"))
+  expect(() => ejb.render("./template.ejb"))
     .toThrow("[EJB] Async template loading in sync mode");
 });
 
@@ -35,6 +34,7 @@ test("should register custom directives", () => {
     onParams: () => "$ejb.res +='CUSTOM_CODE';",
   });
   const result = ejb.render("@custom()");
+  console.log(result)
   expect(result).toInclude("CUSTOM_CODE");
 });
 
