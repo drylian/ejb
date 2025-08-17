@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import type { IfAsync } from "./types";
 import { readFile } from "node:fs/promises";
+import type { IfAsync } from "./types";
 
 /**
  * Creates a file resolver function for Node.js environments

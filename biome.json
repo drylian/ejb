@@ -15,6 +15,15 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
+			"complexity":{
+				"noBannedTypes":"off"
+			},
+			"performance": {
+				"noAccumulatingSpread":"off"
+			},
+			"suspicious": {
+				"noExplicitAny":"off"
+			},
 			"recommended": true
 		}
 	},

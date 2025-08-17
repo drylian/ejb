@@ -1,18 +1,18 @@
+import { compile, generateNodeCode, generateNodeString } from "./compiler";
 import {
-	EJB_DEFAULT_PREFIX_GLOBAL,
 	EJB_DEFAULT_PREFIX_DIRECTIVE,
+	EJB_DEFAULT_PREFIX_GLOBAL,
 	EJB_DEFAULT_PREFIX_VARIABLE,
 	ejbDirective,
-	DIRECTIVE_REGEX,
 } from "./constants";
+import { DEFAULT_DIRECTIVES } from "./directives";
+import { ejbParser } from "./parser";
 import type {
 	AstNode,
 	EjbContructor,
 	EjbDirectivePlugin,
 	IfAsync,
 } from "./types";
-import { ejbParser } from "./parser";
-import { compile, generateNodeCode, generateNodeString } from "./compiler";
 import {
 	AsyncFunction,
 	escapeHtml,
@@ -21,7 +21,6 @@ import {
 	filepathResolver,
 	isPromise,
 } from "./utils";
-import { DEFAULT_DIRECTIVES } from "./directives";
 
 /**
  * EJB Template Engine class
@@ -113,7 +112,7 @@ export class Ejb<Async extends boolean = false> {
 
 				return processTemplate(resolvedContent as string);
 			} catch (e) {
-				if (e && typeof e == "object" && "code" in e && e.code == "ENOENT") {
+				if (e && typeof e === "object" && "code" in e && e.code === "ENOENT") {
 					console.warn(
 						`[EJB] Template path resolution failed, using as literal: ${template}`,
 					);
@@ -196,7 +195,7 @@ export class Ejb<Async extends boolean = false> {
 
 				template = resolvedContent as string;
 			} catch (e) {
-				if (e && typeof e == "object" && "code" in e && e.code == "ENOENT") {
+				if (e && typeof e === "object" && "code" in e && e.code === "ENOENT") {
 					console.warn(
 						`[EJB] Template path resolution failed, using as literal: ${template}`,
 					);
@@ -291,7 +290,7 @@ export class Ejb<Async extends boolean = false> {
 		...directives: (EjbDirectivePlugin | Record<string, EjbDirectivePlugin>)[]
 	) {
 		const formatted = directives.map((i) =>
-			Object.keys(i).length == 1 ? i : ejbDirective(i as EjbDirectivePlugin),
+			Object.keys(i).length === 1 ? i : ejbDirective(i as EjbDirectivePlugin),
 		);
 		this.directives = Object.assign(this.directives, ...formatted);
 		return this;

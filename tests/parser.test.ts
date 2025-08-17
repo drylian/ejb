@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
+import { EjbAst } from "../src/constants";
 import { Ejb } from "../src/ejb";
 import { ejbParser } from "../src/parser";
-import { EjbAst } from "../src/constants";
 
 test("should parse simple text", () => {
 	const ejb = new Ejb();

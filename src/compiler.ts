@@ -1,13 +1,15 @@
 import { EjbAst } from "./constants";
 import type { Ejb } from "./ejb";
 import type {
-	RootNode,
 	AstNode,
-	TextNode,
-	InterpolationNode,
 	DirectiveNode,
+	EjbDirectiveParent,
+	EjbDirectivePlugin,
 	IfAsync,
+	InterpolationNode,
+	RootNode,
 	SubDirectiveNode,
+	TextNode,
 } from "./types";
 import { escapeJs, isPromise } from "./utils";
 
@@ -104,7 +106,7 @@ function handleDirective<A extends boolean>(
 	const { name, expression, children = [] } = node;
 
 	// Get the appropriate directive definition
-	let directive;
+	let directive: EjbDirectivePlugin | EjbDirectiveParent | undefined;
 	const isSubDirective = node.type === EjbAst.SubDirective;
 
 	if (isSubDirective) {

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
+import { join } from "node:path";
 import { Ejb } from "../src/ejb";
 import { EJBNodeJSResolver } from "../src/resolvers";
-import { join } from "node:path";
 
 const pwd = process.cwd();
 

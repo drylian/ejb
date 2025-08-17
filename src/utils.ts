@@ -4,9 +4,7 @@ import type { AnyEjb } from "./types";
 /**
  * Reference to the AsyncFunction constructor
  */
-export const AsyncFunction = Object.getPrototypeOf(
-	async () => {},
-).constructor;
+export const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 
 /**
  * Escapes special regex characters in a string
@@ -101,7 +99,7 @@ export function join(...segments: string[]): string {
 		return path || ".";
 	}
 
-	if (isAbsolute) path = "/" + path.replace(/^\//, "");
+	if (isAbsolute) path = `/${path.replace(/^\//, "")}`;
 	if (path === "") return ".";
 
 	return path;

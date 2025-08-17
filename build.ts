@@ -1,10 +1,8 @@
-import { build, type Options } from "tsup";
-import { writeFile } from "fs/promises";
 import { generateDtsBundle } from "dts-bundle-generator";
-import { dirname, join } from "path";
-import { mkdir } from "fs/promises";
 import { existsSync } from "fs";
-import { rm } from "fs/promises";
+import { mkdir, rm, writeFile } from "fs/promises";
+import { dirname, join } from "path";
+import { build, type Options } from "tsup";
 
 if (existsSync("dist")) await rm("dist", { recursive: true });
 

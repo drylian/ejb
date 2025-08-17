@@ -1,14 +1,13 @@
 import { expect, test } from "bun:test";
 import {
-	ejbDirective,
-	EJB_DEFAULT_PREFIX_GLOBAL,
+	DIRECTIVE_REGEX,
 	EJB_DEFAULT_PREFIX_DIRECTIVE,
+	EJB_DEFAULT_PREFIX_GLOBAL,
 	EJB_DEFAULT_PREFIX_VARIABLE,
+	EJB_HEAD_DIRECTIVE_REPLACER,
 	ESCAPE_HTML,
 	ESPACE_HTML_REGEX,
-	DIRECTIVE_REGEX,
-	EJB_HEAD_DIRECTIVE_REPLACER,
-	EjbAst,
+	ejbDirective,
 } from "../src/constants";
 import type { EjbDirectivePlugin } from "../src/types";
 

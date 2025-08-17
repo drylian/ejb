@@ -1,22 +1,20 @@
 import { expect, test } from "bun:test";
 import { Ejb } from "../src/ejb";
 import {
-	escapeJs,
 	escapeHtml,
-	isPromise,
+	escapeJs,
 	filepathResolver,
-	escapeRegExp,
-	returnEjbRes,
-	PromiseResolver,
-	join,
-	simpleHash,
 	generateId,
+	isPromise,
+	join,
+	PromiseResolver,
+	returnEjbRes,
+	simpleHash,
 } from "../src/utils";
 
 test("should escape JS strings", () => {
-	expect(escapeJs("Hello `world` ${name}")).toBe(
-		"Hello \\`world\\` \\${name}",
-	);
+	// biome-ignore lint/suspicious/noTemplateCurlyInString: regex check
+	expect(escapeJs("Hello `world` ${name}")).toBe("Hello \\`world\\` \\${name}");
 });
 
 test("should escape HTML", () => {
@@ -27,6 +25,7 @@ test("should escape HTML", () => {
 
 test("should detect promises", () => {
 	expect(isPromise(Promise.resolve())).toBe(true);
+	// biome-ignore lint/suspicious/noThenProperty: simulation
 	expect(isPromise({ then: () => {} })).toBe(true);
 	expect(isPromise("not a promise")).toBe(false);
 });

@@ -1,10 +1,10 @@
-import type { Ejb } from "./ejb";
-import type { RootNode, DirectiveNode, SubDirectiveNode } from "./types";
 import {
 	DIRECTIVE_REGEX,
 	EJB_DEFAULT_PREFIX_VARIABLE,
 	EjbAst,
 } from "./constants";
+import type { Ejb } from "./ejb";
+import type { DirectiveNode, RootNode, SubDirectiveNode } from "./types";
 
 /**
  * Parses EJB template string into an Abstract Syntax Tree (AST)
@@ -26,7 +26,7 @@ export function ejbParser<A extends boolean>(
 	// Get interpolation and directive prefixes from configuration
 	const [interpStart, interpEnd] = (
 		ejb.prefix.variable || EJB_DEFAULT_PREFIX_VARIABLE
-	).split("*");
+	).split("*") as string[];
 	const directivePrefix = ejb.prefix.directive;
 
 	// Main parsing loop
@@ -38,7 +38,7 @@ export function ejbParser<A extends boolean>(
 
 		// Find next directive or interpolation start
 		const directive_start = text_before_token.indexOf(directivePrefix);
-		const expression_start = text_before_token.indexOf(interpStart!);
+		const expression_start = text_before_token.indexOf(interpStart);
 
 		// Determine where the next token starts
 		let text_end = -1;
@@ -66,9 +66,9 @@ export function ejbParser<A extends boolean>(
 		const remaining_text = template.substring(cursor);
 
 		// Handle interpolation expressions
-		if (remaining_text.startsWith(interpStart!)) {
-			cursor += interpStart!.length;
-			const expression_end = template.indexOf(interpEnd!, cursor);
+		if (remaining_text.startsWith(interpStart)) {
+			cursor += interpStart.length;
+			const expression_end = template.indexOf(interpEnd, cursor);
 			if (expression_end === -1)
 				throw new Error("Unclosed interpolation expression");
 			const expression = template.substring(cursor, expression_end).trim();
@@ -77,7 +77,7 @@ export function ejbParser<A extends boolean>(
 				expression,
 				escaped: true,
 			});
-			cursor = expression_end + interpEnd!.length;
+			cursor = expression_end + interpEnd?.length;
 		}
 		// Handle directives
 		else if (remaining_text.startsWith(directivePrefix)) {

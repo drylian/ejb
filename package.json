@@ -46,8 +46,8 @@
 	"homepage": "https://github.com/drylian/ejb#readme",
 	"scripts": {
 		"build": "bun run build.ts",
-    "test": "bun test",
-    "biome:format":"bunx biome format --write"
+		"test": "bun test",
+		"biome:format": "bunx biome format --write"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.2.0",

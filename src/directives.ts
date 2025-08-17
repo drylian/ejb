@@ -28,7 +28,7 @@ export const DEFAULT_DIRECTIVES = Object.assign(
 		name: "if",
 		priority: 1,
 		children: true,
-		onParams: (ejb, expression) => {
+		onParams: (_, expression) => {
 			return `if (${expression}) {`;
 		},
 		parents: [
@@ -56,7 +56,7 @@ export const DEFAULT_DIRECTIVES = Object.assign(
 		name: "for",
 		priority: 1,
 		children: true,
-		onParams: (ejb, expression) => {
+		onParams: (_, expression) => {
 			return `for (${expression}) {`;
 		},
 		onEnd: () => {
@@ -236,7 +236,7 @@ export const DEFAULT_DIRECTIVES = Object.assign(
 		name: "head",
 		priority: 999,
 		onInitFile: () => `$ejb.head = new Set();`,
-		onParams(ejb, exp) {
+		onParams() {
 			return `$ejb.res += '${EJB_HEAD_DIRECTIVE_REPLACER}';`;
 		},
 		onEndFile: () =>
