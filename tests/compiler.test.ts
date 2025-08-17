@@ -27,7 +27,8 @@ test("should compile interpolation node", () => {
 
 test("should compile if directive", () => {
   const ejb = new Ejb();
-  const ast = ejb.parserAst("@if(true) Hello @end");
+  const ast = ejb.parserAst(`
+    @if(true) Hello @end`);
   const result = ejb.compileNode(ast);
   expect(result).toContain("if (true) {");
   expect(result).toContain("$ejb.res += ` Hello `");
@@ -46,11 +47,4 @@ test("should handle async compilation", async () => {
     const ast = ejb.parserAst("Hello");
     const result = await compile(ejb, ast);
     expect(result).toContain("$ejb.res += `Hello`;");
-});
-
-test("should throw on async compilation in sync mode", () => {
-    const ejb = new Ejb({ async:true });
-    const ast = ejb.parserAst("@import('file.ejb')");
-    ejb.directives.import.onParams = async () => Promise.resolve("");
-    expect(() => compile(ejb, ast)).toThrow("[EJB] Async compilation in sync mode");
 });

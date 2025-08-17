@@ -85,126 +85,151 @@ function handleDirective<A extends boolean>(
 ): IfAsync<A, string> {
   const { name, expression, children = [] } = node;
   
-  // Try to get cached processors first
-  const cacheKey = node as object;
-  let processors = [] as ((input: string) => any)[];
+  // Get the appropriate directive definition
+  let directive;
+  let isSubDirective = node.type === EjbAst.SubDirective;
   
-  if (!processors) {
-    // Get the appropriate directive definition
-    let directive;
-    let isSubDirective = node.type === EjbAst.SubDirective;
+  if (isSubDirective) {
+    const parentDirectiveName = (node as SubDirectiveNode).parentName;
+    const parentDirective = ejb.directives[parentDirectiveName];
+    directive = parentDirective?.parents?.find(p => p.name === name);
     
-    if (isSubDirective) {
-      const parentDirectiveName = (node as SubDirectiveNode).parentName;
-      const parentDirective = ejb.directives[parentDirectiveName];
-      directive = parentDirective?.parents?.find(p => p.name === name);
-      
-      if (!directive) {
-        const error = `[EJB] Sub-directive "${name}" not found in parent "${parentDirectiveName}"`;
-        return (ejb.async ? Promise.reject(new Error(error)) : error) as IfAsync<A, string>;
+    if (!directive) {
+      const error = `[EJB] Sub-directive "${name}" not found in parent "${parentDirectiveName}"`;
+      return (ejb.async ? Promise.reject(new Error(error)) : error) as IfAsync<A, string>;
+    }
+  } else {
+    directive = ejb.directives[name];
+    if (!directive) {
+      const error = `[EJB] Directive not found: @${name}`;
+      return (ejb.async ? Promise.reject(new Error(error)) : error) as IfAsync<A, string>;
+    }
+  }
+
+  const buildResult = (handler: Function, ...args: any[]) => {
+    try {
+      const result = handler(...args);
+      if (isPromise(result) && !ejb.async) {
+        throw new Error(`[EJB] Async operation in sync mode for @${name}`);
       }
-    } else {
-      directive = ejb.directives[name];
-      if (!directive) {
-        const error = `[EJB] Directive not found: @${name}`;
-        return (ejb.async ? Promise.reject(new Error(error)) : error) as IfAsync<A, string>;
+      return result;
+    } catch (error) {
+      return ejb.async ? Promise.reject(error) : error as IfAsync<A, string>;
+    }
+  };
+
+  let output = '';
+  
+  // 1. Directive initialization
+  if (directive.onInit) {
+    const initResult = buildResult(directive.onInit, ejb);
+    if (isPromise(initResult)) {
+      if (!ejb.async) {
+        return `[EJB] Async init in sync mode for @${name}` as IfAsync<A, string>;
       }
+      return initResult.then(res => {
+        output += res;
+        return processDirectiveParts();
+      }) as IfAsync<A, string>;
     }
-
-    const buildProcessor = (handler: Function, ...args: any[]) => {
-      return (prev: string) => {
-        try {
-          const result = handler(...args);
-          if (isPromise(result) && !ejb.async) {
-            throw new Error(`[EJB] Async operation in sync mode for @${name}`);
-          }
-          return PromiseResolver(result, (res: string) => prev + (res || ''));
-        } catch (error) {
-          return ejb.async ? Promise.reject(error) : error as IfAsync<A, string>;
-        }
-      };
-    };
-
-    // Separate regular children from sub-directives
-    const regularChildren = children.filter(child => child.type !== EjbAst.SubDirective);
-    const subDirectives = children.filter(child => child.type === EjbAst.SubDirective);
-
-    processors = [];
-    
-    // 1. Directive initialization
-    if (directive.onInit) {
-      processors.push(buildProcessor(directive.onInit, ejb));
+    output += initResult;
+  }
+  
+  // 2. Parameters processing
+  if (directive.onParams) {
+    const paramsResult = buildResult(directive.onParams, ejb, expression);
+    if (isPromise(paramsResult)) {
+      if (!ejb.async) {
+        return `[EJB] Async params in sync mode for @${name}` as IfAsync<A, string>;
+      }
+      return paramsResult.then(res => {
+        output += res;
+        return processDirectiveParts();
+      }) as IfAsync<A, string>;
     }
-    
-    // 2. Parameters processing
-    if (directive.onParams) {
-      processors.push(buildProcessor(directive.onParams, ejb, expression));
-    }
-    
-    // 3. Process sub-directives
+    output += paramsResult;
+  }
+  
+  // Separate regular children from sub-directives
+  const regularChildren = children.filter(child => child.type !== EjbAst.SubDirective);
+  const subDirectives = children.filter(child => child.type === EjbAst.SubDirective);
+
+  // Process children and other parts
+  const processDirectiveParts = (): IfAsync<A, string> => {
+    // 3. Process sub-directives first
     if (subDirectives.length > 0) {
-      processors.push((prev: string) => {
-        const processSubDirective = (subDirective: SubDirectiveNode): IfAsync<A, string> => {
-          const processed = generateNodeCode(ejb, subDirective);
-          return processed;
-        };
+      const subDirectivesResult = subDirectives.map(sub => generateNodeCode(ejb, sub));
+      const hasAsyncSubs = subDirectivesResult.some(isPromise);
 
-        if (subDirectives.some(sd => isPromise(generateNodeCode(ejb, sd)))) {
-          if (!ejb.async) {
-            return `[EJB] Async sub-directive in sync mode: @${name}` as IfAsync<A, string>;
-          }
-          return Promise.all(subDirectives.map(processSubDirective))
-            .then(results => prev + results.join('')) as IfAsync<A, string>;
+      if (hasAsyncSubs) {
+        if (!ejb.async) {
+          return `[EJB] Async sub-directives in sync mode for @${name}` as IfAsync<A, string>;
         }
-        
-        return prev + subDirectives.map(processSubDirective).join('') as IfAsync<A, string>;
-      });
+        return Promise.all(subDirectivesResult).then(results => {
+          output += results.join('');
+          return processRegularChildren(regularChildren);
+        }) as IfAsync<A, string>;
+      }
+
+      output += (subDirectivesResult as string[]).join('');
     }
-    
-    // 4. Process regular children
-    //@ts-expect-error not typed
-    if (directive.children || (directive.internal && regularChildren.length > 0)) {
-      processors.push((prev) => {
-        if (directive.onChildren) {
-          return buildProcessor(directive.onChildren, ejb, { children: regularChildren })(prev);
+
+    return processRegularChildren(regularChildren);
+  };
+
+  const processRegularChildren = (regularChildren: AstNode[]): IfAsync<A, string> => {
+    // 4. Process regular children (either via onChildren or standard processing)
+    if (regularChildren.length > 0 && ("children" in directive || "internal" in directive)) {
+      if (directive.onChildren) {
+        const childrenResult = buildResult(directive.onChildren, ejb, { children: regularChildren });
+        if (isPromise(childrenResult)) {
+          if (!ejb.async) {
+            return `[EJB] Async children handler in sync mode for @${name}` as IfAsync<A, string>;
+          }
+          return childrenResult.then(res => {
+            output += res;
+            return processDirectiveEnd();
+          }) as IfAsync<A, string>;
         }
-        
+        output += childrenResult;
+      } else {
         const childrenResult = processChildren(ejb, regularChildren, stringMode);
-        
         if (isPromise(childrenResult)) {
           if (!ejb.async) {
             return `[EJB] Async children in sync mode for @${name}` as IfAsync<A, string>;
           }
-          return childrenResult.then(res => prev + res) as IfAsync<A, string>;
+          return childrenResult.then(res => {
+            output += res;
+            return processDirectiveEnd();
+          }) as IfAsync<A, string>;
         }
-        
-        return (prev + childrenResult) as IfAsync<A, string>;
-      });
-    }
-
-    // 5. Directive finalization
-    if (directive.onEnd) {
-      processors.push(buildProcessor(directive.onEnd, ejb));
-    }
-  }
-
-  // Execute processors sequentially
-  const executeProcessors = (index: number, currentResult: string): IfAsync<A, string> => {
-    if (index >= processors!.length) return currentResult as IfAsync<A, string>;
-    
-    const processed = processors![index](currentResult);
-    
-    if (isPromise(processed)) {
-      if (!ejb.async) {
-        return `[EJB] Async processor in sync mode for @${name}` as IfAsync<A, string>;
+        output += childrenResult;
       }
-      return processed.then(res => executeProcessors(index + 1, res as string)) as IfAsync<A, string>;
     }
-    
-    return executeProcessors(index + 1, processed) as IfAsync<A, string>;
+
+    return processDirectiveEnd();
   };
   
-  return executeProcessors(0, '');
+  const processDirectiveEnd = (): IfAsync<A, string> => {
+    // 5. Directive finalization
+    if (directive.onEnd) {
+      const endResult = buildResult(directive.onEnd, ejb);
+      if (isPromise(endResult)) {
+        if (!ejb.async) {
+          return `[EJB] Async end in sync mode for @${name}` as IfAsync<A, string>;
+        }
+        return endResult.then(res => {
+          output += res;
+          return output;
+        }) as IfAsync<A, string>;
+      }
+      output += endResult;
+    }
+    
+    return output as IfAsync<A, string>;
+  };
+  
+  return processDirectiveParts();
 }
 
 export function compile<Async extends boolean>(

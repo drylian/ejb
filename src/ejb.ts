@@ -25,16 +25,84 @@ export class Ejb<Async extends boolean = false> {
 
     /** Async mode flag */
     public async: Async;
-    
+
     /**
      * Returns the appropriate function constructor (AsyncFunction or Function)
      * based on async mode
      * @returns {FunctionConstructor} The function constructor to use
      */
     public getFunction = () => this.async ? AsyncFunction : Function;
-    
+
     /** Registered directives */
     public directives: EjbContructor<Async>['directives'] = {};
+
+    /**
+     * Compiles a template into a function string that can be executed later
+     * @param template - Template string or path to template file
+     * @returns The generated function code as string (wrapped in Promise if async)
+     */
+    public makeFunction(template: string): IfAsync<Async, string> {
+        const isPotentialPath = this.isTemplatePath(template);
+
+        const processTemplate = (content: string): IfAsync<Async, string> => {
+            const ast = ejbParser(this, content);
+            const codeResult = compile(this, ast);
+
+            const buildFunctionCode = (compiledCode: string): string => {
+                return `
+                return function(${this.prefix.global}) {
+                    const $ejb = {
+                        ins: this,
+                        res: '',
+                        escapeHtml: ${escapeHtml.toString()},
+                        escapeJs: ${escapeJs.toString()},
+                        EjbFunction: ${this.async ? 'async' : ''} function() { 
+                            return ${this.async ? 'new (async () => {}).constructor' : 'Function'}.apply(null, arguments);
+                        }
+                    };
+                    
+                    ${compiledCode}
+                }.bind(this);
+            `;
+            };
+
+            if (isPromise(codeResult)) {
+                if (!this.async) {
+                    throw new Error('[EJB] Async compilation in sync mode');
+                }
+                return codeResult.then(compiledCode => buildFunctionCode(compiledCode)) as IfAsync<Async, string>;
+            }
+
+            return buildFunctionCode(codeResult as string) as IfAsync<Async, string>;
+        };
+
+        if (isPotentialPath) {
+            try {
+                const resolvedPath = filepathResolver(this, template);
+                const resolvedContent = this.resolver?.(resolvedPath) ?? template;
+
+                if (isPromise(resolvedContent)) {
+                    if (!this.async) {
+                        throw new Error('[EJB] Async template loading in sync mode');
+                    }
+                    return (async () => {
+                        const content = await resolvedContent;
+                        return processTemplate(content as string);
+                    })() as unknown as IfAsync<Async, string>;
+                }
+
+                return processTemplate(resolvedContent as string);
+            } catch (e) {
+                if (e && typeof e == "object" && 'code' in e && e.code == 'ENOENT') {
+                    console.warn(`[EJB] Template path resolution failed, using as literal: ${template}`);
+                    return processTemplate(template);
+                }
+                throw e;
+            }
+        }
+
+        return processTemplate(template);
+    }
 
     /**
      * Compiles AST node(s) to executable code or string
@@ -97,8 +165,7 @@ export class Ejb<Async extends boolean = false> {
 
                 template = resolvedContent as string;
             } catch (e) {
-                console.log(e)
-                if(e && typeof e == "object" && 'code' in e && e.code == 'ENOENT') {
+                if (e && typeof e == "object" && 'code' in e && e.code == 'ENOENT') {
                     console.warn(`[EJB] Template path resolution failed, using as literal: ${template}`);
                 } else {
                     throw e;

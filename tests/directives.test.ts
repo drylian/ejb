@@ -2,8 +2,6 @@ import { expect, test } from "bun:test";
 import { Ejb } from "../src/ejb";
 import { EJBNodeJSResolver } from "../src/resolvers";
 import { join } from "node:path";
-import { writeFileSync } from "node:fs";
-import { escapeHtml } from "../src/utils";
 
 const pwd = process.cwd();
 
@@ -59,7 +57,6 @@ test("should handle component with partial slots", () => {
                 <p>Default slot only</p>
             @slot('header')
                 <h1>Only Header</h1>
-            @end
         @end
     `;
 
@@ -116,14 +113,13 @@ test("should handle 'isset' directive", () => {
 
 test("should handle 'css' directive", () => {
     const ejb = createEjbInstance();
-    const template = `@css()body { color: red; }@end`;
-    ejb.render(template);
-    expect(ejb.render("@head()")).toContain("<style>body { color: red; }</style>");
+    const template = `@head()@css()body { color: red; }@end`;
+    expect(ejb.render(template)).toContain("<style>body { color: red; }\n</style>");
 });
 
 test("should handle 'head' directive", () => {
     const ejb = createEjbInstance();
     const template = `@head()`;
-    const result = ejb.render(template);
+    const result = ejb.compileNode(ejb.parserAst(template));
     expect(result).toContain("<!--$EJB-HEAD-REPLACER-->");
 });

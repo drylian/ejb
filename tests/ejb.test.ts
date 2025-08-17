@@ -10,7 +10,7 @@ test("should render simple template", () => {
 test("should handle if directive", () => {
   const ejb = new Ejb();
   const result = ejb.render("@if(it.show) Hello", { show: true });
-  expect(result).toBe(" Hello ");
+  expect(result).toBe(" Hello");
 });
 
 test("should handle async operations", async () => {

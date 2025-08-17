@@ -119,6 +119,7 @@ export const DEFAULT_DIRECTIVES = Object.assign({},
         onEnd: () => "return $_component($_import, {...$_variables, ...$slots}); })({ ...$ejb, res:'' });",
         onChildren: (ejb, { children, parents }) => {
             return PromiseResolver(ejb.compileNode(children), (content: string) => {
+                console.log(content)
                 return `$slots.$slot = ${returnEjbRes(ejb, content)} ?? "";\n ${parents ?? ""}\n`;
             })
         },
@@ -175,14 +176,19 @@ export const DEFAULT_DIRECTIVES = Object.assign({},
         priority: 1,
         children: true,
         onInitFile: () => `$ejb.css = new Set();`,
+        // onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
+        // onInit + onEnd + sync = $ejb.res += (($ejb) => { ...content })({ ...$ejb, res: ''});
+        onInit: (ejb) => `$ejb.css.add(${ejb.async ? 'await' : ''} (${ejb.async ? 'async' : ''} ($ejb) => {`,
+        onEnd: () => ";return $ejb.res;})({ ...$ejb, res:'' }));",
         onChildren(ejb, opts) {
             const promise = ejb.compileNode(opts.children);
+            console.log(promise)
             const processing = isPromise(promise)
                 ? promise.then(i => returnEjbRes(ejb, i))
                 : returnEjbRes(ejb, promise)
-            return `$ejb.css.add(
-                ${processing}
-            );`
+            return PromiseResolver(processing, (res) =>  `$ejb.css.add(
+                ${res}
+            );`)
         },
         onEndFile: () => `$ejb.head.add(\`<style>\${$ejb.css.values().toArray().join("\\n")}</style>\`)`,
     }),

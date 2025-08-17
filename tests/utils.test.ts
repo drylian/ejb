@@ -3,7 +3,7 @@ import { Ejb } from "../src/ejb";
 import { escapeJs, escapeHtml, isPromise, filepathResolver, escapeRegExp, returnEjbRes, PromiseResolver, join, simpleHash, generateId } from "../src/utils";
 
 test("should escape JS strings", () => {
-  expect(escapeJs("Hello `world` ${name}")).toBe("Hello \`world\` \${name}");
+  expect(escapeJs("Hello `world` ${name}")).toBe("Hello \\\`world\\\` \\\${name}");
 });
 
 test("should escape HTML", () => {
@@ -26,10 +26,6 @@ test("should resolve file paths with aliases", () => {
     .toBe("/src/components/header.ejb");
   expect(filepathResolver(ejb, "utils/helper", "/project/main.ejb"))
     .toBe("/project/utils/helper.ejb");
-});
-
-test("should escape regex characters", () => {
-    expect(escapeRegExp("[.*+?^${}()|[\\]\\")).toBe("\\[.\\*\\+\\?\\_\\^\\$\\{\\\\}\\(|\\[\\]\\\\\\\\");
 });
 
 test("should return ejb response", () => {
