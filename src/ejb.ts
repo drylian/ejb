@@ -34,7 +34,7 @@ export class Ejb<Async extends boolean = false> {
 	/** Global variables available in templates */
 	public globals: EjbContructor<Async>["globals"];
 	/** Prefix configuration */
-	public prefix: EjbContructor<Async>["prefix"];
+	public globalvar: EjbContructor<Async>["globalvar"];
 	/** Path aliases mapping */
 	public aliases: EjbContructor<Async>["aliases"];
 	/** Root directory for file resolution */
@@ -67,7 +67,7 @@ export class Ejb<Async extends boolean = false> {
 
 			const buildFunctionCode = (compiledCode: string): string => {
 				return `
-                return function(${this.prefix.global}) {
+                return function(${this.globalvar}) {
                     const $ejb = {
                         ins: this,
                         res: '',
@@ -211,7 +211,7 @@ export class Ejb<Async extends boolean = false> {
 		const execute = (code: string) => {
 			const executor = new (this.getFunction())(
 				"$ejb",
-				this.prefix.global,
+				this.globalvar,
 				code,
 			);
 			return executor(
@@ -258,16 +258,14 @@ export class Ejb<Async extends boolean = false> {
 
 		// Not a path if it's clearly a directive
 		const directivePattern = new RegExp(
-			`^\\s*${escapeRegExp(this.prefix.directive)}`,
+			`^\\s*${escapeRegExp(EJB_DEFAULT_PREFIX_DIRECTIVE)}`,
 		);
 		if (directivePattern.test(trimmed)) {
 			return false;
 		}
 
 		// Not a path if it contains template syntax
-		const [interpStart] = (
-			this.prefix.variable || EJB_DEFAULT_PREFIX_VARIABLE
-		).split("*");
+		const [interpStart] = (EJB_DEFAULT_PREFIX_VARIABLE).split("*");
 		if (trimmed.includes(interpStart)) {
 			return false;
 		}
@@ -319,11 +317,6 @@ export class Ejb<Async extends boolean = false> {
 
 		this.directives = Object.assign({}, DEFAULT_DIRECTIVES, opts.directives);
 
-		this.prefix = {
-			global: EJB_DEFAULT_PREFIX_GLOBAL,
-			directive: EJB_DEFAULT_PREFIX_DIRECTIVE,
-			variable: EJB_DEFAULT_PREFIX_VARIABLE,
-			...opts.prefix,
-		};
+		this.globalvar = opts?.globalvar ?? EJB_DEFAULT_PREFIX_GLOBAL;
 	}
 }

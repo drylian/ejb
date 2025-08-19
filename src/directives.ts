@@ -110,8 +110,8 @@ export const DEFAULT_DIRECTIVES = Object.assign(
 					return PromiseResolver(code, (code: string) => {
 						return [
 							"const $_import = { ...$ejb, res: '' };",
-							`const $_variables = { ...${ejb.prefix.global}, ...(${params}) };`,
-							`return new $ejb.EjbFunction('$ejb', $ejb.ins.prefix.global, \`${escapeJs(code)}\\nreturn $ejb.res;\`)($_import, $_variables)`,
+							`const $_variables = { ...${ejb.globalvar}, ...(${params}) };`,
+							`return new $ejb.EjbFunction('$ejb', $ejb.ins.globalvar, \`${escapeJs(code)}\\nreturn $ejb.res;\`)($_import, $_variables)`,
 						].join("\n");
 					});
 				});
@@ -182,8 +182,8 @@ export const DEFAULT_DIRECTIVES = Object.assign(
 					return PromiseResolver(code, (code: string) => {
 						return [
 							"const $_import = { ...$ejb, res: '' };",
-							`const $_variables = { ...${ejb.prefix.global}, ...(${params}) };`,
-							`const $_component = new $ejb.EjbFunction('$ejb', $ejb.ins.prefix.global, \`${escapeJs(code)}\\nreturn $ejb.res;\`);\n`,
+							`const $_variables = { ...${ejb.globalvar}, ...(${params}) };`,
+							`const $_component = new $ejb.EjbFunction('$ejb', $ejb.ins.globalvar, \`${escapeJs(code)}\\nreturn $ejb.res;\`);\n`,
 						].join("\n");
 					});
 				});

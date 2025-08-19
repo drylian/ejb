@@ -35,15 +35,8 @@ export interface EjbContructor<Async extends boolean> {
 	globals: Record<string, any>;
 	/** Registered directives */
 	directives: Record<string, EjbDirectivePlugin>;
-	/** Prefix configuration */
-	prefix: {
-		/** Directive prefix (default '@') */
-		directive: string;
-		/** Variable interpolation prefix (default '{{*}}') */
-		variable: string;
-		/** Global variable prefix (default 'it') */
-		global: string;
-	};
+	/** Global variable prefix (default 'it') */
+	globalvar:string;
 }
 
 /**

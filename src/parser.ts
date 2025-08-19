@@ -1,5 +1,6 @@
 import {
 	DIRECTIVE_REGEX,
+	EJB_DEFAULT_PREFIX_DIRECTIVE,
 	EJB_DEFAULT_PREFIX_VARIABLE,
 	EjbAst,
 } from "./constants";
@@ -24,10 +25,8 @@ export function ejbParser<A extends boolean>(
 	let cursor = 0;
 
 	// Get interpolation and directive prefixes from configuration
-	const [interpStart, interpEnd] = (
-		ejb.prefix.variable || EJB_DEFAULT_PREFIX_VARIABLE
-	).split("*") as string[];
-	const directivePrefix = ejb.prefix.directive;
+	const [interpStart, interpEnd] = (EJB_DEFAULT_PREFIX_VARIABLE).split("*") as string[];
+	const directivePrefix = EJB_DEFAULT_PREFIX_DIRECTIVE;
 
 	// Main parsing loop
 	while (cursor < template.length) {
