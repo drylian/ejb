@@ -40,11 +40,6 @@ export const ESPACE_HTML_REGEX = /[&<>"']/g;
 export const DIRECTIVE_REGEX = /^\s*([a-zA-Z0-9]+)(?:\s*\(([\s\S]*?)\))?/;
 
 /**
- * Special marker used for head content replacement
- */
-export const EJB_HEAD_DIRECTIVE_REPLACER = "<!--$EJB-HEAD-REPLACER-->";
-
-/**
  * Enum representing different AST node types in the template engine
  */
 export enum EjbAst {

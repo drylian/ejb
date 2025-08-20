@@ -16,6 +16,28 @@ export function escapeRegExp(string: string): string {
 	return string.replace(/[.*+\-?^${}()|[\]\\]/g, "\\$&");
 }
 
+export function escapeString(str:string) {
+    if (typeof str !== 'string') return str;
+    
+    return str
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\t/g, '\\t')
+        .replace(/\f/g, '\\f')
+        .replace(/\b/g, '\\b')
+        .replace(/\v/g, '\\v');
+}
+
+export function trimQuotes(str:string) {
+    if (typeof str !== 'string') return str;
+    return str
+        .replace(/^['"`]+|['"`]+$/g, '')
+        .trim();
+}
+
 /**
  * Wraps template code in an Ejb function wrapper
  * @param ejb - The Ejb instance

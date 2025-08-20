@@ -148,7 +148,7 @@ function handleDirective<A extends boolean>(
 
 	// 1. Directive initialization
 	if (directive.onInit) {
-		const initResult = buildResult(directive.onInit, ejb);
+		const initResult = buildResult(directive.onInit, ejb, expression);
 		if (isPromise(initResult)) {
 			if (!ejb.async) {
 				return `[EJB] Async init in sync mode for @${name}` as IfAsync<

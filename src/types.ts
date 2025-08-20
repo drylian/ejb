@@ -93,7 +93,7 @@ export interface EjbDirectiveBasement {
 	 * @param ejb - Ejb instance
 	 * @returns Code to insert or Promise of code
 	 */
-	onInit?: (ejb: AnyEjb) => EjbAnyReturn<string>;
+	onInit?: (ejb: AnyEjb, expression?: string) => EjbAnyReturn<string>;
 	/**
 	 * Finalization handler
 	 * @param ejb - Ejb instance

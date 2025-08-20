@@ -18,6 +18,7 @@ import {
 	escapeHtml,
 	escapeJs,
 	escapeRegExp,
+	escapeString,
 	filepathResolver,
 	isPromise,
 } from "./utils";
@@ -209,6 +210,7 @@ export class Ejb<Async extends boolean = false> {
 		const codeResult = compile(this, ast);
 
 		const execute = (code: string) => {
+			console.log(code)
 			const executor = new (this.getFunction())(
 				"$ejb",
 				this.globalvar,
@@ -220,6 +222,7 @@ export class Ejb<Async extends boolean = false> {
 					res: "",
 					escapeHtml,
 					escapeJs,
+					escapeString,
 					EjbFunction: this.getFunction(),
 				},
 				{ ...this.globals, ...locals },

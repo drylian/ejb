@@ -4,7 +4,6 @@ import {
 	EJB_DEFAULT_PREFIX_DIRECTIVE,
 	EJB_DEFAULT_PREFIX_GLOBAL,
 	EJB_DEFAULT_PREFIX_VARIABLE,
-	EJB_HEAD_DIRECTIVE_REPLACER,
 	ESCAPE_HTML,
 	ESPACE_HTML_REGEX,
 	ejbDirective,
@@ -33,10 +32,6 @@ test("should return regex for HTML escape", () => {
 
 test("should return regex for directive", () => {
 	expect(DIRECTIVE_REGEX).toEqual(/^\s*([a-zA-Z0-9]+)(?:\s*\(([\s\S]*?)\))?/);
-});
-
-test("should return head directive replacer", () => {
-	expect(EJB_HEAD_DIRECTIVE_REPLACER).toBe("<!--$EJB-HEAD-REPLACER-->");
 });
 
 test("should create a directive plugin", () => {
