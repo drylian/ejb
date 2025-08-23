@@ -1,3 +1,4 @@
+// Use snake_case for constants, keep comments in English
 import {
 	DIRECTIVE_REGEX,
 	EJB_DEFAULT_PREFIX_DIRECTIVE,
@@ -7,163 +8,227 @@ import {
 import type { Ejb } from "./ejb";
 import type { DirectiveNode, RootNode, SubDirectiveNode } from "./types";
 
-/**
- * Parses EJB template string into an Abstract Syntax Tree (AST)
- * @template A - Boolean indicating if the Ejb instance is in async mode
- * @param ejb - The Ejb instance containing configuration and directives
- * @param template - The template string to parse
- * @returns RootNode representing the parsed AST
- * @throws {Error} When encountering unclosed interpolation expressions or invalid directives
- */
 export function ejbParser<A extends boolean>(
 	ejb: Ejb<A>,
 	template: string,
 ): RootNode {
-	// Initialize root node and parsing stack
 	const root: RootNode = { type: EjbAst.Root, children: [] };
 	const stack: (RootNode | DirectiveNode | SubDirectiveNode)[] = [root];
 	let cursor = 0;
 
-	// Get interpolation and directive prefixes from configuration
-	const [interpStart, interpEnd] = (EJB_DEFAULT_PREFIX_VARIABLE).split("*") as string[];
-	const directivePrefix = EJB_DEFAULT_PREFIX_DIRECTIVE;
+	const [interp_start, interp_end] = EJB_DEFAULT_PREFIX_VARIABLE.split(
+		"*",
+	) as string[];
+	const directive_prefix = EJB_DEFAULT_PREFIX_DIRECTIVE;
 
-	// Main parsing loop
 	while (cursor < template.length) {
 		const parent = stack[stack.length - 1];
 		if (!parent) break;
 
-		const text_before_token = template.substring(cursor);
+		const remaining = template.substring(cursor);
+		const next_directive = remaining.indexOf(directive_prefix);
+		const next_interpolation = remaining.indexOf(interp_start);
 
-		// Find next directive or interpolation start
-		const directive_start = text_before_token.indexOf(directivePrefix);
-		const expression_start = text_before_token.indexOf(interpStart);
+		// Find next token
+		const next_token_pos = Math.min(
+			next_directive !== -1 ? next_directive : Infinity,
+			next_interpolation !== -1 ? next_interpolation : Infinity,
+		);
 
-		// Determine where the next token starts
-		let text_end = -1;
-		if (directive_start !== -1 && expression_start !== -1) {
-			text_end = Math.min(directive_start, expression_start);
-		} else if (directive_start !== -1) {
-			text_end = directive_start;
-		} else if (expression_start !== -1) {
-			text_end = expression_start;
+		// Process text before token
+		if (next_token_pos !== Infinity && next_token_pos > 0) {
+			parent.children.push({
+				type: EjbAst.Text,
+				value: remaining.substring(0, next_token_pos),
+			});
+			cursor += next_token_pos;
+			continue;
 		}
 
-		// Process text content before the next token
-		if (text_end !== 0) {
-			const text_content =
-				text_end === -1
-					? text_before_token
-					: text_before_token.substring(0, text_end);
-			if (text_content) {
-				parent.children.push({ type: EjbAst.Text, value: text_content });
+		if (next_token_pos === Infinity) {
+			// No token found, process remaining text
+			if (remaining.length > 0) {
+				parent.children.push({ type: EjbAst.Text, value: remaining });
 			}
-			cursor += text_content.length;
-			if (text_end === -1) break;
+			break;
 		}
 
-		const remaining_text = template.substring(cursor);
-
-		// Handle interpolation expressions
-		if (remaining_text.startsWith(interpStart)) {
-			cursor += interpStart.length;
-			const expression_end = template.indexOf(interpEnd, cursor);
+		// Process token
+		if (next_token_pos === next_interpolation) {
+			cursor += interp_start.length;
+			const expression_end = template.indexOf(interp_end, cursor);
 			if (expression_end === -1)
 				throw new Error("Unclosed interpolation expression");
-			const expression = template.substring(cursor, expression_end).trim();
+
 			parent.children.push({
 				type: EjbAst.Interpolation,
-				expression,
+				expression: template.substring(cursor, expression_end).trim(),
 				escaped: true,
 			});
-			cursor = expression_end + interpEnd?.length;
+			cursor = expression_end + interp_end.length;
+			continue;
 		}
-		// Handle directives
-		else if (remaining_text.startsWith(directivePrefix)) {
-			cursor += directivePrefix.length;
+
+		if (next_token_pos === next_directive) {
+			cursor += directive_prefix.length;
 			const directive_match = template.substring(cursor).match(DIRECTIVE_REGEX);
 			if (!directive_match) throw new Error("Invalid directive");
 
-			const [matched_str, name, expr = ""] = directive_match;
+			const [matched_str, name, expr_raw = ""] = directive_match;
+			const expr = expr_raw.trim();
 			cursor += matched_str.length;
 
-			// Handle directive end markers
-			if (name === "end") {
-				if (stack.length === 1)
-					throw new Error(`Unexpected ${directivePrefix}end directive`);
-				stack.pop();
-			}
-			// Handle regular directives and sub-directives
-			else {
-				let isSubDirective = false;
-				let parentDirectiveName = "";
-				let parentDirectiveDef = null;
+			// CRITICAL CHECK: Before processing closing, verify if it's a valid subdirective
+			let parent_directive: DirectiveNode | SubDirectiveNode | null = null;
+			let is_sub_directive = false;
 
-				// Search through stack to find parent directive
+			// First check if it's a subdirective of any parent in the stack
+			for (let i = stack.length - 1; i >= 0; i--) {
+				const node = stack[i];
+				if (
+					node.type === EjbAst.Directive ||
+					node.type === EjbAst.SubDirective
+				) {
+					const directive_def = ejb.directives[node.name];
+					if (directive_def?.parents?.some((p: any) => p.name === name)) {
+						parent_directive = node;
+						is_sub_directive = true;
+						break;
+					}
+				}
+			}
+
+			// Only process as closing if it's NOT a valid subdirective
+			const is_closing_directive =
+				!is_sub_directive &&
+				(name === "end" ||
+					stack.some(
+						(node) =>
+							node.type !== EjbAst.Root &&
+							(node as DirectiveNode | SubDirectiveNode).name === name,
+					));
+
+			if (is_closing_directive) {
+				if (stack.length === 1) {
+					throw new Error(`Unexpected ${directive_prefix}${name} directive`);
+				}
+
+				if (name === "end") {
+					stack.pop();
+					continue;
+				}
+
+				// Find and close matching directive
+				const target_index = stack.findLastIndex(
+					(node, index) =>
+						index > 0 && // Ignore root
+						node.type !== EjbAst.Root &&
+						(node as DirectiveNode | SubDirectiveNode).name === name,
+				);
+
+				if (target_index === -1) {
+					throw new Error(
+						`No matching ${directive_prefix}${name} directive to close`,
+					);
+				}
+
+				stack.length = target_index;
+				continue;
+			}
+
+			// If we got here, it's an opening directive or subdirective
+			// If we didn't find parent_directive earlier, search again to define directive_def
+			if (!is_sub_directive) {
 				for (let i = stack.length - 1; i >= 0; i--) {
-					const potentialParent = stack[i];
+					const node = stack[i];
 					if (
-						potentialParent.type === EjbAst.Directive ||
-						potentialParent.type === EjbAst.SubDirective
+						node.type === EjbAst.Directive ||
+						node.type === EjbAst.SubDirective
 					) {
-						parentDirectiveDef = ejb.directives[potentialParent.name];
-						if (parentDirectiveDef?.parents?.some((p) => p.name === name)) {
-							isSubDirective = true;
-							parentDirectiveName = potentialParent.name;
+						const directive_def = ejb.directives[node.name];
+						if (directive_def?.parents?.some((p: any) => p.name === name)) {
+							parent_directive = node;
+							is_sub_directive = true;
 							break;
 						}
 					}
 				}
+			}
 
-				// Get the appropriate directive definition
-				const directiveDef = isSubDirective
-					? parentDirectiveDef?.parents?.find((p) => p.name === name)
-					: ejb.directives[name];
+			const directive_def = is_sub_directive
+				? ejb.directives[parent_directive?.name as string]?.parents?.find(
+						(p: any) => p.name === name,
+					)
+				: ejb.directives[name];
 
-				if (!directiveDef) {
-					throw new Error(
-						`[EJB] Directive not found: ${directivePrefix}${name}`,
-					);
+			if (!directive_def) {
+				throw new Error(`[EJB] Directive not found: ${directive_prefix}${name}`);
+			}
+
+			// Create directive node
+			const directive_node: DirectiveNode | SubDirectiveNode = is_sub_directive
+				? {
+						type: EjbAst.SubDirective,
+						name,
+						expression: expr,
+						children: [],
+						auto_closed: false,
+						parent_name: parent_directive?.name as string,
+					}
+				: {
+						type: EjbAst.Directive,
+						name,
+						expression: expr,
+						children: [],
+						auto_closed: false,
+					};
+
+			// Auto-close siblings of same type (only for subdirectives)
+			if (is_sub_directive && parent_directive) {
+				const parent_children = parent_directive.children;
+
+				// Find all siblings of same type that are still open
+				const open_siblings = parent_children.filter(
+					(child): child is SubDirectiveNode =>
+						child.type === EjbAst.SubDirective &&
+						child.name === name &&
+						child.parent_name === parent_directive?.name &&
+						!child.auto_closed,
+				);
+
+				// Close all open siblings (except current one being created)
+				for (const sibling of open_siblings) {
+					sibling.auto_closed = true;
+
+					// Remove from stack if it's at the top
+					const sibling_index = stack.indexOf(sibling);
+					if (sibling_index !== -1 && sibling_index === stack.length - 1) {
+						stack.pop();
+					}
 				}
 
-				// Create appropriate node type
-				const directiveNode = isSubDirective
-					? ({
-							type: EjbAst.SubDirective,
-							name,
-							expression: expr.trim(),
-							children: [],
-							autoClosed: false,
-							parentName: parentDirectiveName,
-						} as SubDirectiveNode)
-					: ({
-							type: EjbAst.Directive,
-							name,
-							expression: expr.trim(),
-							children: [],
-							autoClosed: false,
-						} as DirectiveNode);
+				// Add subdirective to parent directive
+				parent_directive.children.push(directive_node);
+			} else {
+				// For normal directives, add to current parent
+				parent.children.push(directive_node);
+			}
 
-				parent.children.push(directiveNode);
-
-				// Push to stack if it's a subdirective or accepts children
-				//@ts-expect-error not typed
-				if (isSubDirective || directiveDef.children || directiveDef.internal) {
-					stack.push(directiveNode);
-				}
+			// Push to stack if directive can have children
+			const should_push_to_stack =
+				is_sub_directive ||
+				"children" in directive_def ||
+				"internal" in directive_def;
+			if (should_push_to_stack) {
+				stack.push(directive_node);
 			}
 		}
 	}
 
-	// Close any remaining open directives
+	// Close remaining directives
 	while (stack.length > 1) {
-		const node = stack.pop();
-		if (
-			node &&
-			(node.type === EjbAst.Directive || node.type === EjbAst.SubDirective)
-		) {
-			node.autoClosed = true;
-		}
+		const node = stack.pop() as DirectiveNode | SubDirectiveNode;
+		node.auto_closed = true;
 	}
 
 	return root;

@@ -210,12 +210,8 @@ export class Ejb<Async extends boolean = false> {
 		const codeResult = compile(this, ast);
 
 		const execute = (code: string) => {
-			console.log(code)
-			const executor = new (this.getFunction())(
-				"$ejb",
-				this.globalvar,
-				code,
-			);
+			//console.log(code);
+			const executor = new (this.getFunction())("$ejb", this.globalvar, code);
 			return executor(
 				{
 					ins: this,
@@ -268,7 +264,7 @@ export class Ejb<Async extends boolean = false> {
 		}
 
 		// Not a path if it contains template syntax
-		const [interpStart] = (EJB_DEFAULT_PREFIX_VARIABLE).split("*");
+		const [interpStart] = EJB_DEFAULT_PREFIX_VARIABLE.split("*");
 		if (trimmed.includes(interpStart)) {
 			return false;
 		}

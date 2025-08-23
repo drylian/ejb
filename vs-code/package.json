@@ -1,0 +1,57 @@
+{
+	"name": "ejb-vscode-extension",
+	"displayName": "EJB Language Support",
+	"description": "VSCode extension for EJB template language with syntax highlighting and IntelliSense",
+	"version": "1.0.0",
+	"engines": {
+		"vscode": "^1.74.0"
+	},
+	"categories": [
+		"Programming Languages",
+		"Snippets",
+		"Other"
+	],
+	"activationEvents": [
+		"onLanguage:ejb",
+		"workspaceContains:**/ejb-config.json"
+	],
+	"main": "./dist/extension.js",
+	"contributes": {
+		"languages": [
+			{
+				"id": "ejb",
+				"aliases": [
+					"EJB",
+					"ejb"
+				],
+				"extensions": [
+					".ejb"
+				],
+				"configuration": "./language-configuration.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "ejb",
+				"scopeName": "text.html.ejb",
+				"path": "./syntaxes/ejb.tmLanguage.json"
+			}
+		],
+		"jsonValidation": [
+			{
+				"fileMatch": "ejb-config.json",
+				"url": "./schemas/ejb-config.schema.json"
+			}
+		]
+	},
+	"scripts": {
+		"build": "vsce package",
+		"vscode:prepublish": "bun build --external vscode --outdir dist src/extension.ts",
+		"watch": "bun build --external vscode --outdir dist src/extension.ts --watch"
+	},
+	"devDependencies": {
+		"@types/vscode": "^1.74.0",
+		"@types/node": "16.x",
+		"typescript": "^4.9.4"
+	}
+}

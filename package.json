@@ -47,7 +47,7 @@
 	"scripts": {
 		"build": "bun run build.ts",
 		"test": "bun test",
-		"biome:format": "bunx biome format --write"
+		"check": "bunx biome check src/** --write"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.2.0",

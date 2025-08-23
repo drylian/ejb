@@ -35,7 +35,6 @@ test("should register custom directives", () => {
 		onParams: () => "$ejb.res +='CUSTOM_CODE';",
 	});
 	const result = ejb.render("@custom()");
-	console.log(result);
 	expect(result).toInclude("CUSTOM_CODE");
 });
 

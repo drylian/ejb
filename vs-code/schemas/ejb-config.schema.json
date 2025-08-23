@@ -1,0 +1,84 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "EJB Configuration",
+    "description": "Configuration file for EJB directives to provide IntelliSense in editors.",
+    "type": "object",
+    "required": ["package", "directives"],
+    "properties": {
+        "package": {
+            "type": "string",
+            "description": "Name of the package providing these directives."
+        },
+        "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "A URL for documentation or reference for the directives in this file."
+        },
+        "directives": {
+            "type": "array",
+            "description": "A list of directive definitions.",
+            "items": {
+                "type": "object",
+                "required": ["name", "description", "children"],
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The name of the directive (without the '@')."
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "A description of what the directive does."
+                    },
+                    "children": {
+                        "type": "boolean",
+                        "description": "Whether the directive can contain child content and needs a closing tag (@end or a parent directive)."
+                    },
+                    "children_type": {
+                        "type": "string",
+                        "enum": ["html", "js", "css"],
+                        "description": "The type of content expected within the directive's children."
+                    },
+                    "params": {
+                        "type": "array",
+                        "description": "A list of parameters the directive accepts.",
+                        "items": {
+                            "type": "object",
+                            "required": ["name", "type"],
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                    "description": "The name of the parameter."
+                                },
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["string", "number", "boolean", "object", "any"],
+                                    "description": "The expected type of the parameter."
+                                },
+                                "children": {
+                                    "type": "boolean",
+                                    "description": "Indicates if this parameter has its own children content."
+                                }
+                            }
+                        }
+                    },
+                    "parents": {
+                        "type": "array",
+                        "description": "A list of sub-directives that can be used within this directive.",
+                        "items": {
+                            "type": "object",
+                            "required": ["name"],
+                            "properties": {
+                                "name": {
+                                    "type": "string"
+                                },
+                                "description": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

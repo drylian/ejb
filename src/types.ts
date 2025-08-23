@@ -31,12 +31,14 @@ export interface EjbContructor<Async extends boolean> {
 	root: string;
 	/** File resolver function */
 	resolver: (path: string) => IfAsync<Async, string>;
-	/** Global variables available in templates */
-	globals: Record<string, any>;
 	/** Registered directives */
 	directives: Record<string, EjbDirectivePlugin>;
+	/** Global variables available in templates */
+	globals: Record<string, any>;
 	/** Global variable prefix (default 'it') */
-	globalvar:string;
+	globalvar: string;
+	/** expose global keys in file, example: it.exemple -> it.exemple | exemple */
+	globalexpose:boolean;
 }
 
 /**
@@ -62,7 +64,7 @@ export interface EjbChildrenContext {
 	/** Child nodes */
 	children: AstNode[];
 	/** Parent directive names (for nested directives) */
-	parents?: string;
+	parents: AstNode[];
 }
 
 /**
@@ -148,6 +150,8 @@ export type AstNode =
 export interface AstNodeBase {
 	/** Node type identifier */
 	type: EjbAst;
+	/** Flag indicating if directive was auto-closed */
+	auto_closed?: boolean;
 }
 
 /** Root node of the AST */
@@ -173,8 +177,6 @@ export interface DirectiveNode extends AstNodeBase {
 	expression: string;
 	/** Child nodes */
 	children: AstNode[];
-	/** Flag indicating if directive was auto-closed */
-	autoClosed: boolean;
 }
 
 /** Interpolation node */
@@ -196,7 +198,5 @@ export interface SubDirectiveNode extends AstNodeBase {
 	/** Child nodes */
 	children: AstNode[];
 	/** Parent directive name */
-	parentName: string;
-	/** Flag indicating if directive was auto-closed */
-	autoClosed: boolean;
+	parent_name: string;
 }

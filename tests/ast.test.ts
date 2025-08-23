@@ -43,7 +43,7 @@ test("should throw on unclosed directive", () => {
 						value: " Hello",
 					},
 				],
-				autoClosed: true,
+				auto_closed: true,
 			},
 		],
 	});

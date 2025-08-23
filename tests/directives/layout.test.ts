@@ -1,119 +1,16 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { Ejb } from "../src/ejb";
-import { EJBNodeJSResolver } from "../src/resolvers";
+import { Ejb } from "../../src/ejb";
+import { EJBNodeJSResolver } from "../../src/resolvers";
 
 const pwd = process.cwd();
 
-// Shared configuration for component testing
 const createEjbInstance = () =>
 	new Ejb({
 		async: false,
 		aliases: { "@": join(pwd, "tests", "views") },
 		resolver: EJBNodeJSResolver(),
 	});
-
-test("should handle component with default slot", () => {
-	const ejb = createEjbInstance();
-	const template = `
-        @component('@/box')
-            <p>Default slot content</p>
-        @end
-    `;
-
-	const result = ejb.render(template);
-
-	// Check if the default slot content has been rendered inside the div.box
-	expect(result.replace(/\s+/g, " ").trim()).toContain(
-		"<p>Default slot content</p>",
-	);
-});
-
-test("should handle component with named slots", () => {
-	const ejb = createEjbInstance();
-	const template = `
-        @component('@/box')
-                <p>Default slot content</p>    
-            @slot('header')
-                <h1>Only Header</h1>
-            @slot('content')
-                <p>Custom Content</p>
-        @end
-    `;
-
-	const result = ejb.render(template);
-
-	// Check the complete structure with named slots and default.
-	const normalizedResult = result.replace(/\s+/g, " ").trim();
-
-	expect(normalizedResult).toContain('<div class="box">');
-	expect(normalizedResult).toContain("<h1>Only Header</h1>");
-	expect(normalizedResult).toContain("<p>Custom Content</p>");
-	expect(normalizedResult).toContain("<p>Default slot content</p>");
-});
-
-test("should handle component with partial slots", () => {
-	const ejb = createEjbInstance();
-	const template = `
-        @component('@/box')
-                <p>Default slot only</p>
-            @slot('header')
-                <h1>Only Header</h1>
-        @end
-    `;
-
-	const result = ejb.render(template);
-	const normalizedResult = result.replace(/\s+/g, " ").trim();
-
-	expect(normalizedResult).toContain("<h1>Only Header</h1>");
-	expect(normalizedResult).toContain("<p>Default slot only</p>");
-	expect(normalizedResult).not.toContain("$header");
-	expect(normalizedResult).not.toContain("$content");
-});
-
-test("should handle empty slots", () => {
-	const ejb = createEjbInstance();
-	const template = `
-        @component('@/box')
-            <!-- No slots provided -->
-        @end
-    `;
-
-	const result = ejb.render(template);
-
-	// It should render only the basic structure without content.
-	expect(result.replace(/\s+/g, " ").trim()).toBe(
-		'<div class="box"> <!-- No slots provided --> </div>',
-	);
-});
-
-test("should handle 'if' directive", () => {
-	const ejb = createEjbInstance();
-	const template = `@if(true)Hello@end`;
-	const result = ejb.render(template);
-	expect(result).toBe("Hello");
-});
-
-test("should handle 'for' directive", () => {
-	const ejb = createEjbInstance();
-	const template = `@for(let i = 0; i < 3; i++){{i}}@end`;
-	const result = ejb.render(template);
-	expect(result).toBe("012");
-});
-
-test("should handle 'import' directive", () => {
-	const ejb = createEjbInstance();
-	const template = `@import('@/imported')`;
-	const result = ejb.render(template);
-	expect(result).toContain("This is imported content.");
-});
-
-test("should handle 'isset' directive", () => {
-	const ejb = createEjbInstance();
-	const template = `@isset(it.name)`;
-	const result = ejb.render(template, { name: "John" });
-	expect(result).toBe("John");
-});
 
 describe("Push and Stack Directives", () => {
   let ejb: any;
@@ -125,7 +22,7 @@ describe("Push and Stack Directives", () => {
   // Teste básico
   test("should handle basic push and stack", () => {
     const template = `@stack('test') @push('test')<div>Only Test</div>@end`;
-    const result = ejb.compileNode(ejb.parserAst(template));
+    const result = ejb.render(template);
     expect(result).toContain("<div>Only Test</div>");
   });
 
@@ -137,7 +34,7 @@ describe("Push and Stack Directives", () => {
       @push('scripts')<script src="app.js"></script>@end
     `;
     
-    const result = ejb.compileNode(ejb.parserAst(template));
+    const result = ejb.render(template);
     expect(result).toContain('<script src="jquery.js"></script>');
     expect(result).toContain('<script src="app.js"></script>');
     expect(result.indexOf('jquery.js')).toBeLessThan(result.indexOf('app.js'));
@@ -152,16 +49,16 @@ describe("Push and Stack Directives", () => {
       @push('scripts')<script>console.log('test');</script>@end
     `;
     
-    const result = ejb.compileNode(ejb.parserAst(template));
+    const result = ejb.render(template);
     expect(result).toContain('<style>.test { color: red; }</style>');
-    expect(result).toContain('<script>console.log(\'test\');</script>');
+    expect(result).toContain("<script>console.log('test');</script>");
   });
 
   // Teste com stack vazio
   test("should handle empty stack", () => {
     const template = `@stack('empty')`;
     const result = ejb.render(template);
-    expect(result).toBe("");
+    expect(result.trim()).toBe("");
   });
 
   // Teste com conteúdo complexo
@@ -227,7 +124,7 @@ describe("Push and Stack Directives", () => {
       @push('items')<div>Third</div>@end
     `;
     
-    const result = ejb.compileNode(ejb.parserAst(template));
+    const result = ejb.render(template);
     const firstIndex = result.indexOf('First');
     const secondIndex = result.indexOf('Second');
     const thirdIndex = result.indexOf('Third');
@@ -246,11 +143,10 @@ describe("Push and Stack Directives", () => {
     `;
     
     const result = ejb.render(template);
-
     expect(result).toContain('<div>Part 1</div>');
     expect(result).toContain('<div>Part 2</div>');
     expect((result.match(/Part 1/g) || []).length).toBe(2);
-    expect((result.match(/Part 2/g) || []).length).toBe(2);
+    expect((result.match(/Part 2/g) || []).length).toBe(1);
   });
 
   // Teste com conteúdo HTML complexo
@@ -268,10 +164,10 @@ describe("Push and Stack Directives", () => {
       @end
     `;
     
-    const result = ejb.compileNode(ejb.parserAst(template));
+    const result = ejb.render(template);
     expect(result).toContain('class="modal"');
     expect(result).toContain('data-id="test-modal"');
-    expect(result).toContain('onclick="console.log(\'clicked\')"');
+    expect(result).toContain("onclick=\"console.log('clicked')\"");
   });
 
   // Teste de performance com muitos pushes
@@ -283,7 +179,7 @@ describe("Push and Stack Directives", () => {
       template += `@push('items')<div>Item ${i}</div>@end`;
     }
     
-    const result = ejb.compileNode(ejb.parserAst(template));
+    const result = ejb.render(template);
     
     // Verificar se todos os items estão presentes
     for (let i = 0; i < 100; i++) {

@@ -29,7 +29,7 @@ test("should handle unclosed directives", () => {
 	const ejb = new Ejb();
 	const ast = ejbParser(ejb, "@if(true)Hello");
 	const directive = ast.children[0] as any;
-	expect(directive.autoClosed).toBe(true);
+	expect(directive.auto_closed).toBe(true);
 });
 
 test("should handle nested directives", () => {

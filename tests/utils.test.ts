@@ -4,12 +4,10 @@ import {
 	escapeHtml,
 	escapeJs,
 	filepathResolver,
-	generateId,
 	isPromise,
 	join,
 	PromiseResolver,
 	returnEjbRes,
-	simpleHash,
 } from "../src/utils";
 
 test("should escape JS strings", () => {
@@ -57,12 +55,4 @@ test("should resolve promises", async () => {
 
 test("should join paths", () => {
 	expect(join("a", "b", "c")).toBe("a/b/c");
-});
-
-test("should create a simple hash", () => {
-	expect(simpleHash("test")).toBe("3556498");
-});
-
-test("should generate an id", () => {
-	expect(generateId("prefix")).toContain("prefix");
 });
