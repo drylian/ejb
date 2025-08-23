@@ -4,6 +4,7 @@ import {
 	EJB_DEFAULT_PREFIX_GLOBAL,
 	EJB_DEFAULT_PREFIX_VARIABLE,
 	ejbDirective,
+	HTML_REGULAR_REGEX,
 } from "./constants";
 import { DEFAULT_DIRECTIVES } from "./directives";
 import { ejbParser } from "./parser";
@@ -40,6 +41,9 @@ export class Ejb<Async extends boolean = false> {
 	public aliases: EjbContructor<Async>["aliases"];
 	/** Root directory for file resolution */
 	public root: EjbContructor<Async>["root"];
+
+	/** expose global keys in file, example: it.exemple -> it.exemple | exemple */
+	public globalexpose: boolean;
 
 	/** Async mode flag */
 	public async;
@@ -250,26 +254,29 @@ export class Ejb<Async extends boolean = false> {
 	private isTemplatePath(template: string): boolean {
 		const trimmed = template.trim();
 
-		// Definitely not a path if it has multiple lines
-		if (trimmed.split("\n").length > 1) {
+		// 1. It's NOT a path if it contains newlines.
+		if (trimmed.includes("\n")) {
 			return false;
 		}
 
-		// Not a path if it's clearly a directive
+		// 2. It's NOT a path if it contains template syntax like interpolation or directives.
+		const [interpStart] = EJB_DEFAULT_PREFIX_VARIABLE.split("*");
+		if (trimmed.includes(interpStart)) {
+			return false;
+		}
 		const directivePattern = new RegExp(
-			`^\\s*${escapeRegExp(EJB_DEFAULT_PREFIX_DIRECTIVE)}`,
+			`^s*${escapeRegExp(EJB_DEFAULT_PREFIX_DIRECTIVE)}`,
 		);
 		if (directivePattern.test(trimmed)) {
 			return false;
 		}
 
-		// Not a path if it contains template syntax
-		const [interpStart] = EJB_DEFAULT_PREFIX_VARIABLE.split("*");
-		if (trimmed.includes(interpStart)) {
+		// 3. It's NOT a path if it looks like HTML.
+		if (HTML_REGULAR_REGEX.test(trimmed)) {
 			return false;
 		}
 
-		// Consider it a path if it contains path characters
+		// 4. It IS a path if it contains path characters and wasn't identified as a template.
 		return (
 			trimmed.includes("/") ||
 			trimmed.includes("\\") ||
@@ -303,6 +310,7 @@ export class Ejb<Async extends boolean = false> {
 		this.globals = opts.globals ?? {};
 		this.async = (opts.async ?? false) as Async;
 		this.root = opts.root ?? "./";
+		this.globalexpose = opts.globalexpose ?? true;
 		//@ts-expect-error ignore
 		this.resolver =
 			opts.resolver ??

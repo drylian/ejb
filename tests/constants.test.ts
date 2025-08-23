@@ -27,7 +27,7 @@ test("should return HTML escape characters", () => {
 });
 
 test("should return regex for HTML escape", () => {
-	expect(ESPACE_HTML_REGEX).toEqual(/[&<>"']/g);
+	expect(ESPACE_HTML_REGEX).toEqual(/[&<>"'']/g);
 });
 
 test("should return regex for directive", () => {

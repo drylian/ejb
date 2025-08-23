@@ -21,6 +21,10 @@ export function ejbParser<A extends boolean>(
 	) as string[];
 	const directive_prefix = EJB_DEFAULT_PREFIX_DIRECTIVE;
 
+	const regex_directives = Object.values(ejb.directives).filter(
+		(d) => typeof d.name !== "string",
+	);
+
 	while (cursor < template.length) {
 		const parent = stack[stack.length - 1];
 		if (!parent) break;
@@ -29,10 +33,38 @@ export function ejbParser<A extends boolean>(
 		const next_directive = remaining.indexOf(directive_prefix);
 		const next_interpolation = remaining.indexOf(interp_start);
 
+		let earliest_regex_match: {
+			index: number;
+			length: number;
+			directive: any;
+			match: RegExpMatchArray;
+		} | null = null;
+
+		if (regex_directives.length > 0) {
+			for (const directive of regex_directives) {
+				const regex = directive.name as RegExp;
+				const match = remaining.match(regex);
+				if (
+					match &&
+					match.index !== undefined &&
+					(earliest_regex_match === null ||
+						match.index < earliest_regex_match.index)
+				) {
+					earliest_regex_match = {
+						index: match.index,
+						length: match[0].length,
+						directive,
+						match,
+					};
+				}
+			}
+		}
+
 		// Find next token
 		const next_token_pos = Math.min(
 			next_directive !== -1 ? next_directive : Infinity,
 			next_interpolation !== -1 ? next_interpolation : Infinity,
+			earliest_regex_match ? earliest_regex_match.index : Infinity,
 		);
 
 		// Process text before token
@@ -51,6 +83,26 @@ export function ejbParser<A extends boolean>(
 				parent.children.push({ type: EjbAst.Text, value: remaining });
 			}
 			break;
+		}
+
+		if (next_token_pos === earliest_regex_match?.index) {
+			const { directive, match, length } = earliest_regex_match;
+
+			const directive_node: DirectiveNode = {
+				type: EjbAst.Directive,
+				name: directive.name.toString(),
+				expression: match[0],
+				children: [],
+				auto_closed: false,
+			};
+
+			parent.children.push(directive_node);
+			cursor += length;
+
+			if (directive.children) {
+				stack.push(directive_node);
+			}
+			continue;
 		}
 
 		// Process token

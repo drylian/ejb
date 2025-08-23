@@ -72,7 +72,7 @@ export interface EjbChildrenContext {
  */
 export interface EjbDirectiveBasement {
 	/** Directive name */
-	name: string;
+	name: string | RegExp;
 	/**
 	 * Handler for directive parameters
 	 * @param ejb - Ejb instance
@@ -82,6 +82,16 @@ export interface EjbDirectiveBasement {
 	onParams?: (
 		ejb: AnyEjb,
 		expression: string,
+	) => EjbAnyReturn<string | undefined>;
+	/**
+	 * Handler for when a regex name matches
+	 * @param ejb - Ejb instance
+	 * @param match - The match from the regex
+	 * @returns Code to insert or Promise of code
+	 */
+	onNameResolver?: (
+		ejb: AnyEjb,
+		match: RegExpMatchArray,
 	) => EjbAnyReturn<string | undefined>;
 	/**
 	 * Handler for directive children

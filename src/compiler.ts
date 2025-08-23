@@ -120,7 +120,7 @@ function handleDirective<A extends boolean>(
 	} else {
 		directive = ejb.directives[name];
 		if (!directive) {
-			const error = `[EJB] Directive not found: @${name}`;
+			const error = `[EJB] Directive not found: ${name}`;
 			return (ejb.async ? Promise.reject(new Error(error)) : error) as IfAsync<
 				A,
 				string
@@ -139,6 +139,20 @@ function handleDirective<A extends boolean>(
 			return ejb.async ? Promise.reject(error) : (error as IfAsync<A, string>);
 		}
 	};
+
+	if (typeof directive.name !== "string") {
+		if (directive.onNameResolver) {
+			const match = (directive.name as RegExp).exec(expression);
+			if (match) {
+				const res = buildResult(directive.onNameResolver, ejb, match);
+				if (isPromise(res)) {
+					return res.then((r) => `$ejb.res += ${JSON.stringify(r || "")};`) as IfAsync<A, string>;
+				}
+				return `$ejb.res += ${JSON.stringify(res || "")};` as IfAsync<A, string>;
+			}
+		}
+		return (ejb.async ? Promise.resolve("") : "") as IfAsync<A, string>;
+	}
 
 	let output = "";
 	const newParents = [
@@ -315,8 +329,16 @@ export function compile<Async extends boolean>(
 		.map((d) => d.onEndFile?.(ejb))
 		.filter(Boolean);
 
-	const buildFinalCode = (init: string, body: string, end: string) =>
-		`${init}\n${body}${end ? `\n${end}` : ""}\nreturn $ejb;`;
+	const buildFinalCode = (init: string, body: string, end: string) => {
+		let exposeCode = "";
+		if (ejb.globalexpose) {
+			const keys = Object.keys(ejb.globals);
+			if (keys.length > 0) {
+				exposeCode = `const { ${keys.join(", ")} } = ${ejb.globalvar};\n`;
+			}
+		}
+		return `${init}\n${exposeCode}${body}${end ? `\n${end}` : ""}\nreturn $ejb;`;
+	};
 
 	if (
 		!isPromise(bodyCode) &&

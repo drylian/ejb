@@ -1,3 +1,6 @@
+/**
+ * Regular expression for detecting characters that need HTML escaping
+ */
 import type { EjbDirectivePlugin } from "./types";
 
 /**
@@ -30,7 +33,12 @@ export const ESCAPE_HTML = {
 /**
  * Regular expression for detecting characters that need HTML escaping
  */
-export const ESPACE_HTML_REGEX = /[&<>"']/g;
+export const ESPACE_HTML_REGEX = /[&<>"'']/g;
+
+/**
+ * Regular expression for html codes
+ */
+export const HTML_REGULAR_REGEX = /<[a-z][\s\S]*>/i;
 
 /**
  * Regular expression for parsing directive syntax:
@@ -64,6 +72,6 @@ export function ejbDirective(
 	opts: EjbDirectivePlugin,
 ): Record<string, EjbDirectivePlugin> {
 	return {
-		[opts.name]: opts,
+		[opts.name.toString()]: opts,
 	};
 }
