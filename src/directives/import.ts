@@ -11,6 +11,8 @@ export default ejbDirective({
 	name: "import",
 	priority: 10,
 	children: false,
+    description: "Imports and renders another EJB template file.",
+    example: "@import('./path/to/template.ejb', { myVar: 'value' })",
 	// onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
 	// onInit + onEnd + sync = $ejb.res += (($ejb) => { ...content })({ ...$ejb, res: ''});
 	onInit: (ejb) =>

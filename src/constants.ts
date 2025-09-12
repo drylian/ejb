@@ -14,6 +14,11 @@ export const EJB_DEFAULT_PREFIX_GLOBAL = "it";
 export const EJB_DEFAULT_PREFIX_DIRECTIVE = "@";
 
 /**
+ * Escaped prefix for directives in templates (e.g., @@directive)
+ */
+export const EJB_ESCAPED_PREFIX_DIRECTIVE = "@@";
+
+/**
  * Default prefix for variable interpolation in templates
  * Uses {{*}} syntax where * represents the variable name
  */
@@ -26,7 +31,7 @@ export const ESCAPE_HTML = {
 	"&": "&amp;",
 	"<": "&lt;",
 	">": "&gt;",
-	'"': "&quot;",
+	"\"": "&quot;",
 	"'": "&#39;",
 };
 
@@ -45,7 +50,7 @@ export const HTML_REGULAR_REGEX = /<[a-z][\s\S]*>/i;
  * - Captures directive name
  * - Optionally captures parameters in parentheses
  */
-export const DIRECTIVE_REGEX = /^\s*([a-zA-Z0-9]+)(?:\s*\(([\s\S]*?)\))?/;
+export const DIRECTIVE_REGEX = /^\s*([a-zA-Z0-9]+)(?:\s*\(([\s\S]*?)\))?/; // Changed to match only one @
 
 /**
  * Enum representing different AST node types in the template engine
@@ -55,8 +60,7 @@ export enum EjbAst {
 	Root,
 	/** Text content node */
 	Text,
-	/** Variable interpolation node */
-	Interpolation,
+	/** Variable interpolation node */	Interpolation,
 	/** Directive node */
 	Directive,
 	/** Sub-directive node */
@@ -65,7 +69,7 @@ export enum EjbAst {
 
 /**
  * Helper function to create a directive plugin object
- * @param opts - Directive plugin configuration
+ * @param opts - Directive plugin object
  * @returns An object with the directive name as key and options as value
  */
 export function ejbDirective(

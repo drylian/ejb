@@ -1,84 +1,66 @@
 import * as vscode from 'vscode';
-import { EJBConfigManager } from './EJBConfigManager';
-import { EJBCompletionProvider } from './EJBCompletionProvider';
-import { EJBHoverProvider } from './EJBHoverProvider';
+import { ejb_store } from './state';
+import { EJBCompletionProvider } from './completion_provider';
+import { EJBHoverProvider } from './hover_provider';
+import { update_diagnostics } from './diagnostics';
+import { register_semantic_tokens_provider } from './semantic_tokens_provider';
+import { createEJB } from './ejb';
 
-// Variáveis globais para gerenciar o estado
-let configManager: EJBConfigManager;
-let completionProvider: EJBCompletionProvider;
-let hoverProvider: EJBHoverProvider;
-let disposables: vscode.Disposable[] = [];
-
-export async function activate(context: vscode.ExtensionContext) {
-    console.log('[EJB] Extension activating...');
+export function activate(context: vscode.ExtensionContext) {
+    const output_channel = vscode.window.createOutputChannel('EJB');
+    context.subscriptions.push(output_channel);
+    output_channel.appendLine('[Extension] Activating...');
 
     try {
-        configManager = EJBConfigManager.getInstance();
-        
-        // Inicializar antes de registrar os providers
-        await configManager.initialize();
-        
-        completionProvider = new EJBCompletionProvider(configManager);
-        hoverProvider = new EJBHoverProvider(configManager);
+        ejb_store.getState().init(context, output_channel);
+        output_channel.appendLine('[Extension] Store initialized.');
 
-        // Registrar providers para a linguagem EJB
-        const completionDisposable = vscode.languages.registerCompletionItemProvider(
-            { language: 'ejb', scheme: 'file' },
-            completionProvider,
-            '@'
+        // Create the EJB instance with virtualized directives
+        const ejb_instance = createEJB(output_channel);
+        output_channel.appendLine('[Extension] EJB instance created with virtualized directives.');
+
+        const hover_provider = new EJBHoverProvider(output_channel, ejb_instance);
+        const completion_provider = new EJBCompletionProvider();
+
+        context.subscriptions.push(
+            vscode.languages.registerHoverProvider('ejb', hover_provider),
+            vscode.languages.registerCompletionItemProvider('ejb', completion_provider, '@')
         );
+        output_channel.appendLine('[Extension] Hover and Completion providers registered.');
 
-        const hoverDisposable = vscode.languages.registerHoverProvider(
-            { language: 'ejb', scheme: 'file' },
-            hoverProvider
-        );
+        const diagnostics_collection = vscode.languages.createDiagnosticCollection('ejb');
+        context.subscriptions.push(diagnostics_collection);
 
-        // Configurar watchers para mudanças de workspace
-        const workspaceChangeDisposable = vscode.workspace.onDidChangeWorkspaceFolders(async (event) => {
-            console.log('[EJB] Workspace folders changed, reloading configs...');
-            try {
-                await configManager.initialize();
-            } catch (error) {
-                console.warn('[EJB] Error reloading configs after workspace change:', error);
+        const run_diagnostics = (document: vscode.TextDocument) => {
+            if (document.languageId === 'ejb') {
+                update_diagnostics(document, diagnostics_collection, output_channel, ejb_instance);
+            }
+        };
+
+        const unsubscribe = ejb_store.subscribe((state, prev_state) => {
+            if (state.loading !== prev_state.loading && !state.loading) {
+                output_channel.appendLine('[Extension] Config loaded. Rerunning diagnostics.');
+                vscode.workspace.textDocuments.forEach(run_diagnostics);
             }
         });
+        context.subscriptions.push({ dispose: unsubscribe });
+        output_channel.appendLine('[Extension] Diagnostics configured.');
 
-        // Configurar watchers para mudanças de configuração
-        const configChangeDisposable = vscode.workspace.onDidChangeConfiguration((event) => {
-            if (event.affectsConfiguration('ejb')) {
-                console.log('[EJB] Configuration changed, reloading...');
-                configManager.initialize().catch(console.error);
-            }
-        });
+        if (vscode.window.activeTextEditor) {
+            run_diagnostics(vscode.window.activeTextEditor.document);
+        }
 
-        // Adicionar todos os disposables ao contexto
-        disposables = [
-            completionDisposable,
-            hoverDisposable,
-            workspaceChangeDisposable,
-            configChangeDisposable
-        ];
+        context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(run_diagnostics));
+        context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => run_diagnostics(event.document)));
+        context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(doc => diagnostics_collection.delete(doc.uri)));
 
-        disposables.forEach(disposable => context.subscriptions.push(disposable));
+        register_semantic_tokens_provider(context, output_channel, ejb_instance);
+        output_channel.appendLine('[Extension] Semantic Tokens provider registered.');
 
-        console.log('[EJB] Extension activated successfully');
-
-    } catch (error) {
-        console.error('[EJB] Failed to activate extension:', error);
-        vscode.window.showErrorMessage('EJB Extension failed to activate. See console for details.');
+    } catch (error: any) {
+        output_channel.appendLine(`[Extension] FATAL ERROR during activation: ${error.message}\n${error.stack}`);
     }
+
+    output_channel.appendLine('[Extension] Activation complete.');
 }
 
-export function deactivate() {
-    console.log('[EJB] Extension deactivating...');
-    
-    // Limpar todos os recursos
-    disposables.forEach(disposable => disposable.dispose());
-    disposables = [];
-    
-    if (configManager) {
-        configManager.dispose();
-    }
-    
-    console.log('[EJB] Extension deactivated');
-}

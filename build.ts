@@ -3,8 +3,18 @@ import { existsSync } from "fs";
 import { mkdir, rm, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 import { build, type Options } from "tsup";
+import pkg from './package.json';
+import { makeConfig } from "./src/config";
+import { DEFAULT_DIRECTIVES } from "./src/directives";
 
 if (existsSync("dist")) await rm("dist", { recursive: true });
+
+// make ejbconfig.json
+await writeFile('./ejbconfig.json', JSON.stringify(makeConfig(DEFAULT_DIRECTIVES, {
+	packageName:pkg.name,
+	version:pkg.version,
+	url:pkg.repository.url,
+}), null, 2))
 
 const sharedConfig: Options = {
 	platform: "node",

@@ -1,6 +1,17 @@
 import type { EjbAst } from "./constants";
 import type { Ejb } from "./ejb";
 
+export interface Position {
+	line: number;
+	column: number;
+	offset: number;
+}
+
+export interface SourceLocation {
+	start: Position;
+	end: Position;
+}
+
 /**
  * Conditional type that returns Promise<T> if Async is true, otherwise T
  * @template Async - Boolean indicating if the operation is async
@@ -112,6 +123,12 @@ export interface EjbDirectiveBasement {
 	 * @returns Code to insert or Promise of code
 	 */
 	onEnd?: (ejb: AnyEjb) => EjbAnyReturn<string>;
+    /** Type of content within the directive's children */
+    children_type?: 'html' | 'js' | 'css';
+    /** A description of what the directive does. */
+    description?: string;
+    /** An example of how to use the directive. */
+    example?: string;
 }
 
 /**
@@ -162,6 +179,7 @@ export interface AstNodeBase {
 	type: EjbAst;
 	/** Flag indicating if directive was auto-closed */
 	auto_closed?: boolean;
+	loc?: SourceLocation;
 }
 
 /** Root node of the AST */

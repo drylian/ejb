@@ -12,6 +12,9 @@ export default ejbDirective({
 	name: "component",
 	priority: 10,
 	children: true,
+    description: "Renders a template as a component, allowing for slots.",
+    example: "@component('./components/card.ejb')\n    @slot('title')\n        My Card Title\n    @end\n    <p>This is the default slot content.</p>\n@end",
+
 	parents: [
 		{
 			name: "slot",

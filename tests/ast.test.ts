@@ -37,8 +37,32 @@ test("should throw on unclosed directive", () => {
 				type: 3,
 				name: "if",
 				expression: "true",
+				loc: {
+					end: {
+						column: 16,
+						line: 1,
+						offset: 15,
+					},
+					start: {
+						column: 1,
+						line: 1,
+						offset: 0,
+					},
+				},
 				children: [
 					{
+						loc: {
+							end: {
+								column: 10,
+								line: 1,
+								offset: 9,
+							},
+							start: {
+								column: 10,
+								line: 1,
+								offset: 9,
+							},
+						},
 						type: 1,
 						value: " Hello",
 					},
@@ -46,6 +70,18 @@ test("should throw on unclosed directive", () => {
 				auto_closed: true,
 			},
 		],
+		loc: {
+			end: {
+				column: 16,
+				line: 1,
+				offset: 15,
+			},
+			start: {
+				column: 1,
+				line: 1,
+				offset: 0,
+			},
+		},
 	});
 });
 
