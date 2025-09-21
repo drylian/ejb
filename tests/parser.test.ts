@@ -39,12 +39,16 @@ test("should handle nested directives", () => {
 	expect(ifNode.children[0].type).toBe(EjbAst.Directive);
 });
 
-test("should throw on invalid directive", () => {
+test("should collect error on invalid directive", () => {
 	const ejb = new Ejb();
-	expect(() => ejbParser(ejb, "@")).toThrow("Invalid directive");
+	const ast = ejbParser(ejb, "@");
+	expect(ast.errors.length).toBe(1);
+	expect(ast.errors[0].message).toBe("Invalid directive");
 });
 
-test("should throw on unexpected end directive", () => {
+test("should collect error on unexpected end directive", () => {
 	const ejb = new Ejb();
-	expect(() => ejbParser(ejb, "@end")).toThrow("Unexpected @end directive");
+	const ast = ejbParser(ejb, "@end");
+	expect(ast.errors.length).toBe(1);
+	expect(ast.errors[0].message).toBe("Unexpected @end directive");
 });

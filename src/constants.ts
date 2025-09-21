@@ -60,7 +60,8 @@ export enum EjbAst {
 	Root,
 	/** Text content node */
 	Text,
-	/** Variable interpolation node */	Interpolation,
+	/** Variable interpolation node */
+	Interpolation,
 	/** Directive node */
 	Directive,
 	/** Sub-directive node */

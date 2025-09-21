@@ -70,6 +70,7 @@ test("should throw on unclosed directive", () => {
 				auto_closed: true,
 			},
 		],
+		errors: [],
 		loc: {
 			end: {
 				column: 16,

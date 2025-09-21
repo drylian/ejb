@@ -9,9 +9,6 @@ export default Object.assign(
 	ejbDirective({
 		name: "stack",
 		priority: 1,
-        description: "Retrieves and renders a named stack of content.",
-        example: "<style>\n    @stack('styles')\n</style>",
-
 		onInitFile: () => `$ejb._stacks = {};\n
         $ejb.stacks = new Proxy({}, {
             get(target, prop) {
@@ -51,10 +48,6 @@ export default Object.assign(
 		name: "push",
 		priority: 1,
 		children: true,
-        children_type: 'css', // Or can be js, depends on usage
-        description: "Pushes content into a named stack.",
-        example: "@push('styles')\n    .my-class { color: red; }\n@end",
-
 		// onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
 		// onInit + onEnd + sync = $ejb.res += (($ejb) => { ...content })({ ...$ejb, res: ''});
 		onInit: (ejb, exp) =>
@@ -67,8 +60,6 @@ export default Object.assign(
 	ejbDirective({
 		name: "defined",
 		priority: 11,
-        description: "Retrieves and renders a named defined block.",
-        example: "@defined('myBlock')",
 		onInitFile: () => `$ejb.defines = {};`,
 		onParams(_, exp) {
 			return `$ejb.res = $ejb.defines[${exp}] ? ($ejb.res + $ejb.defines[${exp}]) : ($ejb.res + '<!-- EJB:defines(${trimQuotes(exp)}) -->');`;
@@ -90,9 +81,6 @@ export default Object.assign(
 		name: "define",
 		priority: 11,
 		children: true,
-        description: "Defines a reusable block of content.",
-        example: "@define('myBlock')\n    <p>Hello, World!</p>\n@end",
-
 		// onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
 		// onInit + onEnd + sync = $ejb.res += (($ejb) => { ...content })({ ...$ejb, res: ''});
 		onInit: (ejb, exp) =>

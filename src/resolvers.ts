@@ -18,17 +18,12 @@ export const EJBNodeJSResolver = <Async extends boolean = false>(
 	async?: Async,
 ) => {
 	return (importpath: string) => {
-		try {
-			const encoding = { encoding: "utf-8" } as const;
-			return (
-				async
-					? readFile(importpath, encoding)
-					: readFileSync(importpath, encoding)
-			) as IfAsync<Async, string>;
-		} catch (e) {
-			console.error(`[EJB-IMPORT] Failed to resolve: ${importpath}`, e);
-			return (async ? Promise.resolve("") : "") as IfAsync<Async, string>;
-		}
+		const encoding = { encoding: "utf-8" } as const;
+		return (
+			async
+				? readFile(importpath, encoding)
+				: readFileSync(importpath, encoding)
+		) as IfAsync<Async, string>;
 	};
 };
 

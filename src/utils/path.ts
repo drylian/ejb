@@ -23,7 +23,7 @@ export function join(...segments: string[]): string {
 		.replace(/\/+/g, "/");
 
 	if (isWindowsAbsolute && driveLetter) {
-		normalized = normalized.replace(/^[a-zA-Z]:/, driveLetter);
+		normalized = normalized.replace(/^[a-zA-Z]:/, `${driveLetter}:`);
 	}
 	const isAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(normalized);
 

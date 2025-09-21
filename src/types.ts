@@ -12,6 +12,10 @@ export interface SourceLocation {
 	end: Position;
 }
 
+export interface EjbError extends Error {
+	loc?: SourceLocation;
+}
+
 /**
  * Conditional type that returns Promise<T> if Async is true, otherwise T
  * @template Async - Boolean indicating if the operation is async
@@ -49,7 +53,7 @@ export interface EjbContructor<Async extends boolean> {
 	/** Global variable prefix (default 'it') */
 	globalvar: string;
 	/** expose global keys in file, example: it.exemple -> it.exemple | exemple */
-	globalexpose:boolean;
+	globalexpose: boolean;
 }
 
 /**
@@ -74,8 +78,16 @@ export interface EjbFunctionContext {
 export interface EjbChildrenContext {
 	/** Child nodes */
 	children: AstNode[];
+	params?:EjbParamOption[];
 	/** Parent directive names (for nested directives) */
 	parents: AstNode[];
+}
+
+export interface EjbParamOption {
+	name: string;
+	type?: 'string' | 'boolean' | 'number' | 'object' | 'array' | 'html';
+	required?:boolean;
+	default?:any;
 }
 
 /**
@@ -84,6 +96,9 @@ export interface EjbChildrenContext {
 export interface EjbDirectiveBasement {
 	/** Directive name */
 	name: string | RegExp;
+	// params used in onParams
+	params?: EjbParamOption[];
+	children?: boolean;
 	/**
 	 * Handler for directive parameters
 	 * @param ejb - Ejb instance
@@ -93,6 +108,7 @@ export interface EjbDirectiveBasement {
 	onParams?: (
 		ejb: AnyEjb,
 		expression: string,
+		loc?: SourceLocation,
 	) => EjbAnyReturn<string | undefined>;
 	/**
 	 * Handler for when a regex name matches
@@ -116,19 +132,23 @@ export interface EjbDirectiveBasement {
 	 * @param ejb - Ejb instance
 	 * @returns Code to insert or Promise of code
 	 */
-	onInit?: (ejb: AnyEjb, expression?: string) => EjbAnyReturn<string>;
+	onInit?: (
+		ejb: AnyEjb,
+		expression?: string,
+		loc?: SourceLocation,
+	) => EjbAnyReturn<string>;
 	/**
 	 * Finalization handler
 	 * @param ejb - Ejb instance
 	 * @returns Code to insert or Promise of code
 	 */
 	onEnd?: (ejb: AnyEjb) => EjbAnyReturn<string>;
-    /** Type of content within the directive's children */
-    children_type?: 'html' | 'js' | 'css';
-    /** A description of what the directive does. */
-    description?: string;
-    /** An example of how to use the directive. */
-    example?: string;
+	/** Type of content within the directive's children */
+	children_type?: 'html' | 'js' | 'css';
+	/** A description of what the directive does. */
+	description?: string;
+	/** An example of how to use the directive. */
+	example?: string;
 }
 
 /**
@@ -185,6 +205,7 @@ export interface AstNodeBase {
 /** Root node of the AST */
 export interface RootNode extends AstNodeBase {
 	type: EjbAst.Root;
+	errors: EjbError[];
 	/** Child nodes */
 	children: AstNode[];
 }

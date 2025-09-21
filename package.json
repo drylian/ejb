@@ -50,12 +50,12 @@
 		"check": "bunx biome check src/** --write"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.2.0",
-		"@types/bun": "^1.2.10",
-		"@types/node": "^22.15.2",
+		"@biomejs/biome": "2.2.4",
+		"@types/bun": "^1.2.22",
+		"@types/node": "^24.5.2",
 		"dts-bundle-generator": "^9.5.1",
-		"tsup": "^8.4.0",
-		"tsx": "^4.20.4",
-		"typescript": "^5.8.3"
+		"tsup": "^8.5.0",
+		"tsx": "^4.20.5",
+		"typescript": "^5.9.2"
 	}
 }

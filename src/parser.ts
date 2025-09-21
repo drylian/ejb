@@ -1,4 +1,4 @@
-import type { DirectiveNode, RootNode, SubDirectiveNode, Position, SourceLocation } from "./types";
+import type { DirectiveNode, RootNode, SubDirectiveNode, Position, SourceLocation, EjbError } from "./types";
 import { DIRECTIVE_REGEX, EJB_DEFAULT_PREFIX_DIRECTIVE, EJB_DEFAULT_PREFIX_VARIABLE, EJB_ESCAPED_PREFIX_DIRECTIVE, EjbAst, } from "./constants";
 import type { Ejb } from "./ejb";
 
@@ -29,7 +29,7 @@ export function ejbParser<A extends boolean>(
         return { start, end: create_position(line, column, cursor) };
     };
     
-	const root: RootNode = { type: EjbAst.Root, children: [], loc: { start: create_position(1, 1, 0), end: create_position(line, column, template.length) } };
+	const root: RootNode = { type: EjbAst.Root, children: [], errors: [], loc: { start: create_position(1, 1, 0), end: create_position(line, column, template.length) } };
 	const stack: (RootNode | DirectiveNode | SubDirectiveNode)[] = [root];
 
 	const [interp_start, interp_end] = EJB_DEFAULT_PREFIX_VARIABLE.split(
@@ -145,8 +145,12 @@ export function ejbParser<A extends boolean>(
 		if (next_token_pos === next_interpolation) {
             advance(interp_start);
 			const expression_end = template.indexOf(interp_end, cursor);
-			if (expression_end === -1)
-				throw new Error("Unclosed interpolation expression");
+			if (expression_end === -1) {
+				const err: EjbError = new Error("Unclosed interpolation expression");
+				err.loc = get_loc(token_start_pos);
+				root.errors.push(err);
+				break;
+			}
 
             const expression = template.substring(cursor, expression_end).trim();
 			parent.children.push({
@@ -163,7 +167,12 @@ export function ejbParser<A extends boolean>(
 		if (next_token_pos === next_directive) {
             advance(directive_prefix);
 			const directive_match = template.substring(cursor).match(DIRECTIVE_REGEX);
-			if (!directive_match) throw new Error("Invalid directive");
+			if (!directive_match) {
+				const err: EjbError = new Error("Invalid directive");
+				err.loc = get_loc(token_start_pos);
+				root.errors.push(err);
+				continue;
+			};
 
 			const [matched_str, name, expr_raw = ""] = directive_match;
 			const expr = expr_raw.trim();
@@ -188,7 +197,8 @@ export function ejbParser<A extends boolean>(
 
 			const is_closing_directive =
 				!is_sub_directive &&
-				(name === "end" ||
+				(
+					name === "end" ||
 					stack.some(
 						(node) =>
 							node.type !== EjbAst.Root &&
@@ -198,7 +208,11 @@ export function ejbParser<A extends boolean>(
 
 			if (is_closing_directive) {
 				if (stack.length === 1) {
-					throw new Error(`Unexpected ${directive_prefix}${name} directive`);
+					const err: EjbError = new Error(`Unexpected ${directive_prefix}${name} directive`);
+					err.loc = get_loc(token_start_pos);
+					root.errors.push(err);
+					advance(matched_str);
+					continue;
 				}
                 advance(matched_str);
 
@@ -218,9 +232,12 @@ export function ejbParser<A extends boolean>(
 				);
 
 				if (target_index === -1) {
-					throw new Error(
+					const err: EjbError = new Error(
 						`No matching ${directive_prefix}${name} directive to close`,
 					);
+					err.loc = get_loc(token_start_pos);
+					root.errors.push(err);
+					continue;
 				}
 
                 // Pop nodes and update their loc.end
@@ -254,13 +271,11 @@ export function ejbParser<A extends boolean>(
 
 			const directive_def = is_sub_directive
 				? ejb.directives[parent_directive?.name as string]?.parents?.find(
-						(p: any) => p.name === name,
-					)
+								(p: any) => p.name === name,
+						)
 				: ejb.directives[name];
 
-			if (!directive_def) {
-				throw new Error(`[EJB] Directive not found: ${directive_prefix}${name}`);
-			}
+			
             
             const directive_node_loc = get_loc(token_start_pos);
             (directive_node_loc.end as any) = create_position(line, column + matched_str.length, cursor + matched_str.length);
@@ -309,10 +324,14 @@ export function ejbParser<A extends boolean>(
 				parent.children.push(directive_node);
 			}
 
-			const should_push_to_stack = 
-				is_sub_directive ||
-				(typeof directive_def.children === 'boolean' && directive_def.children === true) ||
-				"internal" in directive_def;
+			let should_push_to_stack = false;
+			if (directive_def) {
+				should_push_to_stack =
+					is_sub_directive ||
+					(typeof (directive_def).children === "boolean" &&
+						directive_def.children === true) ||
+					"internal" in directive_def;
+			}
 			if (should_push_to_stack) {
 				stack.push(directive_node);
 			}

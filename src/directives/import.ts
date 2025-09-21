@@ -59,8 +59,8 @@ export default ejbDirective({
 				});
 			});
 		} catch (e: any) {
-			console.error(`[EJB] Failed to resolve import for path: ${path}`, e);
-			return `return \`<!-- EJB Import Error: ${escapeJs(e.message)} -->\`;`;
+			ejb.errors.push(e);
+			return ``;
 		}
 	},
 });
