@@ -1,0 +1,93 @@
+{
+  "name": "ejb-intellisense",
+  "displayName": "EJB Intellisense",
+  "description": "VSCode extension for EJB template language with syntax highlighting and IntelliSense",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:ejb"
+  ],
+  "main": "./dist/extension.js",
+  "type": "module",
+  "contributes": {
+    "languages": [
+      {
+        "id": "ejb",
+        "aliases": [
+          "EJB",
+          "ejb"
+        ],
+        "extensions": [
+          ".ejb"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ejb",
+        "scopeName": "source.ejb",
+        "path": "./syntaxes/ejb-language.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.ejb": "javascript"
+        }
+      },
+      {
+        "scopeName": "source.ejb.injection",
+        "path": "./syntaxes/ejb.tmLanguage.json",
+        "injectTo": [
+          "source.js",
+          "source.css",
+          "text.html.basic"
+        ]
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "ejbconfig.json",
+        "url": "./schemas/ejbconfig.schema.json"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "ejb",
+        "scopes": {
+          "keyword": ["keyword.control.ejb"],
+          "property": ["support.type.property-name.css"],
+          "class": ["entity.name.tag.css"],
+          "string": ["string.quoted.double.js"]
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "build": "vsce package",
+    "vscode:prepublish": "bun build --external vscode --outdir dist src/extension.ts",
+    "watch": "bun build --external vscode --outdir dist src/extension.ts --watch"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "16.x",
+    "@babel/parser": "^7.24.7",
+    "@types/babel__parser": "^7.1.2",
+    "@babel/traverse": "^7.24.7",
+    "@types/babel__traverse": "^7.24.5",
+    "postcss": "^8.4.38"
+  },
+  "dependencies": {
+    "vscode-html-languageservice": "^5.5.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12",
+    "zustand": "^5.0.8"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

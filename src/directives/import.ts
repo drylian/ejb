@@ -13,17 +13,22 @@ export default ejbDirective({
 	children: false,
     description: "Imports and renders another EJB template file.",
     example: "@import('./path/to/template.ejb', { myVar: 'value' })",
+	params: [
+		{ name: 'path', type: 'string', required: true },
+		{ name: 'variables', type: 'object', default: '{}' },
+	], 
 	// onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
 	// onInit + onEnd + sync = $ejb.res += (($ejb) => { ...content })({ ...$ejb, res: ''});
 	onInit: (ejb) =>
 		`$ejb.res += ${ejb.async ? "await" : ""} (${ejb.async ? "async" : ""} ($ejb) => {`,
 	onEnd: () => "})({ ...$ejb, res:'' });",
 	onParams: (ejb, exp) => {
-		const expIdx = exp.indexOf(",");
-		const path = (expIdx === -1 ? exp : exp.slice(0, expIdx))
-			.trim()
-			.replace(/['"`]/g, "");
-		const params = (expIdx === -1 ? "{}" : exp.slice(expIdx + 1)).trim();
+		const path = exp.getString('path');
+		const params = exp.getRaw('variables');
+
+		if (!path) {
+			throw new Error("[EJB] @import directive requires a path.");
+		}
 
 		if (!ejb.resolver) {
 			throw new Error(

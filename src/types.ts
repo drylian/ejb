@@ -85,9 +85,20 @@ export interface EjbChildrenContext {
 
 export interface EjbParamOption {
 	name: string;
-	type?: 'string' | 'boolean' | 'number' | 'object' | 'array' | 'html';
-	required?:boolean;
-	default?:any;
+	type: "string" | "boolean" | "number" | "object" | "array" | "html";
+	required?: boolean;
+	description?: string;
+	default?: any;
+}
+
+export interface Expression {
+	getString(name: string): string | undefined;
+	getNumber(name: string): number | undefined;
+	getBoolean(name: string): boolean | undefined;
+	getObject<T>(name: string): T | undefined;
+	getArray<T>(name: string): T[] | undefined;
+	getRaw(name: string): string | undefined;
+	raw: string;
 }
 
 /**
@@ -107,7 +118,7 @@ export interface EjbDirectiveBasement {
 	 */
 	onParams?: (
 		ejb: AnyEjb,
-		expression: string,
+		exp: Expression,
 		loc?: SourceLocation,
 	) => EjbAnyReturn<string | undefined>;
 	/**
@@ -134,7 +145,7 @@ export interface EjbDirectiveBasement {
 	 */
 	onInit?: (
 		ejb: AnyEjb,
-		expression?: string,
+		exp: Expression,
 		loc?: SourceLocation,
 	) => EjbAnyReturn<string>;
 	/**

@@ -21,16 +21,16 @@ export default Object.assign(
 		name: "if",
 		priority: 1,
 		children: true,
-		onParams: (_, expression) => {
-			return `if (${expression}) {`;
+		onParams: (_, exp) => {
+			return `if (${exp.raw}) {`;
 		},
         onEnd: () => "}",
 		parents: [
 			{
 				name: "elseif",
                 internal:true,
-				onInit: (_, e) => `} else if (${e}) {`,
-                onEnd: () => "}",
+				onInit: (_, e) => `} else if (${e.raw}) {`,
+                onEnd: () => "}"
 			},
 			{
 				name: "else",
@@ -46,8 +46,8 @@ export default Object.assign(
 		name: "for",
 		priority: 1,
 		children: true,
-		onInit: (_, expression) => {
-			return `for (${expression}) {`;
+		onInit: (_, exp) => {
+			return `for (${exp.raw}) {`;
 		},
 		onEnd: () => {
 			return `}`;
@@ -59,8 +59,8 @@ export default Object.assign(
 	ejbDirective({
 		name: "isset",
 		priority: 1,
-		onParams(_, expression) {
-			return `if(typeof ${expression} !== "undefined" && ${expression}) $ejb.res += ${expression};`;
+		onParams(_, exp) {
+			return `if(typeof ${exp.raw} !== "undefined" && ${exp.raw}) $ejb.res += ${exp.raw};`;
 		},
 	}),
 	/**
@@ -70,25 +70,25 @@ export default Object.assign(
 		name: "switch",
 		priority: 1,
 		children: true,
-		onParams: (_, expression) => {
-			return `switch (${expression}) {`;
+		onParams: (_, exp) => {
+			return `switch (${exp.raw}) {`;
 		},
 		parents: [
 			{
 				name: "case",
 				internal: true,
-				onInit: (_, expression) => `case ${expression}: {`,
-				onEnd: () => ";break;}",
+				onInit: (_, exp) => `case ${exp.raw}: {`,
+				onEnd: () => ";break;}"
 			},
 			{
 				name: "default",
 				internal: true,
 				onInit: () => `default: {`,
-				onEnd: () => "}",
+				onEnd: () => "}"
 			},
 		],
 		onChildren: (_, { parents }) => PromiseResolver(_.compileNode(parents)),
-		onEnd: () => "}",
+		onEnd: () => "}"
 	}),
 	/**
 	 * @isset directive
@@ -103,8 +103,8 @@ export default Object.assign(
 				ejb.compileNode(opts.children),
 				(content: string) => {
 					const reference = md5(content);
-					return `if(typeof $ejb.onces['${reference}'] == "undefined") {
-                $ejb.onces['${reference}'] = true;
+					return `if(typeof $ejb.onces[\'{${reference}}\'] == "undefined") {
+                $ejb.onces[\'{${reference}}\'] = true;
                 ${content}
                 `;
 				},

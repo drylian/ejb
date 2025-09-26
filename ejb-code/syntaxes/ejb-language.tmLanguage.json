@@ -1,0 +1,13 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "EJB",
+    "scopeName": "source.ejb",
+    "patterns": [
+        {
+            "include": "source.ejb.injection"
+        },
+        {
+            "include": "text.html.basic"
+        }
+    ]
+}

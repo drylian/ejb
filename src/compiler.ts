@@ -12,6 +12,7 @@ import type {
 	SubDirectiveNode,
 	TextNode,
 } from "./types";
+import { createExpression } from "./expression";
 import { escapeJs, isPromise } from "./utils";
 
 function processNode<A extends boolean>(
@@ -129,6 +130,8 @@ function handleDirective<A extends boolean>(
 		}
 	}
 
+    const exp = createExpression(expression, directive.params || []);
+
 	const buildResult = (handler: Function, ...args: any[]) => {
 		try {
 			const result = handler(...args);
@@ -155,7 +158,7 @@ function handleDirective<A extends boolean>(
 				error = new Error(String(error));
 			}
 			const ejbError: EjbError = error;
-				ejbError.loc = loc;
+					ejbError.loc = loc;
 			ejb.errors.push(ejbError);
 			return "";
 		}
@@ -183,7 +186,7 @@ function handleDirective<A extends boolean>(
 
 	// 1. onInit
 	if (directive.onInit) {
-		const initResult = buildResult(directive.onInit, ejb, expression, loc);
+		const initResult = buildResult(directive.onInit, ejb, exp, loc);
 		if (isPromise(initResult)) {
 			return initResult.then((res) => {
 				output += res || "";
@@ -196,7 +199,7 @@ function handleDirective<A extends boolean>(
 	const processDirectiveParts = (): IfAsync<A, string> => {
 		// 2. onParams
 		if (directive.onParams) {
-			const paramsResult = buildResult(directive.onParams, ejb, expression, loc);
+			const paramsResult = buildResult(directive.onParams, ejb, exp, loc);
 			if (isPromise(paramsResult)) {
 				return paramsResult.then((res) => {
 					output += res || "";
@@ -208,7 +211,6 @@ function handleDirective<A extends boolean>(
 
 		return processChildrenAndSubDirectives();
 	};
-
 	const processChildrenAndSubDirectives = (): IfAsync<A, string> => {
 		const regularChildren = children.filter(
 			(child) => child.type !== EjbAst.SubDirective,

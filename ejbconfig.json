@@ -1,6 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/drylian/ejb/main/vs-code/schemas/ejbconfig.schema.json",
   "package": "@caeljs/ejb",
+   "depuration": true,
   "version": "0.1.0",
   "url": "git+https://github.com/drylian/configjs.git",
   "directives": [
@@ -13,9 +14,9 @@
     },
     {
       "name": "component",
-      "description": "Renders a template as a component, allowing for slots.",
+      "description": "",
       "children": true,
-      "example": "@component('./components/card.ejb')\n    @slot('title')\n        My Card Title\n    @end\n    <p>This is the default slot content.</p>\n@end",
+      "example": "Example not defined",
       "children_type": "html",
       "parents": [
         {
@@ -28,100 +29,100 @@
     },
     {
       "name": "stack",
-      "description": "Retrieves and renders a named stack of content.",
+      "description": "",
       "children": false,
-      "example": "<style>\n    @stack('styles')\n</style>",
+      "example": "Example not defined",
       "children_type": "html"
     },
     {
       "name": "push",
-      "description": "Pushes content into a named stack.",
+      "description": "",
       "children": true,
-      "example": "@push('styles')\n    .my-class { color: red; }\n@end",
-      "children_type": "css"
+      "example": "Example not defined",
+      "children_type": "html"
     },
     {
       "name": "defined",
-      "description": "Retrieves and renders a named defined block.",
+      "description": "",
       "children": false,
-      "example": "@defined('myBlock')",
+      "example": "Example not defined",
       "children_type": "html"
     },
     {
       "name": "define",
-      "description": "Defines a reusable block of content.",
+      "description": "",
       "children": true,
-      "example": "@define('myBlock')\n    <p>Hello, World!</p>\n@end",
+      "example": "Example not defined",
       "children_type": "html"
     },
     {
       "name": "code",
-      "description": "Executes raw JavaScript code on the server side.",
+      "description": "",
       "children": true,
-      "example": "\n@code\n    const myVar = \"Hello, EJB!\";\n    $ejb.res += myVar;\n@end",
-      "children_type": "js"
+      "example": "Example not defined",
+      "children_type": "html"
     },
     {
       "name": "if",
-      "description": "Conditionally renders a block of code.",
+      "description": "",
       "children": true,
-      "example": "@if(user.isLoggedIn)\n    <p>Welcome, {user.name}</p>\n@end",
+      "example": "Example not defined",
       "children_type": "html",
       "parents": [
         {
           "name": "elseif",
           "example": "Example not defined",
           "children_type": "html",
-          "description": "An alternative condition for an @if block."
+          "description": ""
         },
         {
           "name": "else",
           "example": "Example not defined",
           "children_type": "html",
-          "description": "The default case for an @if block."
+          "description": ""
         }
       ]
     },
     {
       "name": "for",
-      "description": "Repeats a block of code for each item in an array.",
+      "description": "",
       "children": true,
-      "example": "@for(const user of users)\n    <p>{user.name}</p>\n@end",
+      "example": "Example not defined",
       "children_type": "html"
     },
     {
       "name": "isset",
-      "description": "Checks if a variable is defined and not null, then prints it.",
+      "description": "",
       "children": false,
-      "example": "@isset(myVar)",
+      "example": "Example not defined",
       "children_type": "html"
     },
     {
       "name": "switch",
-      "description": "A control structure that allows checking a variable against multiple values.",
+      "description": "",
       "children": true,
-      "example": "@switch(role)\n    @case(\"admin\")\n        <p>Admin panel</p>\n    @default\n        <p>User panel</p>\n@end",
+      "example": "Example not defined",
       "children_type": "html",
       "parents": [
         {
           "name": "case",
           "example": "Example not defined",
           "children_type": "html",
-          "description": "A case within a @switch block."
+          "description": ""
         },
         {
           "name": "default",
           "example": "Example not defined",
           "children_type": "html",
-          "description": "The default case for a @switch block."
+          "description": ""
         }
       ]
     },
     {
       "name": "once",
-      "description": "Ensures a block of code is rendered only once, even if included multiple times.",
+      "description": "",
       "children": true,
-      "example": "@once\n    <script src=\"...\" />\n@end",
+      "example": "Example not defined",
       "children_type": "html"
     }
   ]

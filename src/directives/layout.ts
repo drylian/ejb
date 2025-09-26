@@ -29,7 +29,7 @@ export default Object.assign(
         });
 `,
 		onParams(_, exp) {
-			return `$ejb.res = $ejb._stacks[${exp}] ? ($ejb.res + $ejb.stacks[${exp}].join('\\n')) : ($ejb.res + '<!-- EJB:stack(${trimQuotes(exp)}) -->');`;
+			return `$ejb.res = $ejb._stacks[${exp.raw}] ? ($ejb.res + $ejb.stacks[${exp.raw}].join('\\n')) : ($ejb.res + '<!-- EJB:stack(${trimQuotes(exp.raw)}) -->');`;
 		},
 		onEndFile: () => {
 			return `
@@ -51,7 +51,7 @@ export default Object.assign(
 		// onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
 		// onInit + onEnd + sync = $ejb.res += (($ejb) => { ...content })({ ...$ejb, res: ''});
 		onInit: (ejb, exp) =>
-			`$ejb.stacks[${exp}].add(${ejb.async ? "await" : ""} (${ejb.async ? "async" : ""} ($ejb) => {`,
+			`$ejb.stacks[${exp.raw}].add(${ejb.async ? "await" : ""} (${ejb.async ? "async" : ""} ($ejb) => {`,
 		onEnd: () => ";return $ejb.res;})({ ...$ejb, res:'' }));",
 	}),
 	/**
@@ -62,7 +62,7 @@ export default Object.assign(
 		priority: 11,
 		onInitFile: () => `$ejb.defines = {};`,
 		onParams(_, exp) {
-			return `$ejb.res = $ejb.defines[${exp}] ? ($ejb.res + $ejb.defines[${exp}]) : ($ejb.res + '<!-- EJB:defines(${trimQuotes(exp)}) -->');`;
+			return `$ejb.res = $ejb.defines[${exp.raw}] ? ($ejb.res + $ejb.defines[${exp.raw}]) : ($ejb.res + '<!-- EJB:defines(${trimQuotes(exp.raw)}) -->');`;
 		},
 		onEndFile: () => {
 			return `
@@ -84,7 +84,7 @@ export default Object.assign(
 		// onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
 		// onInit + onEnd + sync = $ejb.res += (($ejb) => { ...content })({ ...$ejb, res: ''});
 		onInit: (ejb, exp) =>
-			`$ejb.defines[${exp}] = ${ejb.async ? "await" : ""} (${ejb.async ? "async" : ""} ($ejb) => {`,
+			`$ejb.defines[${exp.raw}] = ${ejb.async ? "await" : ""} (${ejb.async ? "async" : ""} ($ejb) => {`,
 		onEnd: () => ";return $ejb.res;})({ ...$ejb, res:'' });",
 	}),
 );

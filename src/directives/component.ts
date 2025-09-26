@@ -12,12 +12,16 @@ export default ejbDirective({
 	name: "component",
 	priority: 10,
 	children: true,
+	params: [
+		{ name: 'path', type: 'string', required: true },
+		{ name: 'variables', type: 'object', default: '{}' },
+	],
 	parents: [
 		{
 			name: "slot",
 			internal: true,
 			onParams: (ejb, exp) => {
-				return `$slots["$" + ${exp}] = ${ejb.async ? "await" : ""} (${ejb.async ? "async" : ""} ($ejb) => {`;
+				return `$slots["$" + ${exp.raw}] = ${ejb.async ? "await" : ""} (${ejb.async ? "async" : ""} ($ejb) => {`;
 			},
 			onEnd: () => "\nreturn $ejb.res;})({ ...$ejb, res:'' });",
 		},
@@ -39,11 +43,12 @@ export default ejbDirective({
 		});
 	},
 	onParams: (ejb, exp) => {
-		const expIdx = exp.indexOf(",");
-		const path = (expIdx === -1 ? exp : exp.slice(0, expIdx))
-			.trim()
-			.replace(/['"`]/g, "");
-		const params = (expIdx === -1 ? "{}" : exp.slice(expIdx + 1)).trim();
+		const path = exp.getString('path');
+		const params = exp.getRaw('variables');
+
+		if (!path) {
+			throw new Error("[EJB] @component directive requires a path.");
+		}
 
 		if (!ejb.resolver) {
 			throw new Error(

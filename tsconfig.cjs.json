@@ -6,7 +6,7 @@
 		"target": "es2015",
 		"rootDir": "src",
 		"outDir": "cjs",
-		"skipLibCheck": true
+    "lib": ["ESNext", "DOM", "ES2023"],
 	},
 	"exclude": ["build"]
 }

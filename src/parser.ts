@@ -225,7 +225,7 @@ export function ejbParser<A extends boolean>(
 				}
 
 				const target_index = stack.findLastIndex(
-					(node, index) =>
+					(node: RootNode | DirectiveNode | SubDirectiveNode, index: number) =>
 						index > 0 &&
 						node.type !== EjbAst.Root &&
 							(node as DirectiveNode | SubDirectiveNode).name === name,
