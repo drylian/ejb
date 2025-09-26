@@ -6,6 +6,9 @@ import { createEJB } from '@/core/ejb';
 import { EJB_Language_Service } from '@/languages/service';
 import { EJBHoverProvider } from '@/providers/hover';
 import { register_completion_provider } from '@/providers/completion';
+import { register_document_highlight_provider } from '@/providers/document_highlight';
+import { register_document_symbol_provider } from '@/providers/document_symbol';
+import { register_definition_provider } from '@/providers/definition';
  
 export function activate(context: vscode.ExtensionContext) {
     const output_channel = vscode.window.createOutputChannel('EJB');
@@ -28,13 +31,16 @@ export function activate(context: vscode.ExtensionContext) {
         );
 
         register_completion_provider(context, language_service as any);
-        output_channel.appendLine('[Extension] Hover and Completion providers registered.');
+        register_document_highlight_provider(context, language_service as any);
+        register_document_symbol_provider(context, language_service as any);
+        register_definition_provider(context, language_service as any);
+        output_channel.appendLine('[Extension] Hover, Completion, Highlight, Symbol and Definition providers registered.');
 
         const diagnostics_collection = vscode.languages.createDiagnosticCollection('ejb');
         context.subscriptions.push(diagnostics_collection);
 
         const onDocumentChange = (document: vscode.TextDocument) => {
-            update_diagnostics(document, output_channel, ejb_instance, language_service as any, diagnostics_collection);
+            update_diagnostics(document, output_channel, diagnostics_collection, language_service);
         };
 
         const unsubscribe = ejb_store.subscribe((state, prev_state) => {

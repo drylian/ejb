@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { getLanguageService as getHTMLLanguageService, TextDocument as HTMLTextDocument } from 'vscode-html-languageservice';
 import * as ts from 'typescript';
 import { Ejb, ejbParser, type AstNode, type RootNode, EjbAst, type DirectiveNode, type InterpolationNode, type SourceLocation } from 'ejb';
-import type { LanguageMode, LanguageModes, ProcessedEJB, SourceMapEntry } from '@/types/index';
+import type { ProcessedEJB, SourceMapEntry } from '@/types/index';
 
 function is_offset_within_range(offset: number, range: { start: { offset: number; }; end: { offset: number; }; }) {
     return offset >= range.start.offset && offset <= range.end.offset;
@@ -12,6 +12,7 @@ class ParsedEJB_Document {
     public version: number;
     private text: string;
     private ast: RootNode;
+    private ejb_instance: Ejb<boolean>;
 
     public html_content: string = '';
     public ts_content: string = '';
@@ -20,11 +21,12 @@ class ParsedEJB_Document {
     constructor(private document: vscode.TextDocument, ejb_instance: Ejb<boolean>) {
         this.version = document.version;
         this.text = document.getText();
-        this.ast = ejbParser(ejb_instance, this.text);
-        this.parse(ejb_instance);
+        this.ejb_instance = ejb_instance;
+        this.ast = ejbParser(this.ejb_instance, this.text);
+        this.parse();
     }
 
-    private parse(ejb_instance: Ejb<boolean>) {
+    private parse() {
         let html = this.text;
         let ts = '';
         const ts_map: SourceMapEntry[] = [];
@@ -43,7 +45,7 @@ class ParsedEJB_Document {
 
             if (node.type === EjbAst.Directive) {
                 const directive = node as DirectiveNode;
-                const def = ejb_instance.directives[directive.name];
+                const def = this.ejb_instance.directives[directive.name];
 
                 if (directive.expression) {
                     expression = directive.expression;
@@ -103,7 +105,7 @@ class ParsedEJB_Document {
 
         if (node) {
             if (node.type === EjbAst.Directive) {
-                const def = (this.ast as any).directives[node.name];
+                const def = this.ejb_instance.directives[(node as DirectiveNode).name];
                 if (def?.children_type === 'js' && is_offset_within_range(offset, (node as any).children_range)) {
                     language = 'ts';
                 }
@@ -206,12 +208,17 @@ export class EJB_Language_Service {
             if (!virtual_pos) return null;
 
             (this.ts_host as any).update_document(doc, parsed_doc.ts_content);
-            const quick_info = this.ts_service.getQuickInfoAtPosition(doc.uri.toString() + '.ts', doc.offsetAt(virtual_pos));
+            const virtual_doc = HTMLTextDocument.create(doc.uri.toString() + '.ts', 'javascript', doc.version, parsed_doc.ts_content);
+            const virtual_offset = virtual_doc.offsetAt(virtual_pos);
+
+            const quick_info = this.ts_service.getQuickInfoAtPosition(doc.uri.toString() + '.ts', virtual_offset);
             if (!quick_info) return null;
 
             const display = ts.displayPartsToString(quick_info.displayParts);
             const docs = ts.displayPartsToString(quick_info.documentation);
-            const range = parsed_doc.to_original_range(new vscode.Range(doc.positionAt(quick_info.textSpan.start), doc.positionAt(quick_info.textSpan.start + quick_info.textSpan.length)));
+
+            const virtual_range = new vscode.Range(virtual_doc.positionAt(quick_info.textSpan.start), virtual_doc.positionAt(quick_info.textSpan.start + quick_info.textSpan.length));
+            const range = parsed_doc.to_original_range(virtual_range);
 
             return new vscode.Hover(new vscode.MarkdownString([display, docs].filter(Boolean).join('\n\n')), range || undefined);
         }
@@ -233,7 +240,10 @@ export class EJB_Language_Service {
             if (!virtual_pos) return null;
 
             (this.ts_host as any).update_document(doc, parsed_doc.ts_content);
-            const completions = this.ts_service.getCompletionsAtPosition(doc.uri.toString() + '.ts', doc.offsetAt(virtual_pos), {});
+            const virtual_doc = HTMLTextDocument.create(doc.uri.toString() + '.ts', 'javascript', doc.version, parsed_doc.ts_content);
+            const virtual_offset = virtual_doc.offsetAt(virtual_pos);
+
+            const completions = this.ts_service.getCompletionsAtPosition(doc.uri.toString() + '.ts', virtual_offset, {});
             if (!completions) return null;
 
             return {
@@ -243,6 +253,129 @@ export class EJB_Language_Service {
                     kind: item.kind as any,
                 }))
             };
+        }
+
+        return null;
+    }
+
+    public find_document_highlights(doc: vscode.TextDocument, pos: vscode.Position): vscode.DocumentHighlight[] | null {
+        const parsed_doc = this.get_parsed_doc(doc);
+        const lang = parsed_doc.get_language_at(pos);
+
+        if (lang === 'html') {
+            const html_doc = HTMLTextDocument.create(doc.uri.toString(), 'html', doc.version, parsed_doc.html_content);
+            return this.html_service.findDocumentHighlights(html_doc, pos, this.html_service.parseHTMLDocument(html_doc));
+        }
+
+        if (lang === 'ts') {
+            const virtual_pos = parsed_doc.to_virtual_position(pos);
+            if (!virtual_pos) return null;
+
+            (this.ts_host as any).update_document(doc, parsed_doc.ts_content);
+            const virtual_doc = HTMLTextDocument.create(doc.uri.toString() + '.ts', 'javascript', doc.version, parsed_doc.ts_content);
+            const virtual_offset = virtual_doc.offsetAt(virtual_pos);
+
+            const highlights = this.ts_service.getDocumentHighlights(doc.uri.toString() + '.ts', virtual_offset, [doc.uri.toString() + '.ts']);
+            if (!highlights) return null;
+
+            const result: vscode.DocumentHighlight[] = [];
+            for (const h of highlights) {
+                for (const span of h.highlightSpans) {
+                    const virtual_range = new vscode.Range(virtual_doc.positionAt(span.textSpan.start), virtual_doc.positionAt(span.textSpan.start + span.textSpan.length));
+                    const original_range = parsed_doc.to_original_range(virtual_range);
+                    if (original_range) {
+                        result.push(new vscode.DocumentHighlight(original_range, span.kind === 'writtenReference' ? vscode.DocumentHighlightKind.Write : vscode.DocumentHighlightKind.Read));
+                    }
+                }
+            }
+            return result;
+        }
+
+        return null;
+    }
+
+    public find_document_symbols(doc: vscode.TextDocument): vscode.SymbolInformation[] | null {
+        const parsed_doc = this.get_parsed_doc(doc);
+        
+        const html_doc = HTMLTextDocument.create(doc.uri.toString(), 'html', doc.version, parsed_doc.html_content);
+        const html_symbols = this.html_service.findDocumentSymbols(html_doc, this.html_service.parseHTMLDocument(html_doc));
+
+        (this.ts_host as any).update_document(doc, parsed_doc.ts_content);
+        const virtual_doc = HTMLTextDocument.create(doc.uri.toString() + '.ts', 'javascript', doc.version, parsed_doc.ts_content);
+        const ts_nav_items = this.ts_service.getNavigationBarItems(doc.uri.toString() + '.ts');
+
+        const ts_symbols_converted: vscode.SymbolInformation[] = [];
+        const convert_ts_nav_items = (items: ts.NavigationBarItem[], containerName?: string) => {
+            if (!items) return;
+            for (const item of items) {
+                const span = item.spans[0];
+                const virtual_range = new vscode.Range(virtual_doc.positionAt(span.start), virtual_doc.positionAt(span.start + span.length));
+                const range = parsed_doc.to_original_range(virtual_range);
+
+                if (range) {
+                    const symbol_info = new vscode.SymbolInformation(
+                        item.text,
+                        this.convert_ts_symbol_kind(item.kind),
+                        containerName || '',
+                        new vscode.Location(doc.uri, range)
+                    );
+                    ts_symbols_converted.push(symbol_info);
+                    if (item.childItems) {
+                        convert_ts_nav_items(item.childItems, item.text);
+                    }
+                }
+            }
+        }
+        convert_ts_nav_items(ts_nav_items);
+
+        return [...html_symbols, ...ts_symbols_converted];
+    }
+
+    private convert_ts_symbol_kind(kind: ts.ScriptElementKind): vscode.SymbolKind {
+        switch (kind) {
+            case 'module': return vscode.SymbolKind.Module;
+            case 'class': return vscode.SymbolKind.Class;
+            case 'interface': return vscode.SymbolKind.Interface;
+            case 'method': return vscode.SymbolKind.Method;
+            case 'memberVariable': return vscode.SymbolKind.Field;
+            case 'memberGetAccessor': return vscode.SymbolKind.Property;
+            case 'memberSetAccessor': return vscode.SymbolKind.Property;
+            case 'variable': return vscode.SymbolKind.Variable;
+            case 'const': return vscode.SymbolKind.Constant;
+            case 'localVariable': return vscode.SymbolKind.Variable;
+            case 'function': return vscode.SymbolKind.Function;
+            case 'localFunction': return vscode.SymbolKind.Function;
+            case 'enum': return vscode.SymbolKind.Enum;
+            case 'enumMember': return vscode.SymbolKind.EnumMember;
+            case 'alias': return vscode.SymbolKind.Variable;
+            default: return vscode.SymbolKind.Variable;
+        }
+    }
+
+    public find_definition(doc: vscode.TextDocument, pos: vscode.Position): vscode.Definition | null {
+        const parsed_doc = this.get_parsed_doc(doc);
+        const lang = parsed_doc.get_language_at(pos);
+
+        if (lang === 'ts') {
+            const virtual_pos = parsed_doc.to_virtual_position(pos);
+            if (!virtual_pos) return null;
+
+            (this.ts_host as any).update_document(doc, parsed_doc.ts_content);
+            const virtual_doc = HTMLTextDocument.create(doc.uri.toString() + '.ts', 'javascript', doc.version, parsed_doc.ts_content);
+            const virtual_offset = virtual_doc.offsetAt(virtual_pos);
+
+            const definitions = this.ts_service.getDefinitionAtPosition(doc.uri.toString() + '.ts', virtual_offset);
+            if (!definitions) return null;
+
+            const result: vscode.Location[] = [];
+            for (const def of definitions) {
+                const virtual_range = new vscode.Range(virtual_doc.positionAt(def.textSpan.start), virtual_doc.positionAt(def.textSpan.start + def.textSpan.length));
+                const original_range = parsed_doc.to_original_range(virtual_range);
+                if (original_range) {
+                    result.push(new vscode.Location(doc.uri, original_range));
+                }
+            }
+            return result;
         }
 
         return null;
