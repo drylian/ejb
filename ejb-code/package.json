@@ -76,7 +76,7 @@
   "devDependencies": {
     "@types/vscode": "^1.74.0",
     "@types/node": "20.x",
-     "typescript": "^5"
+    "typescript": "^5.9.2"
   },
   "dependencies": {
     "vscode-html-languageservice": "^5.5.1",

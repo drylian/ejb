@@ -7,10 +7,9 @@ export interface EJBConfig {
     includes?: string[];
 }
 
-
 export interface EnrichedDirective extends EjbDirectivePlugin {
-    source_package: string;
-    source_url?: string;
+    sourcePackage: string;
+    sourceUrl?: string;
 }
 
 export interface Param {
@@ -27,14 +26,14 @@ export interface Parent {
 import type { SourceLocation } from "ejb";
 
 export interface SourceMapEntry {
-    original_loc: SourceLocation;
-    virtual_start_offset: number;
-    virtual_end_offset: number;
+    originalLoc: SourceLocation;
+    virtualStartOffset: number;
+    virtualEndOffset: number;
 }
 
 export interface EmbeddedLanguage {
     content: string;
-    source_map: SourceMapEntry[];
+    sourceMap: SourceMapEntry[];
 }
 
 export interface ProcessedEJB {

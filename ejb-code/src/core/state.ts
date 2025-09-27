@@ -5,41 +5,41 @@ import type { EJBConfig, EnrichedDirective, ProcessedEJB } from '@/types/index';
 interface EJBState {
     directives: EnrichedDirective[];
     loading: boolean;
-    embedded_languages_cache: Map<string, ProcessedEJB>;
+    embeddedLanguagesCache: Map<string, ProcessedEJB>;
 }
 
 interface EJBStore extends EJBState {
-    init: (context: vscode.ExtensionContext, output_channel: vscode.OutputChannel) => void;
-    load_configuration: (output_channel: vscode.OutputChannel) => Promise<void>;
+    init: (context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel) => void;
+    loadConfiguration: (outputChannel: vscode.OutputChannel) => Promise<void>;
     hasEmbeddedLanguage(key: string): boolean;
     getEmbeddedLanguage(key: string): ProcessedEJB | undefined;
     setEmbeddedLanguage(key: string, value: ProcessedEJB): void;
     deleteEmbeddedLanguage(key: string): void;
 }
 
-export const ejb_store = createStore<EJBStore>((set, get) => ({
+export const ejbStore = createStore<EJBStore>((set, get) => ({
     directives: [],
     loading: true,
-    embedded_languages_cache: new Map(),
+    embeddedLanguagesCache: new Map(),
 
     hasEmbeddedLanguage: (key: string) => {
-        return get().embedded_languages_cache.has(key);
+        return get().embeddedLanguagesCache.has(key);
     },
     getEmbeddedLanguage: (key: string) => {
-        return get().embedded_languages_cache.get(key); 
+        return get().embeddedLanguagesCache.get(key); 
     },
     setEmbeddedLanguage: (key: string, value: ProcessedEJB) => {
-        const cache = new Map(get().embedded_languages_cache);
+        const cache = new Map(get().embeddedLanguagesCache);
         cache.set(key, value);
-        set({ embedded_languages_cache: cache });
+        set({ embeddedLanguagesCache: cache });
     },
     deleteEmbeddedLanguage: (key: string) => {
-        const cache = new Map(get().embedded_languages_cache);
+        const cache = new Map(get().embeddedLanguagesCache);
         cache.delete(key);
-        set({ embedded_languages_cache: cache });
+        set({ embeddedLanguagesCache: cache });
     },
-    init: (context: vscode.ExtensionContext, output_channel: vscode.OutputChannel) => {
-        const load = () => get().load_configuration(output_channel);
+    init: (context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel) => {
+        const load = () => get().loadConfiguration(outputChannel);
         
         load(); // Initial load
 
@@ -47,7 +47,7 @@ export const ejb_store = createStore<EJBStore>((set, get) => ({
         context.subscriptions.push(watcher);
 
         const reload = (uri: vscode.Uri) => {
-            output_channel.appendLine(`EJB: Configuration file changed: ${uri.fsPath}. Reloading.`);
+            outputChannel.appendLine(`EJB: Configuration file changed: ${uri.fsPath}. Reloading.`);
             load();
         };
 
@@ -55,69 +55,71 @@ export const ejb_store = createStore<EJBStore>((set, get) => ({
         watcher.onDidCreate(reload);
         watcher.onDidDelete(reload);
     },
-    load_configuration: async (output_channel: vscode.OutputChannel) => {
+    loadConfiguration: async (outputChannel: vscode.OutputChannel) => {
         set({ loading: true });
-        output_channel.appendLine('EJB: Loading configuration...');
+        outputChannel.appendLine('EJB: Loading configuration...');
 
-        const new_directives: EnrichedDirective[] = [];
-        const directive_names = new Set<string>();
+        const newDirectives: EnrichedDirective[] = [];
+        const directiveNames = new Set<string>();
+        const allConfigs: EJBConfig[] = [];
 
-        const add_config = (config: EJBConfig) => {
+        const addConfig = (config: EJBConfig) => {
             if (!config.directives || !config.package) return;
-            output_channel.appendLine(`EJB: Loading directives from package: ${config.package}`);
+            allConfigs.push(config);
+            outputChannel.appendLine(`EJB: Loading directives from package: ${config.package}`);
             for (const directive of config.directives) {
-                if (!directive_names.has(directive.name.toString())) {
-                    new_directives.push({ 
+                if (!directiveNames.has(directive.name.toString())) {
+                    newDirectives.push({ 
                         ...directive, 
-                        source_package: config.package, 
-                        source_url: config.url 
+                        sourcePackage: config.package, 
+                        sourceUrl: config.url 
                     });
-                    directive_names.add(directive.name.toString());
+                    directiveNames.add(directive.name.toString());
                 }
             }
         };
 
-        const workspace_folders = vscode.workspace.workspaceFolders;
-        if (workspace_folders && workspace_folders.length > 0) {
-            const root_config_uri = vscode.Uri.joinPath((workspace_folders[0] as vscode.WorkspaceFolder).uri, 'ejbconfig.json');
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (workspaceFolders && workspaceFolders.length > 0) {
+            const rootConfigUri = vscode.Uri.joinPath((workspaceFolders[0] as vscode.WorkspaceFolder).uri, 'ejbconfig.json');
             try {
-                const file_content = await vscode.workspace.fs.readFile(root_config_uri);
-                output_channel.appendLine(`EJB: Found root ejbconfig.json at ${root_config_uri.fsPath}`);
-                const config = JSON.parse(file_content.toString()) as EJBConfig;
-                add_config(config);
+                const fileContent = await vscode.workspace.fs.readFile(rootConfigUri);
+                outputChannel.appendLine(`EJB: Found root ejbconfig.json at ${rootConfigUri.fsPath}`);
+                const config = JSON.parse(fileContent.toString()) as EJBConfig;
+                addConfig(config);
             } catch {
-                output_channel.appendLine('EJB: No root ejbconfig.json found in workspace.');
+                outputChannel.appendLine('EJB: No root ejbconfig.json found in workspace.');
             }
         } else {
-            output_channel.appendLine('EJB: No workspace open, skipping root configuration load.');
+            outputChannel.appendLine('EJB: No workspace open, skipping root configuration load.');
         }
 
         let globs: string[] = ['node_modules/**/ejbconfig.json'];
-        const root_config = new_directives.length > 0 ? new_directives[0] : null;
+        const coreConfig = allConfigs.find(c => c.package === 'ejb-core');
 
-        if (root_config && root_config.sourcePackage === 'ejb-core' && Array.isArray((root_config as any).includes)) {
-            globs = (root_config as any).includes;
+        if (coreConfig && Array.isArray(coreConfig.includes)) {
+            globs = coreConfig.includes;
         }
 
-        output_channel.appendLine(`EJB: Searching for configurations with patterns: ${globs.join(', ')}`);
+        outputChannel.appendLine(`EJB: Searching for configurations with patterns: ${globs.join(', ')}`);
         for (const glob of globs) {
             try {
                 const uris = await vscode.workspace.findFiles(glob, '**/node_modules/node_modules/**');
                 for (const uri of uris) {
                     try {
-                        const file_content = await vscode.workspace.fs.readFile(uri);
-                        const config = JSON.parse(file_content.toString()) as EJBConfig;
-                        add_config(config);
+                        const fileContent = await vscode.workspace.fs.readFile(uri);
+                        const config = JSON.parse(fileContent.toString()) as EJBConfig;
+                        addConfig(config);
                     } catch (error: any) {
-                        output_channel.appendLine(`EJB: Error loading secondary config file: ${uri.fsPath}: ${error.message}`);
+                        outputChannel.appendLine(`EJB: Error loading secondary config file: ${uri.fsPath}: ${error.message}`);
                     }
                 }
             } catch (error: any) {
-                output_channel.appendLine(`EJB: Error searching for files with pattern '${glob}': ${error.message}`);
+                outputChannel.appendLine(`EJB: Error searching for files with pattern '${glob}': ${error.message}`);
             }
         }
 
-        set({ directives: new_directives, loading: false });
-        output_channel.appendLine(`EJB: Configuration loaded. ${new_directives.length} directives available.`);
+        set({ directives: newDirectives, loading: false });
+        outputChannel.appendLine(`EJB: Configuration loaded. ${newDirectives.length} directives available.`);
     }
 }));

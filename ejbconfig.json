@@ -1,7 +1,6 @@
 {
-  "$schema": "https://raw.githubusercontent.com/drylian/ejb/main/vs-code/schemas/ejbconfig.schema.json",
+  "$schema": "https://raw.githubusercontent.com/drylian/ejb/main/ejb-code/schemas/ejbconfig.schema.json",
   "package": "@caeljs/ejb",
-   "depuration": true,
   "version": "0.1.0",
   "url": "git+https://github.com/drylian/configjs.git",
   "directives": [
@@ -10,7 +9,19 @@
       "description": "Imports and renders another EJB template file.",
       "children": false,
       "example": "@import('./path/to/template.ejb', { myVar: 'value' })",
-      "children_type": "html"
+      "children_type": "html",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "variables",
+          "type": "object",
+          "default": "{}"
+        }
+      ]
     },
     {
       "name": "component",
@@ -18,6 +29,18 @@
       "children": true,
       "example": "Example not defined",
       "children_type": "html",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "variables",
+          "type": "object",
+          "default": "{}"
+        }
+      ],
       "parents": [
         {
           "name": "slot",

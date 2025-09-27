@@ -16,6 +16,7 @@ await writeFile('./ejbconfig.json', JSON.stringify(makeConfig(DEFAULT_DIRECTIVES
 	url:pkg.repository.url,
 }), null, 2))
 
+if(process.argv.includes("--only-ejbconfig")) process.exit(0);
 const sharedConfig: Options = {
 	platform: "node",
 	entry: ["src/index.ts"],

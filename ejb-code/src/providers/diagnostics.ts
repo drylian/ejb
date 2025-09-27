@@ -1,15 +1,13 @@
 import * as vscode from 'vscode';
-import { ejbParser, Ejb, type RootNode } from 'ejb';
-import { EJB_Language_Service } from '@/languages/service';
+import { EJBLanguageService } from '@/languages/service';
 
-export async function update_diagnostics(
+export function updateDiagnostics(
     document: vscode.TextDocument, 
-    output_channel: vscode.OutputChannel, 
-    diagnostics_collection: vscode.DiagnosticCollection,
-    language_service: EJB_Language_Service
+    diagnosticsCollection: vscode.DiagnosticCollection,
+    languageService: EJBLanguageService
 ) {
     if (document.languageId !== 'ejb') return;
 
-    const diagnostics = await language_service.do_validation(document);
-    diagnostics_collection.set(document.uri, diagnostics);
+    const diagnostics = languageService.doValidation(document);
+    diagnosticsCollection.set(document.uri, diagnostics);
 }

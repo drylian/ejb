@@ -1,56 +1,61 @@
 import * as vscode from 'vscode';
-import { ejb_store } from '@/core/state';
-import { update_diagnostics } from '@/providers/diagnostics';
-import { register_semantic_tokens_provider } from '@/providers/semantic_tokens';
+import { ejbStore } from '@/core/state';
+import { updateDiagnostics } from '@/providers/diagnostics';
+import { registerSemanticTokensProvider } from '@/providers/semantic_tokens';
 import { createEJB } from '@/core/ejb';
-import { EJB_Language_Service } from '@/languages/service';
+import { EJBLanguageService } from '@/languages/service';
 import { EJBHoverProvider } from '@/providers/hover';
-import { register_completion_provider } from '@/providers/completion';
-import { register_document_highlight_provider } from '@/providers/document_highlight';
-import { register_document_symbol_provider } from '@/providers/document_symbol';
-import { register_definition_provider } from '@/providers/definition';
+import { registerCompletionProvider } from '@/providers/completion';
+import { registerDocumentHighlightProvider } from '@/providers/document_highlight';
+import { registerDocumentSymbolProvider } from '@/providers/document_symbol';
+import { registerDefinitionProvider } from '@/providers/definition';
  
 export function activate(context: vscode.ExtensionContext) {
-    const output_channel = vscode.window.createOutputChannel('EJB');
-    context.subscriptions.push(output_channel);
-    output_channel.appendLine('[Extension] Activating...');
+    // Step 1: Create Output Channel
+    const outputChannel = vscode.window.createOutputChannel('EJB');
+    context.subscriptions.push(outputChannel);
+    outputChannel.appendLine('[Extension] Activating...');
 
     try {
-        ejb_store.getState().init(context, output_channel);
-        output_channel.appendLine('[Extension] Store initialized.');
+        // Step 2: Initialize Store and EJB Instance
+        ejbStore.getState().init(context, outputChannel);
+        outputChannel.appendLine('[Extension] Store initialized.');
 
-        const ejb_instance = createEJB(output_channel);
-        output_channel.appendLine('[Extension] EJB instance created.');
+        const ejbInstance = createEJB();
+        outputChannel.appendLine('[Extension] EJB instance created.');
 
-        const language_service = new EJB_Language_Service(ejb_instance);
-        output_channel.appendLine('[Extension] Language Service created.');
+        // Step 3: Create Language Service
+        const languageService = new EJBLanguageService(ejbInstance);
+        outputChannel.appendLine('[Extension] Language Service created.');
 
-        const hover_provider = new EJBHoverProvider(output_channel, ejb_instance, language_service as any);
+        // Step 4: Register Providers
+        const hoverProvider = new EJBHoverProvider(languageService);
         context.subscriptions.push(
-            vscode.languages.registerHoverProvider('ejb', hover_provider)
+            vscode.languages.registerHoverProvider('ejb', hoverProvider)
         );
 
-        register_completion_provider(context, language_service as any);
-        register_document_highlight_provider(context, language_service as any);
-        register_document_symbol_provider(context, language_service as any);
-        register_definition_provider(context, language_service as any);
-        output_channel.appendLine('[Extension] Hover, Completion, Highlight, Symbol and Definition providers registered.');
+        registerCompletionProvider(context, languageService);
+        registerDocumentHighlightProvider(context, languageService);
+        registerDocumentSymbolProvider(context, languageService);
+        registerDefinitionProvider(context, languageService);
+        outputChannel.appendLine('[Extension] Hover, Completion, Highlight, Symbol and Definition providers registered.');
 
-        const diagnostics_collection = vscode.languages.createDiagnosticCollection('ejb');
-        context.subscriptions.push(diagnostics_collection);
+        // Step 5: Configure Diagnostics
+        const diagnosticsCollection = vscode.languages.createDiagnosticCollection('ejb');
+        context.subscriptions.push(diagnosticsCollection);
 
         const onDocumentChange = (document: vscode.TextDocument) => {
-            update_diagnostics(document, output_channel, diagnostics_collection, language_service);
+            updateDiagnostics(document, diagnosticsCollection, languageService);
         };
 
-        const unsubscribe = ejb_store.subscribe((state, prev_state) => {
-            if (state.loading !== prev_state.loading && !state.loading) {
-                output_channel.appendLine('[Extension] Config loaded. Rerunning diagnostics.');
+        const unsubscribe = ejbStore.subscribe((state, prevState) => {
+            if (state.loading !== prevState.loading && !state.loading) {
+                outputChannel.appendLine('[Extension] Config loaded. Rerunning diagnostics.');
                 vscode.workspace.textDocuments.forEach(onDocumentChange);
             }
         });
         context.subscriptions.push({ dispose: unsubscribe });
-        output_channel.appendLine('[Extension] Diagnostics configured.');
+        outputChannel.appendLine('[Extension] Diagnostics configured.');
 
         if (vscode.window.activeTextEditor) {
             onDocumentChange(vscode.window.activeTextEditor.document);
@@ -59,15 +64,16 @@ export function activate(context: vscode.ExtensionContext) {
         context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(onDocumentChange));
         context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => onDocumentChange(event.document)));
         context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(doc => {
-            diagnostics_collection.delete(doc.uri);
+            diagnosticsCollection.delete(doc.uri);
         }));
 
-        register_semantic_tokens_provider(context, output_channel, ejb_instance);
-        output_channel.appendLine('[Extension] Semantic Tokens provider registered.');
+        // Step 6: Register Semantic Tokens Provider
+        registerSemanticTokensProvider(context, outputChannel, ejbInstance);
+        outputChannel.appendLine('[Extension] Semantic Tokens provider registered.');
 
     } catch (error: any) {
-        output_channel.appendLine(`[Extension] FATAL ERROR during activation: ${error.message}\n${error.stack}`);
+        outputChannel.appendLine(`[Extension] FATAL ERROR during activation: ${error.message}\n${error.stack}`);
     }
 
-    output_channel.appendLine('[Extension] Activation complete.');
+    outputChannel.appendLine('[Extension] Activation complete.');
 }
