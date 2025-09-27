@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 import { createStore } from 'zustand/vanilla';
 import type { EJBConfig, EnrichedDirective, ProcessedEJB } from '@/types/index';
+import EjbCoreJson from '../../../ejbconfig.json' with { type: "json" };
 
 interface EJBState {
     directives: EnrichedDirective[];
     loading: boolean;
     embeddedLanguagesCache: Map<string, ProcessedEJB>;
+    deputation: boolean;
 }
 
 interface EJBStore extends EJBState {
@@ -21,6 +23,7 @@ export const ejbStore = createStore<EJBStore>((set, get) => ({
     directives: [],
     loading: true,
     embeddedLanguagesCache: new Map(),
+    deputation: false,
 
     hasEmbeddedLanguage: (key: string) => {
         return get().embeddedLanguagesCache.has(key);
@@ -61,7 +64,7 @@ export const ejbStore = createStore<EJBStore>((set, get) => ({
 
         const newDirectives: EnrichedDirective[] = [];
         const directiveNames = new Set<string>();
-        const allConfigs: EJBConfig[] = [];
+        const allConfigs: EJBConfig[] = [EjbCoreJson as EJBConfig];
 
         const addConfig = (config: EJBConfig) => {
             if (!config.directives || !config.package) return;
@@ -95,10 +98,14 @@ export const ejbStore = createStore<EJBStore>((set, get) => ({
         }
 
         let globs: string[] = ['node_modules/**/ejbconfig.json'];
-        const coreConfig = allConfigs.find(c => c.package === 'ejb-core');
+        const coreConfig = allConfigs.find(c => c.package === '@caeljs/ejb');
 
         if (coreConfig && Array.isArray(coreConfig.includes)) {
             globs = coreConfig.includes;
+        }
+
+        if (coreConfig && (coreConfig as any).deputation) {
+            set({ deputation: true });
         }
 
         outputChannel.appendLine(`EJB: Searching for configurations with patterns: ${globs.join(', ')}`);

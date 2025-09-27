@@ -3,6 +3,7 @@
   "package": "@caeljs/ejb",
   "version": "0.1.0",
   "url": "git+https://github.com/drylian/configjs.git",
+  "depuration": true,
   "directives": [
     {
       "name": "import",

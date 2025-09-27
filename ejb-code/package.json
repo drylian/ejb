@@ -12,7 +12,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:ejb"
+    "onLanguage:ejb",
+    "onLanguage:html"
   ],
   "main": "./dist/extension.js",
   "type": "module",
@@ -80,8 +81,6 @@
   },
   "dependencies": {
     "vscode-html-languageservice": "^5.5.1",
-    "vscode-languageserver": "^9.0.1",
-    "vscode-languageserver-textdocument": "^1.0.12",
     "zustand": "^5.0.8"
   }
 }

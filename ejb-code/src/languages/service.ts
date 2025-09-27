@@ -3,10 +3,7 @@ import { getLanguageService as getHTMLLanguageService, TextDocument as HTMLTextD
 import * as ts from 'typescript';
 import { Ejb, ejbParser, type AstNode, type RootNode, EjbAst, type DirectiveNode, type InterpolationNode, type SourceLocation, type EjbError } from 'ejb';
 import type { SourceMapEntry } from '@/types/index';
-
-interface CustomLanguageServiceHost extends ts.LanguageServiceHost {
-    update_document(doc: vscode.TextDocument, content: string): void;
-}
+import { ejbStore } from '@/core/state';
 
 function isOffsetWithinRange(offset: number, range: { start: { offset: number; }; end: { offset: number; }; }) {
     return offset >= range.start.offset && offset <= range.end.offset;
@@ -56,7 +53,7 @@ class ParsedEJBDocument {
                     expressionLoc = (node as any).expression_loc || node.loc;
                 }
 
-                if (def?.children_type === 'js' && directive.children.length > 0) {
+                if ((def?.children_type ?? 'html') === 'js' && directive.children.length > 0) {
                     const startNode = directive.children[0];
                     const endNode = directive.children[directive.children.length - 1];
                     if (startNode.loc && endNode.loc) {
@@ -110,7 +107,7 @@ class ParsedEJBDocument {
         if (node) {
             if (node.type === EjbAst.Directive) {
                 const def = this.ejbInstance.directives[(node as DirectiveNode).name];
-                if (def?.children_type === 'js' && isOffsetWithinRange(offset, (node as any).children_range)) {
+                if ((def?.children_type ?? 'html') === 'js' && isOffsetWithinRange(offset, (node as any).children_range)) {
                     language = 'ts';
                 }
                 if ((node as any).expression_loc && isOffsetWithinRange(offset, (node as any).expression_loc)) {
@@ -157,13 +154,8 @@ class ParsedEJBDocument {
 export class EJBLanguageService {
     private docCache = new Map<string, ParsedEJBDocument>();
     private htmlService = getHTMLLanguageService();
-    private tsService: ts.LanguageService;
-    private tsHost: CustomLanguageServiceHost;
 
-    constructor(private ejbInstance: Ejb<boolean>) {
-        this.tsHost = this.createTsHost();
-        this.tsService = ts.createLanguageService(this.tsHost, ts.createDocumentRegistry());
-    }
+    constructor(private ejbInstance: Ejb<boolean>, private outputChannel: vscode.OutputChannel) {}
 
     private getParsedDoc(doc: vscode.TextDocument): ParsedEJBDocument {
         const cached = this.docCache.get(doc.uri.toString());
@@ -175,10 +167,11 @@ export class EJBLanguageService {
         return parsed;
     }
 
-    private createTsHost(): CustomLanguageServiceHost {
+    private createTsLanguageService(doc: vscode.TextDocument, content: string): ts.LanguageService {
         const fileMap = new Map<string, { text: string, version: string }>();
+        fileMap.set(doc.uri.toString() + '.ts', { text: content, version: doc.version.toString() });
 
-        const host: CustomLanguageServiceHost = {
+        const host: ts.LanguageServiceHost = {
             getScriptFileNames: () => Array.from(fileMap.keys()),
             getScriptVersion: fileName => fileMap.get(fileName)?.version || '0',
             getScriptSnapshot: fileName => {
@@ -190,34 +183,40 @@ export class EJBLanguageService {
             getDefaultLibFileName: options => ts.getDefaultLibFilePath(options),
             fileExists: fileName => fileMap.has(fileName),
             readFile: fileName => fileMap.get(fileName)?.text,
-            update_document: (doc: vscode.TextDocument, content: string) => {
-                fileMap.set(doc.uri.toString() + '.ts', { text: content, version: doc.version.toString() });
-            }
         };
 
-        return host;
+        return ts.createLanguageService(host, ts.createDocumentRegistry());
     }
 
     public doHover(doc: vscode.TextDocument, pos: vscode.Position): vscode.Hover | null {
+        const { deputation } = ejbStore.getState();
+        if (deputation) {
+            this.outputChannel.appendLine(`[HOVER] Triggered for ${doc.uri.fsPath} at ${pos.line}:${pos.character}`);
+        }
+
         const parsedDoc = this.getParsedDoc(doc);
         const lang = parsedDoc.getLanguageAt(pos);
+
+        if (deputation) {
+            this.outputChannel.appendLine(`[HOVER] Language at position: ${lang}`);
+        }
 
         if (lang === 'html') {
             const htmlDoc = HTMLTextDocument.create(doc.uri.toString(), 'html', doc.version, parsedDoc.htmlContent);
             const hover = this.htmlService.doHover(htmlDoc, pos, this.htmlService.parseHTMLDocument(htmlDoc));
             if (!hover) return null;
-            return new vscode.Hover(hover.contents as vscode.MarkdownString | vscode.MarkedString | (vscode.MarkdownString | vscode.MarkedString)[], hover.range ? new vscode.Range(hover.range.start.line, hover.range.start.character, hover.range.end.line, hover.range.end.character) : undefined);
+            return new vscode.Hover(hover.contents as any, hover.range ? new vscode.Range(hover.range.start.line, hover.range.start.character, hover.range.end.line, hover.range.end.character) : undefined);
         }
 
         if (lang === 'ts') {
             const virtualPos = parsedDoc.toVirtualPosition(pos);
             if (!virtualPos) return null;
 
-            this.tsHost.update_document(doc, parsedDoc.tsContent);
+            const service = this.createTsLanguageService(doc, parsedDoc.tsContent);
             const virtualDoc = HTMLTextDocument.create(doc.uri.toString() + '.ts', 'javascript', doc.version, parsedDoc.tsContent);
             const virtualOffset = virtualDoc.offsetAt({line: virtualPos.line, character: virtualPos.character});
 
-            const quickInfo = this.tsService.getQuickInfoAtPosition(doc.uri.toString() + '.ts', virtualOffset);
+            const quickInfo = service.getQuickInfoAtPosition(doc.uri.toString() + '.ts', virtualOffset);
             if (!quickInfo) return null;
 
             const display = ts.displayPartsToString(quickInfo.displayParts);
@@ -235,8 +234,17 @@ export class EJBLanguageService {
     }
 
     public doComplete(doc: vscode.TextDocument, pos: vscode.Position): vscode.CompletionList | null {
+        const { deputation } = ejbStore.getState();
+        if (deputation) {
+            this.outputChannel.appendLine(`[AUTOCOMPLETE] Triggered for ${doc.uri.fsPath} at ${pos.line}:${pos.character}`);
+        }
+
         const parsedDoc = this.getParsedDoc(doc);
         const lang = parsedDoc.getLanguageAt(pos);
+
+        if (deputation) {
+            this.outputChannel.appendLine(`[AUTOCOMPLETE] Language at position: ${lang}`);
+        }
 
         if (lang === 'html') {
             const htmlDoc = HTMLTextDocument.create(doc.uri.toString(), 'html', doc.version, parsedDoc.htmlContent);
@@ -248,11 +256,11 @@ export class EJBLanguageService {
             const virtualPos = parsedDoc.toVirtualPosition(pos);
             if (!virtualPos) return null;
 
-            this.tsHost.update_document(doc, parsedDoc.tsContent);
+            const service = this.createTsLanguageService(doc, parsedDoc.tsContent);
             const virtualDoc = HTMLTextDocument.create(doc.uri.toString() + '.ts', 'javascript', doc.version, parsedDoc.tsContent);
             const virtualOffset = virtualDoc.offsetAt({line: virtualPos.line, character: virtualPos.character});
 
-            const completions = this.tsService.getCompletionsAtPosition(doc.uri.toString() + '.ts', virtualOffset, {});
+            const completions = service.getCompletionsAtPosition(doc.uri.toString() + '.ts', virtualOffset, {});
             if (!completions) return null;
 
             const completionItems = completions.entries.map(item => {
@@ -280,11 +288,11 @@ export class EJBLanguageService {
             const virtualPos = parsedDoc.toVirtualPosition(pos);
             if (!virtualPos) return null;
 
-            this.tsHost.update_document(doc, parsedDoc.tsContent);
+            const service = this.createTsLanguageService(doc, parsedDoc.tsContent);
             const virtualDoc = HTMLTextDocument.create(doc.uri.toString() + '.ts', 'javascript', doc.version, parsedDoc.tsContent);
             const virtualOffset = virtualDoc.offsetAt({line: virtualPos.line, character: virtualPos.character});
 
-            const highlights = this.tsService.getDocumentHighlights(doc.uri.toString() + '.ts', virtualOffset, [doc.uri.toString() + '.ts']);
+            const highlights = service.getDocumentHighlights(doc.uri.toString() + '.ts', virtualOffset, [doc.uri.toString() + '.ts']);
             if (!highlights) return null;
 
             const result: vscode.DocumentHighlight[] = [];
@@ -311,9 +319,9 @@ export class EJBLanguageService {
         const htmlDoc = HTMLTextDocument.create(doc.uri.toString(), 'html', doc.version, parsedDoc.htmlContent);
         const htmlSymbols = this.htmlService.findDocumentSymbols(htmlDoc, this.htmlService.parseHTMLDocument(htmlDoc));
 
-        this.tsHost.update_document(doc, parsedDoc.tsContent);
+        const service = this.createTsLanguageService(doc, parsedDoc.tsContent);
         const virtualDoc = HTMLTextDocument.create(doc.uri.toString() + '.ts', 'javascript', doc.version, parsedDoc.tsContent);
-        const tsNavItems = this.tsService.getNavigationBarItems(doc.uri.toString() + '.ts');
+        const tsNavItems = service.getNavigationBarItems(doc.uri.toString() + '.ts');
 
         const tsSymbolsConverted: vscode.SymbolInformation[] = [];
         const convertTsNavItems = (items: ts.NavigationBarItem[], containerName?: string) => {
@@ -401,11 +409,11 @@ export class EJBLanguageService {
             const virtualPos = parsedDoc.toVirtualPosition(pos);
             if (!virtualPos) return null;
 
-            this.tsHost.update_document(doc, parsedDoc.tsContent);
+            const service = this.createTsLanguageService(doc, parsedDoc.tsContent);
             const virtualDoc = HTMLTextDocument.create(doc.uri.toString() + '.ts', 'javascript', doc.version, parsedDoc.tsContent);
             const virtualOffset = virtualDoc.offsetAt({line: virtualPos.line, character: virtualPos.character});
 
-            const definitions = this.tsService.getDefinitionAtPosition(doc.uri.toString() + '.ts', virtualOffset);
+            const definitions = service.getDefinitionAtPosition(doc.uri.toString() + '.ts', virtualOffset);
             if (!definitions) return null;
 
             const result: vscode.Location[] = [];

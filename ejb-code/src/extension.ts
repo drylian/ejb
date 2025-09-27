@@ -21,11 +21,11 @@ export function activate(context: vscode.ExtensionContext) {
         ejbStore.getState().init(context, outputChannel);
         outputChannel.appendLine('[Extension] Store initialized.');
 
-        const ejbInstance = createEJB();
+        const ejbInstance = createEJB(outputChannel);
         outputChannel.appendLine('[Extension] EJB instance created.');
 
         // Step 3: Create Language Service
-        const languageService = new EJBLanguageService(ejbInstance);
+        const languageService = new EJBLanguageService(ejbInstance, outputChannel);
         outputChannel.appendLine('[Extension] Language Service created.');
 
         // Step 4: Register Providers
