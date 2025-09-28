@@ -9,8 +9,9 @@ import { registerCompletionProvider } from '@/providers/completion';
 import { registerDocumentHighlightProvider } from '@/providers/document_highlight';
 import { registerDocumentSymbolProvider } from '@/providers/document_symbol';
 import { registerDefinitionProvider } from '@/providers/definition';
+import { TextDecoder } from 'util';
  
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     // Step 1: Create Output Channel
     const outputChannel = vscode.window.createOutputChannel('EJB');
     context.subscriptions.push(outputChannel);
@@ -25,7 +26,10 @@ export function activate(context: vscode.ExtensionContext) {
         outputChannel.appendLine('[Extension] EJB instance created.');
 
         // Step 3: Create Language Service
-        const languageService = new EJBLanguageService(ejbInstance, outputChannel);
+        const libPath = vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'typescript', 'lib', 'lib.esnext.d.ts');
+        const libContentBuffer = await vscode.workspace.fs.readFile(libPath);
+        const libContent = new TextDecoder().decode(libContentBuffer);
+        const languageService = new EJBLanguageService(ejbInstance, libContent);
         outputChannel.appendLine('[Extension] Language Service created.');
 
         // Step 4: Register Providers

@@ -1,48 +1,84 @@
 import * as vscode from 'vscode';
-import { getLanguageService, CompletionItemKind as HTMLCompletionItemKind } from 'vscode-html-languageservice';
+import { getLanguageService, type LanguageService as HTMLService, type HTMLDocument, MarkedString, MarkupContent, DocumentHighlightKind, SymbolKind as LspSymbolKind } from 'vscode-html-languageservice';
+import type { TextDocument } from 'vscode-languageserver-textdocument';
 import { BaseLanguageService } from './base';
 
-export class HTMLanguageService extends BaseLanguageService {
-    private languageService = getLanguageService();
+function toVscodeRange(range: import('vscode-languageserver-types').Range): vscode.Range {
+    return new vscode.Range(range.start.line, range.start.character, range.end.line, range.end.character);
+}
 
-    doHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | null {
-        const htmlDocument = this.languageService.parseHTMLDocument(document as any);
-        const hover = this.languageService.doHover(document as any, position, htmlDocument);
+function toVscodeMarkdown(content: string | MarkupContent | MarkedString | MarkedString[]): vscode.MarkdownString[] {
+    if (typeof content === 'string') {
+        return [new vscode.MarkdownString(content)];
+    }
+    if (Array.isArray(content)) {
+        return content.map(item => {
+            if (typeof item === 'string') {
+                return new vscode.MarkdownString(item);
+            }
+            return new vscode.MarkdownString(`\`\`\`${item.language}\`\`\`\n${item.value}\n\`\`\`
+`);
+        });
+    }
+    if (MarkupContent.is(content)) {
+        return [new vscode.MarkdownString(content.value)];
+    }
+    return [new vscode.MarkdownString(`\`\`\`${content.language}\`\`\`\n${content.value}\n\`\`\`
+`)];
+}
+
+function toVscodeSymbolKind(kind: LspSymbolKind): vscode.SymbolKind {
+    // This is a partial mapping. A complete one would be more complex.
+    if (kind >= 1 && kind <= 26) {
+        return kind - 1;
+    }
+    return vscode.SymbolKind.Variable;
+}
+
+export class HTMLLanguageService extends BaseLanguageService {
+    private htmlService: HTMLService = getLanguageService({});
+
+    private getHTMLDocument(document: TextDocument): HTMLDocument {
+        return this.htmlService.parseHTMLDocument(document);
+    }
+
+    doHover(document: TextDocument, position: vscode.Position): vscode.Hover | null {
+        const htmlDocument = this.getHTMLDocument(document);
+        const hover = this.htmlService.doHover(document, position, htmlDocument);
         if (!hover) return null;
-        return new vscode.Hover(hover.contents as any, hover.range ? new vscode.Range(hover.range.start.line, hover.range.start.character, hover.range.end.line, hover.range.end.character) : undefined);
+        return new vscode.Hover(toVscodeMarkdown(hover.contents), hover.range ? toVscodeRange(hover.range) : undefined);
     }
 
-    doComplete(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionList | null {
-        const htmlDocument = this.languageService.parseHTMLDocument(document as any);
-        const completions = this.languageService.doComplete(document as any, position, htmlDocument);
+    doComplete(document: TextDocument, position: vscode.Position): vscode.CompletionList | null {
+        const htmlDocument = this.getHTMLDocument(document);
+        const completions = this.htmlService.doComplete(document, position, htmlDocument);
         if (!completions) return null;
-        return new vscode.CompletionList(completions.items.map(i => new vscode.CompletionItem(i.label, this.convertHtmlCompletionKind(i.kind))), completions.isIncomplete);
+        const items = completions.items.map(item => {
+            const newItem = new vscode.CompletionItem(item.label, item.kind ? (item.kind as number - 1) : vscode.CompletionItemKind.Text);
+            return newItem;
+        });
+        return new vscode.CompletionList(items, completions.isIncomplete);
     }
-
-    doValidation(_document: vscode.TextDocument): vscode.Diagnostic[] {
+    
+    doValidation(_document: TextDocument): vscode.Diagnostic[] {
         return [];
     }
 
-    findDefinition(_document: vscode.TextDocument, _position: vscode.Position): vscode.Definition | null {
+    findDefinition(_document: TextDocument, _position: vscode.Position): vscode.Definition | null {
         return null;
     }
 
-    findDocumentHighlights(document: vscode.TextDocument, position: vscode.Position): vscode.DocumentHighlight[] | null {
-        const htmlDocument = this.languageService.parseHTMLDocument(document as any);
-        const highlights = this.languageService.findDocumentHighlights(document as any, position, htmlDocument);
+    findDocumentHighlights(document: TextDocument, position: vscode.Position): vscode.DocumentHighlight[] | null {
+        const htmlDocument = this.getHTMLDocument(document);
+        const highlights = this.htmlService.findDocumentHighlights(document, position, htmlDocument);
         if (!highlights) return null;
-        return highlights.map(h => new vscode.DocumentHighlight(new vscode.Range(h.range.start.line, h.range.start.character, h.range.end.line, h.range.end.character), h.kind as vscode.DocumentHighlightKind));
+        return highlights.map(h => new vscode.DocumentHighlight(toVscodeRange(h.range), h.kind ? h.kind - 1 : DocumentHighlightKind.Text - 1));
     }
 
-    findDocumentSymbols(document: vscode.TextDocument): vscode.SymbolInformation[] | null {
-        const htmlDocument = this.languageService.parseHTMLDocument(document as any);
-        const symbols = this.languageService.findDocumentSymbols(document as any, htmlDocument);
+    findDocumentSymbols(document: TextDocument): vscode.SymbolInformation[] | null {
+        const htmlDocument = this.getHTMLDocument(document);
+        const symbols = this.htmlService.findDocumentSymbols(document, htmlDocument);
         if (!symbols) return null;
-        return symbols.map(s => new vscode.SymbolInformation(s.name, s.kind as vscode.SymbolKind, s.containerName || '', new vscode.Location(document.uri, new vscode.Range(s.location.range.start.line, s.location.range.start.character, s.location.range.end.line, s.location.range.end.character))));
-    }
-
-    private convertHtmlCompletionKind(kind: HTMLCompletionItemKind | undefined): vscode.CompletionItemKind {
-        if (kind === undefined) return vscode.CompletionItemKind.Text;
-        return kind - 1;
+        return symbols.map(s => new vscode.SymbolInformation(s.name, toVscodeSymbolKind(s.kind), s.containerName || '', new vscode.Location(vscode.Uri.parse(document.uri), toVscodeRange(s.location.range))));
     }
 }

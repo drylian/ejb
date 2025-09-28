@@ -1,10 +1,11 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
+import type { TextDocument } from 'vscode-languageserver-textdocument';
 
 export abstract class BaseLanguageService {
-    abstract doHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | null;
-    abstract doComplete(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionList | null;
-    abstract doValidation(document: vscode.TextDocument): vscode.Diagnostic[];
-    abstract findDefinition(document: vscode.TextDocument, position: vscode.Position): vscode.Definition | null;
-    abstract findDocumentHighlights(document: vscode.TextDocument, position: vscode.Position): vscode.DocumentHighlight[] | null;
-    abstract findDocumentSymbols(document: vscode.TextDocument): vscode.SymbolInformation[] | null;
+    abstract doHover(document: TextDocument, position: vscode.Position): vscode.Hover | null;
+    abstract doComplete(document: TextDocument, position: vscode.Position): vscode.CompletionList | null;
+    abstract doValidation(document: TextDocument): vscode.Diagnostic[];
+    abstract findDefinition(document: TextDocument, position: vscode.Position): vscode.Definition | null;
+    abstract findDocumentHighlights(document: TextDocument, position: vscode.Position): vscode.DocumentHighlight[] | null;
+    abstract findDocumentSymbols(document: TextDocument): vscode.SymbolInformation[] | null;
 }

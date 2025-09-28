@@ -1,12 +1,11 @@
 import * as vscode from 'vscode';
-import { BaseLanguageService } from './base';
 import { ejbStore } from '@/core/state';
 
-export class EJBLanguageService extends BaseLanguageService {
+export class EJBDirectiveLanguageService {
     doHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | null {
         const { directives } = ejbStore.getState();
         const wordRange = document.getWordRangeAtPosition(position, /@\w+/);
-        if (!wordRange) return null;
+        if (!wordRange || !wordRange.contains(position)) return null;
 
         const word = document.getText(wordRange);
         const directiveName = word.substring(1);
@@ -29,34 +28,20 @@ export class EJBLanguageService extends BaseLanguageService {
     }
 
     doComplete(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionList | null {
-        const { directives } = ejbStore.getState();
         const line = document.lineAt(position.line).text;
         const prefix = line.substring(0, position.character);
 
-        if (!prefix.endsWith('@')) return null;
+        if (!prefix.trim().endsWith('@')) return null;
 
+        const { directives } = ejbStore.getState();
         const items = directives.map(d => {
             const item = new vscode.CompletionItem(d.name.toString(), vscode.CompletionItemKind.Keyword);
             item.insertText = d.name.toString();
+            item.detail = d.sourcePackage;
+            item.documentation = new vscode.MarkdownString(d.description);
             return item;
         });
 
         return new vscode.CompletionList(items, true);
-    }
-
-    doValidation(_document: vscode.TextDocument): vscode.Diagnostic[] {
-        return [];
-    }
-
-    findDefinition(_document: vscode.TextDocument, _position: vscode.Position): vscode.Definition | null {
-        return null;
-    }
-
-    findDocumentHighlights(_document: vscode.TextDocument, _position: vscode.Position): vscode.DocumentHighlight[] | null {
-        return null;
-    }
-
-    findDocumentSymbols(_document: vscode.TextDocument): vscode.SymbolInformation[] | null {
-        return null;
     }
 }

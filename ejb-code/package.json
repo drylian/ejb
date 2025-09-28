@@ -4,7 +4,7 @@
   "description": "VSCode extension for EJB template language with syntax highlighting and IntelliSense",
   "version": "1.0.0",
   "engines": {
-    "vscode": "^1.74.0"
+    "vscode": "^1.104.0"
   },
   "categories": [
     "Programming Languages",
@@ -75,12 +75,13 @@
     "compile": "tsc --project tsconfig.json"
   },
   "devDependencies": {
-    "@types/vscode": "^1.74.0",
-    "@types/node": "20.x",
-    "typescript": "^5.9.2"
+    "@types/vscode": "^1.104.0",
+    "@types/node": "^24.5.2"
   },
   "dependencies": {
+    "typescript": "^5.9.2",
     "vscode-html-languageservice": "^5.5.1",
+    "vscode-languageserver-textdocument": "^1.0.12",
     "zustand": "^5.0.8"
   }
 }
