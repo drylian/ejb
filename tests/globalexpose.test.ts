@@ -2,7 +2,7 @@ import { Ejb } from "../src/index";
 import { describe, expect, it } from "bun:test";
 
 describe("globalexpose feature", () => {
-	it("should expose global variables directly when globalexpose is true (default)", () => {
+	it("should expose global variables directly when globalexpose is true (default)", async () => {
 		const ejb = new Ejb({
 			globals: {
 				myVar: "world",
@@ -10,11 +10,11 @@ describe("globalexpose feature", () => {
 		});
 
 		const template = "Hello {{ myVar }}";
-		const result = ejb.render(template);
+		const result = await ejb.render(template);
 		expect(result).toBe("Hello world");
 	});
 
-	it("should not expose global variables directly when globalexpose is false", () => {
+	it("should not expose global variables directly when globalexpose is false", async () => {
 		const ejb = new Ejb({
 			globalexpose: false,
 			globals: {
@@ -23,14 +23,14 @@ describe("globalexpose feature", () => {
 		});
 
 		const template = "Hello {{ myVar }}";
-				expect(() => ejb.render(template)).toThrow(ReferenceError);
+		await expect(ejb.render(template)).rejects.toThrow(ReferenceError);
 
 		const template2 = "Hello {{ it.myVar }}";
-		const result = ejb.render(template2);
+		const result = await ejb.render(template2);
 		expect(result).toBe("Hello world");
 	});
 
-	it("should not throw error for undefined variable when globalexpose is false", () => {
+	it("should not throw error for undefined variable when globalexpose is false", async () => {
 		const ejb = new Ejb({
 			globalexpose: false,
 			globals: {
@@ -38,6 +38,6 @@ describe("globalexpose feature", () => {
 			},
 		});
 		const template = "Hello {{ myOtherVar }}";
-				expect(() => ejb.render(template)).toThrow(ReferenceError);
+		await expect(ejb.render(template)).rejects.toThrow(ReferenceError);
 	});
 });

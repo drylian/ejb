@@ -7,12 +7,11 @@ const pwd = process.cwd();
 
 const createEjbInstance = () =>
 	new Ejb({
-		async: false,
 		aliases: { "@": join(pwd, "tests", "views") },
 		resolver: EJBNodeJSResolver(),
 	});
 
-test("should handle component with default slot", () => {
+test("should handle component with default slot", async () => {
 	const ejb = createEjbInstance();
 	const template = `
         @component('@/box')
@@ -20,7 +19,7 @@ test("should handle component with default slot", () => {
         @end
     `;
 
-	const result = ejb.render(template);
+	const result = await ejb.render(template);
 
 	// Check if the default slot content has been rendered inside the div.box
 	expect(result.replace(/\s+/g, " ").trim()).toContain(
@@ -28,7 +27,7 @@ test("should handle component with default slot", () => {
 	);
 });
 
-test("should handle component with named slots", () => {
+test("should handle component with named slots", async () => {
 	const ejb = createEjbInstance();
 	const template = `
         @component('@/box')
@@ -40,7 +39,7 @@ test("should handle component with named slots", () => {
         @end
     `;
 
-	const result = ejb.render(template);
+	const result = await ejb.render(template);
 
 	// Check the complete structure with named slots and default.
 	const normalizedResult = result.replace(/\s+/g, " ").trim();
@@ -51,7 +50,7 @@ test("should handle component with named slots", () => {
 	expect(normalizedResult).toContain("<p>Default slot content</p>");
 });
 
-test("should handle component with partial slots", () => {
+test("should handle component with partial slots", async () => {
 	const ejb = createEjbInstance();
 	const template = `
         @component('@/box')
@@ -61,7 +60,7 @@ test("should handle component with partial slots", () => {
         @end
     `;
 
-	const result = ejb.render(template);
+	const result = await ejb.render(template);
 	const normalizedResult = result.replace(/\s+/g, " ").trim();
 
 	expect(normalizedResult).toContain("<h1>Only Header</h1>");
@@ -70,7 +69,7 @@ test("should handle component with partial slots", () => {
 	expect(normalizedResult).not.toContain("$content");
 });
 
-test("should handle empty slots", () => {
+test("should handle empty slots", async () => {
 	const ejb = createEjbInstance();
 	const template = `
         @component('@/box')
@@ -78,7 +77,7 @@ test("should handle empty slots", () => {
         @end
     `;
 
-	const result = ejb.render(template);
+	const result = await ejb.render(template);
 
 	// It should render only the basic structure without content.
 	expect(result.replace(/\s+/g, " ").trim()).toBe(

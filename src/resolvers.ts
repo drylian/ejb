@@ -1,29 +1,17 @@
-import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import type { IfAsync } from "./types";
 
 /**
  * Creates a file resolver function for Node.js environments
- * @template Async - Boolean indicating if resolver should work in async mode
- * @param async - Optional flag to force async/sync mode (defaults to generic type)
  * @returns A resolver function that handles file reading
  *
  * @example
  * // Async resolver
- * const asyncResolver = EJBNodeJSResolver<true>();
- * // Sync resolver
- * const syncResolver = EJBNodeJSResolver<false>();
+ * const asyncResolver = EJBNodeJSResolver();
  */
-export const EJBNodeJSResolver = <Async extends boolean = false>(
-	async?: Async,
-) => {
+export const EJBNodeJSResolver = () => {
 	return (importpath: string) => {
 		const encoding = { encoding: "utf-8" } as const;
-		return (
-			async
-				? readFile(importpath, encoding)
-				: readFileSync(importpath, encoding)
-		) as IfAsync<Async, string>;
+		return readFile(importpath, encoding);
 	};
 };
 

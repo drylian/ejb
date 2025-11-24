@@ -7,14 +7,13 @@ const pwd = process.cwd();
 
 const createEjbInstance = () =>
 	new Ejb({
-		async: false,
 		aliases: { "@": join(pwd, "tests", "views") },
 		resolver: EJBNodeJSResolver(),
 	});
 
-test("should handle 'import' directive", () => {
+test("should handle 'import' directive", async () => {
 	const ejb = createEjbInstance();
 	const template = `@import('@/imported')`;
-	const result = ejb.render(template);
+	const result = await ejb.render(template);
 	expect(result).toContain("This is imported content.");
 });

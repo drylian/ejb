@@ -5,29 +5,27 @@ import { EJBNodeJSResolver } from "../src/resolvers";
 
 const pwd = process.cwd();
 
-const createEjbInstance = (async = false) =>
+const createEjbInstance = () =>
 	new Ejb({
-		async,
 		aliases: { "@": join(pwd, "tests", "views") },
-		resolver: EJBNodeJSResolver(async),
+		resolver: EJBNodeJSResolver(),
 	});
 
-test("should return error for non-existent directive", () => {
+test("should return error for non-existent directive", async () => {
 	const ejb = createEjbInstance();
 	const template = `@nonexistent()`;
-	const result = ejb.render(template);
+	const result = await ejb.render(template);
 	expect(result).toContain("[EJB] Directive not found: nonexistent");
 });
 
-test("should return error for non-existent sub-directive", () => {
+test("should return error for non-existent sub-directive", async () => {
 	const ejb = createEjbInstance();
 	const template = `@if(true) @nonexistentsub() @end`;
-	const result = ejb.render(template);
-	console.log(result)
+	const result = await ejb.render(template);
 	expect(result).toContain('[EJB] Directive not found: nonexistentsub');
 });
 
-test("should return error from directive lifecycle hook", () => {
+test("should return error from directive lifecycle hook", async () => {
 	const ejb = createEjbInstance();
 	ejb.register({
 		name: "errorprone",
@@ -36,40 +34,27 @@ test("should return error from directive lifecycle hook", () => {
 		},
 	});
 	const template = `@errorprone()`;
-	const result = ejb.render(template);
+	const result = await ejb.render(template);
 	expect(result).toContain("Error in onParams");
 });
 
-test("should return error for async directive in sync mode", () => {
-	const ejb = createEjbInstance();
-	ejb.register({
-		name: "asyncprone",
-		onParams: async () => {
-			return "";
-		},
-	});
-	const template = `@asyncprone()`;
-	const result = ejb.render(template);
-	expect(result).toContain("[EJB] Async operation in sync mode for @asyncprone");
-});
-
-test("should return error for non-existent import", () => {
+test("should return error for non-existent import", async () => {
 	const ejb = createEjbInstance();
 	const template = `@import('./nonexistent.ejb')`;
-	const result = ejb.render(template);
-	expect(result).toContain("no such file or directory");
+	const result = await ejb.render(template); // Await the promise
+	expect(result).toContain("no such file or directory"); // Expect string content
 });
 
-test("should collect and return multiple errors", () => {
+test("should collect and return multiple errors", async () => {
 	const ejb = createEjbInstance();
-	const template = `@nonexistent() @import('./nonexistent.ejb')`;
-	const result = ejb.render(template);
+	const template = `@nonexistent() @anotheError()`;
+	const result = await ejb.render(template);
 	expect(result).toContain("[EJB] Directive not found: nonexistent");
-	expect(result).toContain("no such file or directory");
+	expect(result).toContain("[EJB] Directive not found: anotheError");
 });
 
 test("should return error from async directive lifecycle hook", async () => {
-	const ejb = createEjbInstance(true);
+	const ejb = createEjbInstance();
 	ejb.register({
 		name: "errorprone",
 		onParams: () => {

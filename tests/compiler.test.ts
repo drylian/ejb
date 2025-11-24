@@ -9,15 +9,15 @@ test("should compile text node to string", () => {
 	expect(result).toBe("Hello");
 });
 
-test("should compile text node to code", () => {
+test("should compile text node to code", async () => {
 	const ejb = new Ejb();
-	const result = generateNodeCode(ejb, { type: EjbAst.Text, value: "Hello" });
+	const result = await generateNodeCode(ejb, { type: EjbAst.Text, value: "Hello" });
 	expect(result).toContain("$ejb.res += `Hello`;");
 });
 
-test("should compile interpolation node", () => {
+test("should compile interpolation node", async () => {
 	const ejb = new Ejb();
-	const result = generateNodeCode(ejb, {
+	const result = await generateNodeCode(ejb, {
 		type: EjbAst.Interpolation,
 		expression: "name",
 		escaped: true,
@@ -25,26 +25,26 @@ test("should compile interpolation node", () => {
 	expect(result).toContain("$ejb.res += $ejb.escapeHtml(name)");
 });
 
-test("should compile if directive", () => {
+test("should compile if directive", async () => {
 	const ejb = new Ejb();
-	const ast = ejb.parserAst(`
+	const ast = ejb.parser(`
     @if(true) Hello @end`);
-	const result = ejb.compileNode(ast);
+	const result = await ejb.compile(ast);
 	expect(result).toContain("if (true) {");
 	expect(result).toContain("$ejb.res += ` Hello `");
 	expect(result).toContain("}");
 });
 
-test("should compile root node", () => {
+test("should compile root node", async () => {
 	const ejb = new Ejb();
 	const ast = { type: EjbAst.Root, children: [] };
-	const result = compile(ejb, ast as any);
+	const result = await compile(ejb, ast as any);
 	expect(result).toContain("return $ejb");
 });
 
-test("should handle async compilation", async () => {
-	const ejb = new Ejb({ async: true });
-	const ast = ejb.parserAst("Hello");
+test("should handle compilation", async () => {
+	const ejb = new Ejb();
+	const ast = ejb.parser("Hello");
 	const result = await compile(ejb, ast);
 	expect(result).toContain("$ejb.res += `Hello`;");
 });

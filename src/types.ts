@@ -16,17 +16,8 @@ export interface EjbError extends Error {
 	loc?: SourceLocation;
 }
 
-/**
- * Conditional type that returns Promise<T> if Async is true, otherwise T
- * @template Async - Boolean indicating if the operation is async
- * @template T - The type to wrap in Promise or return directly
- */
-export type IfAsync<Async extends boolean, T> = Async extends true
-	? Promise<T>
-	: T;
-
 /** Type representing any Ejb instance (sync or async) */
-export type AnyEjb = Ejb<boolean>;
+export type AnyEjb = Ejb;
 
 /** Type representing a value that can be either the type or a Promise of the type */
 export type EjbAnyReturn<type> = type | Promise<type>;
@@ -35,17 +26,15 @@ export type EjbAnyReturn<type> = type | Promise<type>;
  * Interface for Ejb constructor options
  * @template Async - Boolean indicating if the instance should work in async mode
  */
-export interface EjbContructor<Async extends boolean> {
+export interface EjbContructor {
 	/** Path aliases mapping */
 	aliases: Record<string, string>;
 	/** Default file extension */
 	extension: string;
-	/** Async mode flag */
-	async: Async;
 	/** Root directory for file resolution */
 	root: string;
 	/** File resolver function */
-	resolver: (path: string) => IfAsync<Async, string>;
+	resolver: (path: string) => Promise<string>;
 	/** Registered directives */
 	directives: Record<string, EjbDirectivePlugin>;
 	/** Global variables available in templates */
@@ -78,7 +67,7 @@ export interface EjbFunctionContext {
 export interface EjbChildrenContext {
 	/** Child nodes */
 	children: AstNode[];
-	params?:EjbParamOption[];
+	params?: EjbParamOption[];
 	/** Parent directive names (for nested directives) */
 	parents: AstNode[];
 }
@@ -155,7 +144,7 @@ export interface EjbDirectiveBasement {
 	 */
 	onEnd?: (ejb: AnyEjb) => EjbAnyReturn<string>;
 	/** Type of content within the directive's children */
-	children_type?: 'html' | 'js' | 'css';
+	children_type?: "html" | "js" | "css";
 	/** A description of what the directive does. */
 	description?: string;
 	/** An example of how to use the directive. */

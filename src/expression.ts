@@ -1,101 +1,98 @@
 import type { EjbParamOption, Expression } from "./types";
 
 function parseExpressionArgs(expression: string): string[] {
-    const args: string[] = [];
-    let level = 0;
-    let start = 0;
-    let inString: false | "'" | '"' | "`" = false;
+	const args: string[] = [];
+	let level = 0,
+		start = 0;
+	let inString: false | "'" | '"' | "`" = false;
 
-    for (let i = 0; i < expression.length; i++) {
-        const char = expression[i];
+	for (let i = 0; i < expression.length; i++) {
+		const char = expression[i];
 
-        if (inString) {
-            if (char === inString && expression[i - 1] !== '\\') {
-                inString = false;
-            }
-            continue;
-        }
+		if (inString) {
+			if (char === inString && expression[i - 1] !== "\\") inString = false;
+			continue;
+		}
 
-        switch (char) {
-            case '`':
-            case "'":
-            case '"':
-                inString = char;
-                break;
-            case '(': 
-            case '[':
-            case '{':
-                level++;
-                break;
-            case ')':
-            case ']':
-            case '}':
-                level--;
-                break;
-            case ',':
-                if (level === 0) {
-                    args.push(expression.substring(start, i).trim());
-                    start = i + 1;
-                }
-                break;
-        }
-    }
+		switch (char) {
+			case "`":
+			case "'":
+			case '"':
+				inString = char;
+				break;
+			case "(":
+			case "[":
+			case "{":
+				level++;
+				break;
+			case ")":
+			case "]":
+			case "}":
+				level--;
+				break;
+			case ",":
+				if (level === 0) {
+					const arg = expression.substring(start, i).trim();
+					if (arg) args.push(arg);
+					start = i + 1;
+				}
+				break;
+		}
+	}
 
-    args.push(expression.substring(start).trim());
-    return args.filter(arg => arg);
+	const lastArg = expression.substring(start).trim();
+	if (lastArg) args.push(lastArg);
+	return args;
 }
 
-export function createExpression(expression: string, params: EjbParamOption[]): Expression {
-    const argStrings = parseExpressionArgs(expression);
-    const getArg = (name: string): string | undefined => {
-        const index = params.findIndex(p => p.name === name);
-        if (index === -1) return undefined;
-        return argStrings[index];
-    }
+function safeEval<T>(value: string): T | undefined {
+	try {
+		return new Function(`return ${value}`)() as T;
+	} catch {
+		return undefined;
+	}
+}
 
-    const getArgWithDefault = (name: string): string | undefined => {
-        const arg = getArg(name);
-        if (arg !== undefined) return arg;
-        const param = params.find(p => p.name === name);
-        return param?.default;
-    }
+export function createExpression(
+	expression: string,
+	params: EjbParamOption[],
+): Expression {
+	const argStrings = parseExpressionArgs(expression);
+	const paramMap = new Map(params.map((p) => [p.name, p]));
 
-    return {
-        raw: expression,
-        getRaw: (name: string) => getArg(name),
-        getString: (name: string) => {
-            const val = getArgWithDefault(name);
-            return val?.replace(/^["\'\`]|["\'\`]$/g, '');
-        },
-        getNumber: (name: string) => {
-            const val = getArgWithDefault(name);
-            return val !== undefined ? parseFloat(val) : undefined;
-        },
-        getBoolean: (name: string) => {
-            const val = getArgWithDefault(name);
-            return val !== undefined ? val === 'true' : undefined;
-        },
-        getObject: <T>(name: string): T | undefined => {
-            const val = getArgWithDefault(name);
-            if (val === undefined) return undefined;
-            try {
-                // Using new Function to safely parse object literals
-                return new Function(`return ${val}`)() as T;
-            } catch (e) {
-                console.error(`[EJB] Failed to parse object for param '${name}':`, e);
-                return undefined as any;
-            }
-        },
-        getArray: <T extends any = any>(name: string): T[] | undefined => {
-            const val = getArgWithDefault(name);
-            if (val === undefined) return undefined;
-            try {
-                // Using new Function to safely parse array literals
-                return new Function(`return ${val}`)() as T[];
-            } catch (e) {
-                console.error(`[EJB] Failed to parse array for param '${name}':`, e);
-                return undefined;
-            }
-        },
-    }
+	const getArg = (name: string) => {
+		const index = params.findIndex((p) => p.name === name);
+		return index >= 0 ? argStrings[index] : undefined;
+	};
+
+	const getArgWithDefault = (name: string) => {
+		const arg = getArg(name);
+		if (arg !== undefined) return arg;
+		return paramMap.get(name)?.default;
+	};
+
+	const baseGet = (name: string) => ({
+		raw: getArg(name),
+		string: getArgWithDefault(name)?.replace(/^["'`]|["'`]$/g, ""),
+		number: () => {
+			const val = getArgWithDefault(name);
+			return val !== undefined ? parseFloat(val) : undefined;
+		},
+		boolean: () => {
+			const val = getArgWithDefault(name);
+			return val !== undefined ? val === "true" : undefined;
+		},
+		object: <T>() => safeEval<T>(getArgWithDefault(name) || ""),
+		array: <T>() => safeEval<T[]>(getArgWithDefault(name) || ""),
+	});
+
+	return {
+		raw: expression,
+		getRaw: (name: string) => baseGet(name).raw,
+		getString: (name: string) => baseGet(name).string,
+		getNumber: (name: string) => baseGet(name).number(),
+		getBoolean: (name: string) => baseGet(name).boolean(),
+		getObject: <T>(name: string) => baseGet(name).object<T>(),
+		getArray: <T = any>(name: string) => baseGet(name).array<T>(),
+	};
 }

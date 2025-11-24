@@ -2,8 +2,6 @@ import type { AnyEjb } from "../types";
 
 /**
  * Joins path segments and normalizes the resulting path
- * @param segments - Path segments to join
- * @returns Normalized path string
  */
 export function join(...segments: string[]): string {
 	if (!segments.length) return ".";
@@ -17,51 +15,48 @@ export function join(...segments: string[]): string {
 				.toUpperCase()
 		: null;
 
-	let normalized = segments
-		.map((s) => s.replace(/\\/g, "/").replace(/\/+/g, "/"))
+	// Normalize all segments at once
+	const normalized = segments
 		.join("/")
+		.replace(/\\/g, "/")
 		.replace(/\/+/g, "/");
-
-	if (isWindowsAbsolute && driveLetter) {
-		normalized = normalized.replace(/^[a-zA-Z]:/, `${driveLetter}:`);
-	}
 	const isAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(normalized);
 
-	const parts = normalized
-		.split("/")
-		.filter((part) => part && part !== ".")
-		.reduce((acc, part) => {
-			return part === ".."
-				? acc.length && acc[acc.length - 1] !== ".."
-					? acc.slice(0, -1)
-					: [...acc, part]
-				: [...acc, part];
-		}, [] as string[]);
+	const parts = normalized.split("/");
+	const result: string[] = [];
+	let i = 0;
 
-	let path = parts.join("/");
+	while (i < parts.length) {
+		const part = parts[i++];
+		if (!part || part === ".") continue;
 
-	if (isWindowsAbsolute) {
-		path = path
-			.replace(/^([a-zA-Z]:)/, (_, drive) => `${drive.toUpperCase()}/`)
-			.replace(/^\//, `${driveLetter}:/`)
-			.replace(/\//g, "\\");
+		if (part === "..") {
+			if (result.length && result[result.length - 1] !== "..") {
+				result.pop();
+			} else {
+				result.push(part);
+			}
+		} else {
+			result.push(part);
+		}
+	}
 
-		path = path.replace(/\\+/g, "\\");
+	let path = result.join("/");
+
+	if (isWindowsAbsolute && driveLetter) {
+		path = path.replace(/^[a-zA-Z]:/, "").replace(/^\//, "");
+		path = `${driveLetter}:\\${path.replace(/\//g, "\\")}`.replace(
+			/\\+/g,
+			"\\",
+		);
 		return path || ".";
 	}
 
-	if (isAbsolute) path = `/${path.replace(/^\//, "")}`;
-	if (path === "") return ".";
-
-	return path;
+	return isAbsolute ? `/${path.replace(/^\//, "")}` : path || ".";
 }
 
 /**
  * Resolves file paths with aliases and extensions
- * @param ejb - The Ejb instance
- * @param filepath - The path to resolve
- * @param currentFile - Optional current file path for relative resolution
- * @returns Resolved file path
  */
 export const filepathResolver = (
 	ejb: AnyEjb,
@@ -70,33 +65,56 @@ export const filepathResolver = (
 ): string => {
 	if (!filepath) return filepath;
 
-	filepath = filepath.replace(/\\/g, "/").replace(/\/+/g, "/");
+	// Fast path normalization
+	let resolved = filepath.replace(/\\/g, "/").replace(/\/+/g, "/");
 	const root = (ejb.root || ".").replace(/\\/g, "/").replace(/\/$/, "");
 
-	const isAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(filepath);
+	// Check if absolute - including Windows absolute paths
+	const _isAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(resolved);
+	const isWindowsAbsolute = /^[a-zA-Z]:\//.test(resolved);
 
-	const aliasMatch = Object.entries(ejb.aliases)
-		.sort(([a], [b]) => b.length - a.length)
-		.find(([alias]) =>
-			new RegExp(`^${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(
-				filepath,
-			),
-		);
+	// Handle aliases with while loop
+	const aliases = Object.entries(ejb.aliases);
+	let aliasIndex = aliases.length - 1;
 
-	if (aliasMatch) {
-		const [alias, replacement] = aliasMatch as [string, string];
-		filepath = join(replacement, filepath.slice(alias.length));
-	} else if (!isAbsolute) {
-		const base = currentFile ? currentFile.replace(/\/[^/]*$/, "") : root;
-		filepath = join(base, filepath);
+	// Sort by length descending using while
+	while (aliasIndex > 0) {
+		let j = 0;
+		while (j < aliasIndex) {
+			if (aliases[j][0].length < aliases[j + 1][0].length) {
+				[aliases[j], aliases[j + 1]] = [aliases[j + 1], aliases[j]];
+			}
+			j++;
+		}
+		aliasIndex--;
 	}
 
-	if (ejb.extension && !/\.[^/.]+$/.test(filepath)) {
-		const ext = ejb.extension.startsWith(".")
-			? ejb.extension
-			: `.${ejb.extension}`;
-		filepath = filepath + ext;
+	// Find matching alias with while
+	let i = 0;
+	while (i < aliases.length) {
+		const [alias, replacement] = aliases[i];
+		const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		if (new RegExp(`^${escapedAlias}`).test(filepath)) {
+			resolved = join(replacement, filepath.slice(alias.length));
+			break;
+		}
+		i++;
 	}
 
-	return filepath.replace(/\/+/g, "/");
+	const isResolvedAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(resolved);
+	if (!isResolvedAbsolute && !isWindowsAbsolute) {
+		const base = currentFile
+			? currentFile.replace(/\\/g, "/").replace(/\/[^/]*$/, "")
+			: root;
+		resolved = join(base, resolved);
+	}
+
+	// Add extension if needed
+	if (ejb.extension && !/\.[^/.]+$/.test(resolved)) {
+		const ext =
+			ejb.extension.charAt(0) === "." ? ejb.extension : `.${ejb.extension}`;
+		resolved += ext;
+	}
+
+	return resolved.replace(/\/+/g, "/");
 };

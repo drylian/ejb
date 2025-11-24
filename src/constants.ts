@@ -31,7 +31,7 @@ export const ESCAPE_HTML = {
 	"&": "&amp;",
 	"<": "&lt;",
 	">": "&gt;",
-	"\"": "&quot;",
+	'"': "&quot;",
 	"'": "&#39;",
 };
 

@@ -1,5 +1,3 @@
-import type { AnyEjb } from "../types";
-
 /**
  * Reference to the AsyncFunction constructor
  */
@@ -16,6 +14,6 @@ export function trimQuotes(str: string) {
  * @param str - The code string to wrap
  * @returns Wrapped function code
  */
-export function returnEjbRes(ejb: AnyEjb, str: string): string {
-	return `(${ejb.async ? "await" : ""}(${ejb.async ? "async" : ""}($ejb) => {${str}; return $ejb.res})({...$ejb, res:''}))`;
+export function returnEjbRes(str: string): string {
+	return `(await(async($ejb) => {${str}; return $ejb.res})({...$ejb, res:''}))`;
 }

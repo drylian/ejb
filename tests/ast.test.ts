@@ -4,7 +4,7 @@ import { Ejb } from "../src/ejb";
 
 test("should parse simple text", () => {
 	const ejb = new Ejb();
-	const ast = ejb.parserAst("Hello World");
+	const ast = ejb.parser("Hello World");
 	expect(ast.type).toBe(EjbAst.Root);
 	expect(ast.children.length).toBe(1);
 	expect(ast.children[0].type).toBe(EjbAst.Text);
@@ -13,7 +13,7 @@ test("should parse simple text", () => {
 
 test("should parse interpolation", () => {
 	const ejb = new Ejb();
-	const ast = ejb.parserAst("Hello {{name}}");
+	const ast = ejb.parser("Hello {{name}}");
 	expect(ast.children.length).toBe(2);
 	expect(ast.children[1].type).toBe(EjbAst.Interpolation);
 	expect((ast.children[1] as any).expression).toBe("name");
@@ -21,7 +21,7 @@ test("should parse interpolation", () => {
 
 test("should parse directives", () => {
 	const ejb = new Ejb();
-	const ast = ejb.parserAst("@if(true) Hello @end");
+	const ast = ejb.parser("@if(true) Hello @end");
 	expect(ast.children.length).toBe(1);
 	expect(ast.children[0].type).toBe(EjbAst.Directive);
 	expect((ast.children[0] as any).name).toBe("if");
@@ -30,7 +30,7 @@ test("should parse directives", () => {
 
 test("should throw on unclosed directive", () => {
 	const ejb = new Ejb();
-	expect(ejb.parserAst("@if(true) Hello")).toEqual({
+	expect(ejb.parser("@if(true) Hello")).toEqual({
 		type: EjbAst.Root,
 		children: [
 			{
@@ -88,7 +88,7 @@ test("should throw on unclosed directive", () => {
 
 test("should parse nested directives", () => {
 	const ejb = new Ejb();
-	const ast = ejb.parserAst("@if(true) @for(item in list) Loop @end @end");
+	const ast = ejb.parser("@if(true) @for(item in list) Loop @end @end");
 	expect(ast.children.length).toBe(1);
 	const ifNode = ast.children[0] as any;
 	expect(ifNode.children.length).toBe(3); // Text + for directive + Text

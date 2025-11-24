@@ -1,8 +1,28 @@
 import { ejbDirective } from "../constants";
-import { md5, PromiseResolver } from "../utils";
+import { md5 } from "../utils";
 
 export default Object.assign(
 	{},
+	/**
+	 * @const
+	 */
+	ejbDirective({
+		name: "const",
+		priority: 1,
+		onParams: (_, exp) => {
+			return `const ${exp.raw};`;
+		},
+	}),
+	/**
+	 * @let
+	 */
+	ejbDirective({
+		name: "let",
+		priority: 1,
+		onParams: (_, exp) => {
+			return `let ${exp.raw};`;
+		},
+	}),
 	/**
 	 * @code
 	 */
@@ -10,8 +30,8 @@ export default Object.assign(
 		name: "code",
 		priority: 1,
 		children: true,
-		onChildren: (ejb, { children }) => {
-			return ejb.compileNode(children, true);
+		onChildren: async (ejb, { children }) => {
+			return await ejb.compile(children, true);
 		},
 	}),
 	/**
@@ -24,17 +44,23 @@ export default Object.assign(
 		onParams: (_, exp) => {
 			return `if (${exp.raw}) {`;
 		},
-        onEnd: () => "}",
+		onEnd: () => "}",
 		parents: [
 			{
 				name: "elseif",
-                internal:true,
+				internal: true,
 				onInit: (_, e) => `} else if (${e.raw}) {`,
-                onEnd: () => "}"
+				onEnd: () => "}",
+			},
+			{
+				name: "elif",
+				internal: true,
+				onInit: (_, e) => `} else if (${e.raw}) {`,
+				onEnd: () => "}",
 			},
 			{
 				name: "else",
-                internal:true,
+				internal: true,
 				onInit: () => `else {`,
 			},
 		],
@@ -78,37 +104,35 @@ export default Object.assign(
 				name: "case",
 				internal: true,
 				onInit: (_, exp) => `case ${exp.raw}: {`,
-				onEnd: () => ";break;}"
+				onEnd: () => ";break;};",
 			},
 			{
 				name: "default",
 				internal: true,
 				onInit: () => `default: {`,
-				onEnd: () => "}"
+				onEnd: () => "};",
 			},
 		],
-		onChildren: (_, { parents }) => PromiseResolver(_.compileNode(parents)),
-		onEnd: () => "}"
+		onChildren: async () => {
+			return "";
+		},
+		onEnd: () => "}",
 	}),
 	/**
-	 * @isset directive
+	 * @once directive
 	 */
 	ejbDirective({
 		name: "once",
 		priority: 1,
 		children: true,
 		onInitFile: () => "$ejb.onces = {};",
-		onChildren: (ejb, opts) => {
-			return PromiseResolver(
-				ejb.compileNode(opts.children),
-				(content: string) => {
-					const reference = md5(content);
-					return `if(typeof $ejb.onces[\'{${reference}}\'] == "undefined") {
-                $ejb.onces[\'{${reference}}\'] = true;
+		onChildren: async (ejb, opts) => {
+			const content = await ejb.compile(opts.children);
+			const reference = md5(content);
+			return `if(typeof $ejb.onces['${reference}'] == "undefined") {
+                $ejb.onces['${reference}'] = true;
                 ${content}
                 `;
-				},
-			);
 		},
 		onEnd: () => "};",
 	}),

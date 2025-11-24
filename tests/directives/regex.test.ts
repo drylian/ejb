@@ -2,7 +2,7 @@ import { Ejb, ejbDirective } from "../../src/index";
 import { describe, expect, it } from "bun:test";
 
 describe("Regex Directives", () => {
-	it("should replace a self-closing tag-like directive", () => {
+	it("should replace a self-closing tag-like directive", async () => {
 		const ejb = new Ejb();
 
 		const regexDirective = ejbDirective({
@@ -18,11 +18,11 @@ describe("Regex Directives", () => {
 		const template = "before <x-my-component /> after";
 		const expected = "before REPLACED-my-component after";
 
-		const result = ejb.render(template);
+		const result = await ejb.render(template);
 		expect(result).toBe(expected);
 	});
 
-	it("should replace a block tag-like directive", () => {
+	it("should replace a block tag-like directive", async () => {
 		const ejb = new Ejb();
 
 		const regexDirective = ejbDirective({
@@ -39,7 +39,7 @@ describe("Regex Directives", () => {
 		const template = "before <x-my-card>inner content</x-my-card> after";
 		const expected = "before <div>my-card: inner content</div> after";
 
-		const result = ejb.render(template);
+		const result = await ejb.render(template);
 		expect(result).toBe(expected);
 	});
 });
