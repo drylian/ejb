@@ -1,9 +1,8 @@
 {
-  "$schema": "https://raw.githubusercontent.com/drylian/ejb/main/ejb-code/schemas/ejbconfig.schema.json",
+  "$schema": "https://raw.githubusercontent.com/drylian/ejb/main/vs-code/schemas/ejbconfig.schema.json",
   "package": "@caeljs/ejb",
   "version": "0.1.0",
   "url": "git+https://github.com/drylian/configjs.git",
-  "depuration": true,
   "directives": [
     {
       "name": "import",
@@ -80,6 +79,20 @@
       "children_type": "html"
     },
     {
+      "name": "const",
+      "description": "",
+      "children": false,
+      "example": "Example not defined",
+      "children_type": "html"
+    },
+    {
+      "name": "let",
+      "description": "",
+      "children": false,
+      "example": "Example not defined",
+      "children_type": "html"
+    },
+    {
       "name": "code",
       "description": "",
       "children": true,
@@ -95,6 +108,12 @@
       "parents": [
         {
           "name": "elseif",
+          "example": "Example not defined",
+          "children_type": "html",
+          "description": ""
+        },
+        {
+          "name": "elif",
           "example": "Example not defined",
           "children_type": "html",
           "description": ""
@@ -148,6 +167,53 @@
       "children": true,
       "example": "Example not defined",
       "children_type": "html"
+    },
+    {
+      "name": "client",
+      "description": "Defines code that should only run on the client side",
+      "children": true,
+      "example": "@client const handler = () => console.log('clicked'); @end",
+      "children_type": "js"
+    },
+    {
+      "name": "server",
+      "description": "Defines code that should only run on the server side",
+      "children": true,
+      "example": "@server const data = await fetchFromDB(); @end",
+      "children_type": "js"
+    },
+    {
+      "name": "style",
+      "description": "Defines CSS styles for the component",
+      "children": true,
+      "example": "@style .button { background: blue; } @end",
+      "children_type": "css"
+    },
+    {
+      "name": "hydrate",
+      "description": "Marks content for client-side hydration",
+      "children": true,
+      "example": "@hydrate <button onclick='handleClick()'>Click</button> @end",
+      "children_type": "html"
+    },
+    {
+      "name": "asset",
+      "description": "Includes client-side assets (JS/CSS)",
+      "children": false,
+      "example": "@asset('script', 'main')",
+      "children_type": "html",
+      "params": [
+        {
+          "name": "type",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true
+        }
+      ]
     }
   ]
 }

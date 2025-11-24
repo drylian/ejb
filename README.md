@@ -1,6 +1,6 @@
 # EJB - A Powerful and Flexible Template Engine
 
-EJB is a lightweight, powerful, and flexible template engine for JavaScript and TypeScript, designed to be intuitive and easy to use. It supports custom directives, async operations, layouts, partials, and much more, making it a great choice for a wide range of applications.
+EJB is a lightweight, powerful, and flexible template engine for JavaScript and TypeScript, designed to be intuitive and easy to use. It supports custom directives, async operations, layouts, partials, and **Server-Side Rendering (SSR)**, making it a great choice for a wide range of applications.
 
 ## Features
 
@@ -13,6 +13,8 @@ EJB is a lightweight, powerful, and flexible template engine for JavaScript and 
 - **Variable Exposure**: Automatically expose global variables for direct access in templates.
 - **Extensible**: Highly customizable with a powerful directive API.
 - **Written in TypeScript**: Provides strong typing for better development experience.
+- **🆕 SSR Support**: Build applications with automatic code-splitting for server, client, and CSS.
+- **🆕 Builder API**: `EjbBuilder` class for advanced build workflows.
 
 ## Installation
 
@@ -162,6 +164,61 @@ const ejb = new Ejb({
 // {{ myVar }} will throw a ReferenceError
 ejb.render('{{ it.myVar }}');
 ```
+
+## Server-Side Rendering (SSR)
+
+EJB now supports SSR with automatic code-splitting for server, client, and CSS!
+
+### Quick Start
+
+```typescript
+import { EjbBuilder } from '@caeljs/ejb';
+
+const builder = new EjbBuilder({
+  root: './views',
+  dist: './dist',
+  resolver: EJBNodeJSResolver()
+});
+
+// Your template
+const template = `
+<div>
+  @server
+    const data = await fetchData();
+  @end
+
+  <h1>{{ data.title }}</h1>
+
+  @client
+    document.querySelector('button').onclick = () => {
+      alert('Clicked!');
+    };
+  @end
+
+  @style
+    .container { max-width: 1200px; }
+  @end
+</div>
+`;
+
+// Build
+builder.file('@/main.ejb');
+const ast = builder.parser(template);
+await builder.compile(ast);
+await builder.build();
+```
+
+### New Directives
+
+- `@server`: Code that runs only on the server
+- `@client`: Code that runs only in the browser
+- `@style`: CSS styles for the component
+- `@hydrate`: Mark content for client-side hydration
+- `@asset`: Include generated assets (JS/CSS)
+
+### Learn More
+
+See [SSR.md](./SSR.md) for complete documentation on Server-Side Rendering features.
 
 ## Contributing
 

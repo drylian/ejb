@@ -1,3 +1,4 @@
+export * from "./builder";
 export * from "./compiler";
 export * from "./constants";
 export * from "./ejb";

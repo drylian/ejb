@@ -1,5 +1,6 @@
 import type { EjbAst } from "./constants";
 import type { Ejb } from "./ejb";
+import type { EjbBuilder } from "./builder";
 
 export interface Position {
 	line: number;
@@ -17,7 +18,7 @@ export interface EjbError extends Error {
 }
 
 /** Type representing any Ejb instance (sync or async) */
-export type AnyEjb = Ejb;
+export type AnyEjb = Ejb | EjbBuilder;
 
 /** Type representing a value that can be either the type or a Promise of the type */
 export type EjbAnyReturn<type> = type | Promise<type>;

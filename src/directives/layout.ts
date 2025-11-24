@@ -51,7 +51,7 @@ export default Object.assign(
 		// onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
 		// onInit + onEnd + sync = $ejb.res += (($ejb) => { ...content })({ ...$ejb, res: ''});
 		onInit: (ejb, exp) =>
-			`$ejb.stacks[${exp.raw}].add(${ejb.async ? "await" : ""} (${ejb.async ? "async" : ""} ($ejb) => {`,
+			`$ejb.stacks[${exp.raw}].add(await (async ($ejb) => {`,
 		onEnd: () => ";return $ejb.res;})({ ...$ejb, res:'' }));",
 	}),
 	/**
@@ -84,7 +84,7 @@ export default Object.assign(
 		// onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
 		// onInit + onEnd + sync = $ejb.res += (($ejb) => { ...content })({ ...$ejb, res: ''});
 		onInit: (ejb, exp) =>
-			`$ejb.defines[${exp.raw}] = ${ejb.async ? "await" : ""} (${ejb.async ? "async" : ""} ($ejb) => {`,
+			`$ejb.defines[${exp.raw}] = await (async ($ejb) => {`,
 		onEnd: () => ";return $ejb.res;})({ ...$ejb, res:'' });",
 	}),
 );

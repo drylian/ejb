@@ -19,7 +19,13 @@ export default Object.assign(
 	ejbDirective({
 		name: "let",
 		priority: 1,
-		onParams: (_, exp) => {
+		onParams: (ejb, exp) => {
+			// Suporta EjbBuilder para SSR
+			if ("res" in ejb && typeof ejb.res === "function") {
+				const code = `let ${exp.raw};`;
+				(ejb as any).res(code);
+				return "";
+			}
 			return `let ${exp.raw};`;
 		},
 	}),
