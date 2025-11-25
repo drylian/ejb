@@ -27,6 +27,8 @@ import {
 	md5,
 } from "./utils";
 import path from "path";
+import { existsSync, mkdirSync } from "fs";
+import { promises as fs } from "fs";
 
 /**
  * EJB Template Engine class
@@ -34,6 +36,8 @@ import path from "path";
 export class Ejb {
 	/** File resolver function */
 	public resolver: EjbContructor["resolver"];
+	/** File writer function (for build process) */
+	public writer: EjbContructor["writer"];
 	/** Default file extension */
 	public extension: EjbContructor["extension"];
 	/** Global variables available in templates */
@@ -44,9 +48,13 @@ export class Ejb {
 	public aliases: EjbContructor["aliases"];
 	/** Root directory for file resolution */
 	public root: EjbContructor["root"];
+	/** Manifest file loaded from build output */
+	public manifest: Record<string, any> = {};
 
 	/** expose global keys in file, example: it.exemple -> it.exemple | exemple */
 	public globalexpose: boolean;
+	/** Development mode flag */
+	public depuration: boolean;
 
 	/** Stores errors during compilation */
 	public errors: EjbError[] = [];
@@ -81,7 +89,7 @@ export class Ejb {
 
 		const builder = new EjbBuilder(this);
 		builder.file(resolvedPath);
-		
+
 		const ast = this.parser(content);
 		if (ast.errors.length) {
 			this.errors.push(...ast.errors);
@@ -101,8 +109,14 @@ export class Ejb {
 			return;
 		}
 
-		// --- File Generation (Simplified) ---
+		// --- File Generation ---
 		const manifest: Record<string, { entry: string, assets: string[] }> = {};
+		const writePromises: Promise<void>[] = [];
+
+		const loaderPrefixMap: Record<string, string> = {
+			server: 'se',
+			client: 'cl',
+		};
 
 		for (const [filepath, artefacts] of Object.entries(this.files)) {
 			const fileKey = '@/' + path.relative(this.root, filepath);
@@ -110,15 +124,19 @@ export class Ejb {
 
 			for (const artefact of artefacts) {
 				const hash = md5(artefact.content).slice(0, 8);
-				const ext = artefact.loader === 'css' ? '.css' : '.js';
 				const baseName = path.basename(filepath, `.${this.extension}`);
-				const newFileName = `${artefact.loader}-${baseName}.${hash}${ext}`;
-				
-				// In a real scenario, you'd write this content to a file in the 'dist' folder.
-				// For now, we'll just log it.
-				console.log(`-- Writing ${dist}/${newFileName} --`);
-				// await fs.promises.writeFile(path.join(dist, newFileName), artefact.content);
-				
+
+				let newFileName: string;
+				if (artefact.loader === 'css') {
+					newFileName = `${baseName}.${hash}.css`;
+				} else {
+					const prefix = loaderPrefixMap[artefact.loader] || artefact.loader;
+					newFileName = `${prefix}-${baseName}.${hash}.js`;
+				}
+
+				const fullPath = path.join(dist, newFileName);
+				writePromises.push(this.writer(fullPath, artefact.content));
+
 				if (artefact.loader === 'server') {
 					manifest[fileKey].entry = newFileName;
 				} else {
@@ -128,9 +146,10 @@ export class Ejb {
 		}
 
 		// Write manifest.json
-		console.log(`-- Writing ${dist}/ejb.json --`);
-		console.log(JSON.stringify(manifest, null, 2));
-		// await fs.promises.writeFile(path.join(dist, 'ejb.json'), JSON.stringify(manifest, null, 2));
+		const manifestPath = path.join(dist, 'ejb.json');
+		writePromises.push(this.writer(manifestPath, JSON.stringify(manifest, null, 2)));
+
+		await Promise.all(writePromises);
 
 		console.log("[EJB] Build completed.");
 	}
@@ -140,45 +159,35 @@ export class Ejb {
 	 * @param template - Template string or path to template file
 	 * @returns The generated function code as string (wrapped in Promise if async)
 	 */
-	public async makeFunction(template: string): Promise<string> {
+	public async makeFunction(template: string): Promise<Function> {
 		this.errors = [];
 		const isPotentialPath = this.isTemplatePath(template);
 
-		const processTemplate = async (content: string): Promise<string> => {
+		const processTemplate = async (content: string): Promise<Function> => {
 			const ast = ejbParser(this, content);
 			if (ast.errors.length) {
 				this.errors.push(...ast.errors);
 			}
-			const codeResult = await compile(this, ast);
+			const compiledCode = await compile(this, ast);
+			console.log(compiledCode)
+			if (this.errors.length > 0) {
+				const errorContent = JSON.stringify(
+					this.errors.map((e) => ({
+						message: e.stack || e.message,
+						loc: e.loc,
+					})),
+				);
+				// If compilation errors, return a function that throws
+				return () => {
+					const err = new Error('EJB compilation failed');
+					err.details = errorContent;
+					throw err;
+				};
+			}
 
-			const buildFunctionCode = (compiledCode: string): string => {
-				if (this.errors.length > 0) {
-					const errorContent = JSON.stringify(
-						this.errors.map((e) => ({
-							message: e.stack || e.message,
-							loc: e.loc,
-						})),
-					);
-					return `return () => { const err = new Error('EJB compilation failed'); err.details = ${errorContent}; throw err; }`;
-				}
-				return `
-                return function(${this.globalvar}) {
-                    const $ejb = {
-                        ins: this,
-                        res: '',
-                        escapeHtml: ${escapeHtml.toString()},
-                        escapeJs: ${escapeJs.toString()},
-                        EjbFunction: async function() { 
-                            return new (async () => {}).constructor.apply(null, arguments);
-                        }
-                    };
-                    
-                    ${compiledCode}
-                }.bind(this);
-            `;
-			};
-
-			return buildFunctionCode(codeResult);
+			const ejbInstance = this;
+			const AsyncFunctionConstructor = this.getFunction();
+			return new AsyncFunctionConstructor("$ejb", this.globalvar, `${compiledCode}\nreturn $ejb.res;`).bind(ejbInstance);
 		};
 
 		if (isPotentialPath) {
@@ -242,11 +251,12 @@ export class Ejb {
 		locals: Record<string, any> = {},
 	): Promise<string> {
 		this.errors = [];
+		let resolvedPath: string | undefined;
 		const isPotentialPath = this.isTemplatePath(template);
 
 		if (isPotentialPath) {
 			try {
-				const resolvedPath = filepathResolver(this, template);
+				resolvedPath = filepathResolver(this, template);
 				template = await Promise.resolve(this.resolver(resolvedPath));
 			} catch (e) {
 				if (e && typeof e === "object" && "code" in e && e.code === "ENOENT") {
@@ -259,26 +269,18 @@ export class Ejb {
 			}
 		}
 
-		const ast = ejbParser(this, template);
-		if (ast.errors.length) {
-			this.errors.push(...ast.errors);
+		// In depuration mode, run the build-compiler to populate in-memory assets
+		if (this.depuration) {
+			this.files = {};
+			const builder = new EjbBuilder(this);
+			// Use a generic key for string-based templates, or the resolved path
+			builder.file(resolvedPath || '__EJB_DEBBUG__');
+			const astForBuild = this.parser(template);
+			await compileForBuild(builder, astForBuild);
 		}
-		const codeResult = await compile(this, ast);
-		//console.log(codeResult)
-		const execute = (code: string) => {
-			const executor = new (this.getFunction())("$ejb", this.globalvar, code);
-			return executor(
-				{
-					ins: this,
-					res: "",
-					escapeHtml,
-					escapeJs,
-					escapeString,
-					EjbFunction: this.getFunction(),
-				},
-				{ ...this.globals, ...locals },
-			);
-		};
+
+		// Get the compiled render function
+		const renderFunction = await this.makeFunction(template);
 
 		if (this.errors.length > 0) {
 			const errorMessages = this.errors
@@ -287,8 +289,22 @@ export class Ejb {
 			this.errors = [];
 			return errorMessages;
 		}
-		const result = await execute(codeResult);
-		return result.res;
+
+		// Prepare the execution context
+		const ejbContext = {
+			ins: this,
+			res: "", // Always start with an empty result string
+			escapeHtml,
+			escapeJs,
+			escapeString,
+			EjbFunction: this.getFunction(),
+		};
+		const globalLocals = { ...this.globals, ...locals };
+
+		// Execute the render function
+		const result = await renderFunction(ejbContext, globalLocals);
+
+		return result;
 	}
 
 	/**
@@ -362,8 +378,35 @@ export class Ejb {
 				return Promise.reject(new Error(content));
 			});
 
+		this.writer =
+			opts.writer ??
+			(async (filepath: string, content: string) => {
+				const dir = path.dirname(filepath);
+				if (!existsSync(dir)) {
+					mkdirSync(dir, { recursive: true });
+				}
+				await fs.writeFile(filepath, content);
+			});
+
 		this.directives = Object.assign({}, DEFAULT_DIRECTIVES, opts.directives);
 
 		this.globalvar = opts?.globalvar ?? EJB_DEFAULT_PREFIX_GLOBAL;
+		this.globalexpose = opts.globalexpose ?? true;
+		this.depuration = opts.depuration ?? false;
+		this.manifest = opts.manifest ?? {}; // Initialize manifest directly from options
+
+		if (opts.manifestPath) {
+			this.resolver(opts.manifestPath)
+				.then(content => {
+					try {
+						this.manifest = JSON.parse(content);
+					} catch (e) {
+						console.error(`[EJB] Failed to parse manifest file: ${opts.manifestPath}`, e);
+					}
+				})
+				.catch(err => {
+					console.error(`[EJB] Failed to load manifest file: ${opts.manifestPath}`, err);
+				});
+		}
 	}
 }

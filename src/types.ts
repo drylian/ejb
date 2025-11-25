@@ -36,6 +36,10 @@ export interface EjbContructor {
 	root: string;
 	/** File resolver function */
 	resolver: (path: string) => Promise<string>;
+	/** File writer function (for build process) */
+	writer: (path: string, content: string) => Promise<void>;
+	/** Path to the manifest file (for @assets) */
+	manifestPath?: string;
 	/** Registered directives */
 	directives: Record<string, EjbDirectivePlugin>;
 	/** Global variables available in templates */
@@ -44,6 +48,8 @@ export interface EjbContructor {
 	globalvar: string;
 	/** expose global keys in file, example: it.exemple -> it.exemple | exemple */
 	globalexpose: boolean;
+	/** Enable development mode (e.g., for virtual paths) */
+	depuration?: boolean;
 }
 
 /**

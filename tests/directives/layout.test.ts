@@ -142,6 +142,7 @@ describe("Push and Stack Directives", () => {
     `;
     
     const result = await ejb.render(template);
+    console.log(result)
     expect(result).toContain('<div>Part 1</div>');
     expect(result).toContain('<div>Part 2</div>');
     expect((result.match(/Part 1/g) || []).length).toBe(2);
@@ -179,7 +180,6 @@ describe("Push and Stack Directives", () => {
     }
     
     const result = await ejb.render(template);
-    
     // Verificar se todos os items estão presentes
     for (let i = 0; i < 100; i++) {
       expect(result).toContain(`<div>Item ${i}</div>`);

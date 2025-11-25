@@ -149,8 +149,12 @@ async function handleDirective(
 	// Métodos do ciclo de vida
 	if (directive.onInit)
 		output += await safeExecute(ejb, directive.onInit, [ejb, exp, loc], loc);
-	if (directive.onParams)
-		output += await safeExecute(ejb, directive.onParams, [ejb, exp, loc], loc);
+	if (directive.onParams) {
+		const paramOutput = await safeExecute(ejb, directive.onParams, [ejb, exp, loc], loc);
+		if (paramOutput) {
+			output += `$ejb.res += \`${escapeJs(paramOutput)}\`;\n`;
+		}
+	}
 
 	// Processar children
 	const [regularChildren, subDirectives] = [
@@ -214,5 +218,5 @@ export async function compile(ejb: Ejb, ast: RootNode): Promise<string> {
 			? `const { ${Object.keys(ejb.globals).join(", ")} } = ${ejb.globalvar};\n`
 			: "";
 
-	return `${initCodes.join("\n")}\n${exposeCode}${await generateNodeCode(ejb, ast)}${finalCodes.join("\n")}\nreturn $ejb;`;
+	return `${initCodes.join("\n")}\n${exposeCode}${await generateNodeCode(ejb, ast)}${finalCodes.join("\n")}`;
 }
