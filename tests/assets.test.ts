@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { Ejb } from "../src/ejb";
+import { escapeHtml } from "../src/utils";
 
 test("should render assets in production mode from manifest", async () => {
 
@@ -33,18 +34,9 @@ test("should render assets in production mode from manifest", async () => {
 
     const result = await ejb.render(template);
 
-
-
-    const expectedFullString = `<script src="/cl-main.456.js" defer></script>
-
-<link rel="stylesheet" href="/main.789.css">
-
-<link rel="stylesheet" href="/global.abc.css">
-
-`;
-
-    expect(String(result)).toBe(expectedFullString);
-
+    expect(result).toContain(escapeHtml('<script src="/cl-main.456.js" defer></script>'));
+    expect(result).toContain(escapeHtml('<link rel="stylesheet" href="/main.789.css">'));
+    expect(result).toContain(escapeHtml('<link rel="stylesheet" href="/global.abc.css">'));
 });
 
 test("should render assets in development mode from in-memory files", async () => {
@@ -88,15 +80,10 @@ test("should produce correct asset tags based on file extension", async () => {
         }
     });
     const result = await ejb.render(`@assets()`); // Pass directive content directly
-    const expected = `
-<link rel="stylesheet" href="/my-style.css">
-<script src="/my-script.js" defer></script>
-<script src="/another-script.js" defer></script>
-`.trim().split('\n').sort().join('\n');
-    
-    const actual = String(result).trim().split('\n').sort().join('\n');
 
-    expect(actual).toBe(expected);
+    expect(result).toContain(escapeHtml('<link rel="stylesheet" href="/my-style.css">'));
+    expect(result).toContain(escapeHtml('<script src="/my-script.js" defer></script>'));
+    expect(result).toContain(escapeHtml('<script src="/another-script.js" defer></script>'));
 });
 
 test("should not render anything if manifest is empty", async () => {

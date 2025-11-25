@@ -9,8 +9,8 @@ export default Object.assign(
 	ejbDirective({
 		name: "const",
 		priority: 1,
-		onParams: (_, exp) => {
-			return `const ${exp.raw};`;
+		onParams: (ejb, exp) => {
+			ejb.builder.add(`const ${exp.raw};`);
 		},
 	}),
 	/**
@@ -19,8 +19,8 @@ export default Object.assign(
 	ejbDirective({
 		name: "let",
 		priority: 1,
-		onParams: (_, exp) => {
-			return `let ${exp.raw};`;
+		onParams: (ejb, exp) => {
+			ejb.builder.add(`let ${exp.raw};`);
 		},
 	}),
 	/**
@@ -31,7 +31,7 @@ export default Object.assign(
 		priority: 1,
 		children: true,
 		onChildren: async (ejb, { children }) => {
-			return await ejb.compile(children, true);
+			ejb.builder.add(await ejb.compile(children, true));
 		},
 	}),
 	/**
@@ -41,27 +41,27 @@ export default Object.assign(
 		name: "if",
 		priority: 1,
 		children: true,
-		onParams: (_, exp) => {
-			return `if (${exp.raw}) {`;
+		onParams: (ejb, exp) => {
+			ejb.builder.add(`if (${exp.raw}) {`);
 		},
-		onEnd: () => "}",
+		onEnd: (ejb) => ejb.builder.add("}"),
 		parents: [
 			{
 				name: "elseif",
 				internal: true,
-				onInit: (_, e) => `} else if (${e.raw}) {`,
-				onEnd: () => "}",
+				onInit: (ejb, e) => ejb.builder.add(`} else if (${e.raw}) {`),
+				onEnd: (ejb) => ejb.builder.add("}"),
 			},
 			{
 				name: "elif",
 				internal: true,
-				onInit: (_, e) => `} else if (${e.raw}) {`,
-				onEnd: () => "}",
+				onInit: (ejb, e) => ejb.builder.add(`} else if (${e.raw}) {`),
+				onEnd: (ejb) => ejb.builder.add("}"),
 			},
 			{
 				name: "else",
 				internal: true,
-				onInit: () => `else {`,
+				onInit: (ejb) => ejb.builder.add(`else {`),
 			},
 		],
 	}),
@@ -72,11 +72,11 @@ export default Object.assign(
 		name: "for",
 		priority: 1,
 		children: true,
-		onInit: (_, exp) => {
-			return `for (${exp.raw}) {`;
+		onInit: (ejb, exp) => {
+			ejb.builder.add(`for (${exp.raw}) {`);
 		},
-		onEnd: () => {
-			return `}`;
+		onEnd: (ejb) => {
+			ejb.builder.add(`}`);
 		},
 	}),
 	/**
@@ -85,8 +85,10 @@ export default Object.assign(
 	ejbDirective({
 		name: "isset",
 		priority: 1,
-		onParams(_, exp) {
-			return `if(typeof ${exp.raw} !== "undefined" && ${exp.raw}) $ejb.res += ${exp.raw};`;
+		onParams(ejb, exp) {
+			ejb.builder.add(
+				`if(typeof ${exp.raw} !== "undefined" && ${exp.raw}) $ejb.res += ${exp.raw};`,
+			);
 		},
 	}),
 	/**
@@ -96,27 +98,24 @@ export default Object.assign(
 		name: "switch",
 		priority: 1,
 		children: true,
-		onParams: (_, exp) => {
-			return `switch (${exp.raw}) {`;
+		onParams: (ejb, exp) => {
+			ejb.builder.add(`switch (${exp.raw}) {`);
 		},
 		parents: [
 			{
 				name: "case",
 				internal: true,
-				onInit: (_, exp) => `case ${exp.raw}: {`,
-				onEnd: () => ";break;};",
+				onInit: (ejb, exp) => ejb.builder.add(`case ${exp.raw}: {`),
+				onEnd: (ejb) => ejb.builder.add(";break;};"),
 			},
 			{
 				name: "default",
 				internal: true,
-				onInit: () => `default: {`,
-				onEnd: () => "};",
+				onInit: (ejb) => ejb.builder.add(`default: {`),
+				onEnd: (ejb) => ejb.builder.add("};"),
 			},
 		],
-		onChildren: async () => {
-			return "";
-		},
-		onEnd: () => "}",
+		onEnd: (ejb) => ejb.builder.add("}"),
 	}),
 	/**
 	 * @once directive
@@ -125,15 +124,15 @@ export default Object.assign(
 		name: "once",
 		priority: 1,
 		children: true,
-		onInitFile: () => "$ejb.onces = {};",
+		onInitFile: (ejb) => ejb.builder.add("$ejb.onces = {};"),
 		onChildren: async (ejb, opts) => {
 			const content = await ejb.compile(opts.children);
 			const reference = md5(content);
-			return `if(typeof $ejb.onces['${reference}'] == "undefined") {
+			ejb.builder.add(`if(typeof $ejb.onces['${reference}'] == "undefined") {
                 $ejb.onces['${reference}'] = true;
                 ${content}
-                `;
+                `);
 		},
-		onEnd: () => "};",
+		onEnd: (ejb) => ejb.builder.add("};"),
 	}),
 );

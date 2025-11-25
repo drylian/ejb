@@ -5,6 +5,7 @@ import {
 	EJB_DEFAULT_PREFIX_DIRECTIVE,
 	EJB_DEFAULT_PREFIX_GLOBAL,
 	EJB_DEFAULT_PREFIX_VARIABLE,
+	EJB_VIRTUAL_FILENAME,
 	ejbDirective,
 	HTML_REGULAR_REGEX,
 } from "./constants";
@@ -53,8 +54,8 @@ export class Ejb {
 
 	/** expose global keys in file, example: it.exemple -> it.exemple | exemple */
 	public globalexpose: boolean;
-	/** Development mode flag */
-	public depuration: boolean;
+	/** Ejb code builder */
+	public builder: EjbBuilder;
 
 	/** Stores errors during compilation */
 	public errors: EjbError[] = [];
@@ -63,13 +64,6 @@ export class Ejb {
 	public files: Record<string, FileArtefact[]> = {};
 	/** Cache for imported component functions or production-mode import paths */
 	public resolvers: Record<string, string> = {};
-
-	/**
-	 * Returns the appropriate function constructor (AsyncFunction or Function)
-	 * based on async mode
-	 * @returns {FunctionConstructor} The function constructor to use
-	 */
-	public getFunction = () => AsyncFunction;
 
 	/** Registered directives */
 	public directives: EjbContructor["directives"] = {};
@@ -169,7 +163,7 @@ export class Ejb {
 				this.errors.push(...ast.errors);
 			}
 			const compiledCode = await compile(this, ast);
-			console.log(compiledCode)
+			//console.log(compiledCode)
 			if (this.errors.length > 0) {
 				const errorContent = JSON.stringify(
 					this.errors.map((e) => ({
@@ -186,8 +180,8 @@ export class Ejb {
 			}
 
 			const ejbInstance = this;
-			const AsyncFunctionConstructor = this.getFunction();
-			return new AsyncFunctionConstructor("$ejb", this.globalvar, `${compiledCode}\nreturn $ejb.res;`).bind(ejbInstance);
+			console.log(compiledCode)
+			return new AsyncFunction("$ejb", this.globalvar, `${compiledCode}\nreturn $ejb.res;`).bind(ejbInstance);
 		};
 
 		if (isPotentialPath) {
@@ -270,13 +264,11 @@ export class Ejb {
 		}
 
 		// In depuration mode, run the build-compiler to populate in-memory assets
-		if (this.depuration) {
-			this.files = {};
-			const builder = new EjbBuilder(this);
-			// Use a generic key for string-based templates, or the resolved path
-			builder.file(resolvedPath || '__EJB_DEBBUG__');
+		if (!resolvedPath) {
+			resolvedPath = EJB_VIRTUAL_FILENAME;
+			this.builder.file(resolvedPath);
 			const astForBuild = this.parser(template);
-			await compileForBuild(builder, astForBuild);
+			await compileForBuild(this, astForBuild);
 		}
 
 		// Get the compiled render function
@@ -297,13 +289,13 @@ export class Ejb {
 			escapeHtml,
 			escapeJs,
 			escapeString,
-			EjbFunction: this.getFunction(),
+			EjbFunction: AsyncFunction,
 		};
 		const globalLocals = { ...this.globals, ...locals };
 
 		// Execute the render function
 		const result = await renderFunction(ejbContext, globalLocals);
-
+		this.files
 		return result;
 	}
 
@@ -392,7 +384,6 @@ export class Ejb {
 
 		this.globalvar = opts?.globalvar ?? EJB_DEFAULT_PREFIX_GLOBAL;
 		this.globalexpose = opts.globalexpose ?? true;
-		this.depuration = opts.depuration ?? false;
 		this.manifest = opts.manifest ?? {}; // Initialize manifest directly from options
 
 		if (opts.manifestPath) {
@@ -408,5 +399,6 @@ export class Ejb {
 					console.error(`[EJB] Failed to load manifest file: ${opts.manifestPath}`, err);
 				});
 		}
+		this.builder = new EjbBuilder(this);
 	}
 }

@@ -1,4 +1,4 @@
-import type { AnyEjb } from "../types";
+import type { Ejb } from "../ejb";
 
 /**
  * Joins path segments and normalizes the resulting path
@@ -59,7 +59,7 @@ export function join(...segments: string[]): string {
  * Resolves file paths with aliases and extensions
  */
 export const filepathResolver = (
-	ejb: AnyEjb,
+	ejb: Ejb,
 	filepath: string,
 	currentFile?: string,
 ): string => {

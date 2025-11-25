@@ -46,6 +46,11 @@ export const ESPACE_HTML_REGEX = /[&<>"'']/g;
 export const HTML_REGULAR_REGEX = /<[a-z][\s\S]*>/i;
 
 /**
+ * Ejb Virtual file
+ */
+export const EJB_VIRTUAL_FILENAME = ':ejb-virtual-file:';
+
+/**
  * Regular expression for parsing directive syntax:
  * - Captures directive name
  * - Optionally captures parameters in parentheses

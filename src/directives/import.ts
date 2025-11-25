@@ -13,8 +13,12 @@ export default ejbDirective({
 		{ name: "variables", type: "object", default: "{}" },
 	],
 	// onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
-	onInit: () => ` $ejb.res += await (async ($ejb) => {`,
-	onEnd: () => ` })( { ...$ejb, res:'' });`,
+	onInit: (ejb) => {
+		ejb.builder.add(` $ejb.res += await (async ($ejb) => {`);
+	},
+	onEnd: (ejb) => {
+		ejb.builder.add(` })( { ...$ejb, res:'' });`);
+	},
 	onParams: async (ejb, exp) => {
 		const path = exp.getString("path");
 		const params = exp.getRaw("variables");
@@ -30,19 +34,22 @@ export default ejbDirective({
 		}
 
 		try {
-			const resolvedContent = await ejb.resolver(filepathResolver(ejb, path));
+			const resolvedContent = await ejb.resolver(
+				filepathResolver(ejb, path),
+			);
 
 			const ast = ejbParser(ejb, resolvedContent);
 			const code = await ejb.compile(ast);
 
-			return [
-				"const $_import = { ...$ejb, res: '' };",
-				`const $_variables = { ...${ejb.globalvar}, ...(${params}) };`,
-				`return new $ejb.EjbFunction('$ejb', $ejb.ins.globalvar, \`${escapeJs(code)}\\nreturn $ejb.res;\`)($_import, $_variables)`,
-			].join("\n");
+			ejb.builder.add(
+				[
+					"const $_import = { ...$ejb, res: '' };",
+					`const $_variables = { ...${ejb.globalvar}, ...(${params}) };`,
+					`return new $ejb.EjbFunction('$ejb', $ejb.ins.globalvar, \`${escapeJs(code)}\\nreturn $ejb.res;\`)($_import, $_variables)`,
+				].join("\n"),
+			);
 		} catch (e: any) {
 			ejb.errors.push(e);
-			return ``;
 		}
 	},
 });

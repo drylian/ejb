@@ -1,5 +1,6 @@
-import { EjbAst } from "./constants";
+import { EJB_VIRTUAL_FILENAME, EjbAst } from "./constants";
 import type { Ejb } from "./ejb";
+import { EjbBuilder } from "./builder";
 import { createExpression } from "./expression";
 import type {
 	AstNode,
@@ -17,12 +18,11 @@ async function processChildren(
 	children: AstNode[],
 	stringMode: boolean = false,
 	parents: AstNode[] = [],
-): Promise<string> {
-	if (!children.length) return "";
-	const results = await Promise.all(
-		children.map((child) => processNode(ejb, child, stringMode, parents)),
-	);
-	return results.join("");
+): Promise<void> {
+	if (!children.length) return;
+	for (const child of children) {
+		await processNode(ejb, child, stringMode, parents);
+	}
 }
 
 async function processNode(
@@ -30,53 +30,99 @@ async function processNode(
 	node: AstNode,
 	stringMode: boolean,
 	parents: AstNode[] = [],
-): Promise<string> {
-	return stringMode
-		? generateNodeString(ejb, node, parents)
-		: generateNodeCode(ejb, node, parents);
+): Promise<void> {
+	stringMode
+		? await generateNodeString(ejb, node, parents)
+		: await generateNodeCode(ejb, node, parents);
 }
 
-export function generateNodeString(
+export async function generateNodeString(
 	ejb: Ejb,
 	node: AstNode,
 	parents: AstNode[] = [],
-): string {
-	switch (node.type) {
-		case EjbAst.Root:
-			return processChildren(
-				ejb,
-				node.children,
-				true,
-				parents,
-			) as unknown as string;
-		case EjbAst.Text:
-			return escapeJs((node as TextNode).value);
-		case EjbAst.Interpolation:
-			return (node as InterpolationNode).expression;
-		default:
-			return "";
-	}
+): Promise<string> {
+	ejb.builder.file("temp_string");
+
+	const logic = async () => {
+		switch (node.type) {
+			case EjbAst.Root:
+				await processChildren(
+					ejb,
+					(node as RootNode).children,
+					true,
+					parents,
+				);
+				break;
+			case EjbAst.Text:
+				ejb.builder.add((node as TextNode).value);
+				break;
+			case EjbAst.Interpolation:
+				ejb.builder.add(`\${${(node as InterpolationNode).expression}}`);
+				break;
+			case EjbAst.Directive:
+			case EjbAst.SubDirective:
+				{
+					const { name, expression, children, loc } = node as DirectiveNode;
+					const directive = ejb.directives[name]; // Simplified
+					if (!directive) break;
+
+					const exp = createExpression(expression || "", directive.params || []);
+
+					if (directive.onInit)
+						await safeExecute(ejb, directive.onInit, [ejb, exp, loc], loc);
+					if (directive.onParams)
+						await safeExecute(ejb, directive.onParams, [ejb, exp, loc], loc);
+					if (children?.length) {
+						if (directive.onChildren) {
+							await safeExecute(
+								ejb,
+								directive.onChildren,
+								[ejb, { children, parents }],
+								loc,
+							);
+						} else {
+							await processChildren(ejb, children, true, parents);
+						}
+					}
+					if (directive.onEnd)
+						await safeExecute(ejb, directive.onEnd, [ejb, exp, loc], loc);
+				}
+				break;
+		}
+	};
+
+	await logic();
+	const serverArtefact =
+		ejb.files.temp_string?.find(
+			(f) => f.loader === "server",
+		) || { content: "" };
+	delete ejb.files.temp_string;
+	return serverArtefact.content;
 }
 
 export async function generateNodeCode(
 	ejb: Ejb,
 	node: AstNode,
 	parents: AstNode[] = [],
-): Promise<string> {
+): Promise<void> {
 	switch (node.type) {
 		case EjbAst.Root:
-			return processChildren(ejb, node.children, false, parents);
+			await processChildren(ejb, node.children, false, parents);
+			break;
 		case EjbAst.Text:
-			return `$ejb.res += \`${escapeJs((node as TextNode).value)}\`;\n`;
+			ejb.builder.add(`$ejb.res += \`${escapeJs((node as TextNode).value)}\`;\n`);
+			break;
 		case EjbAst.Interpolation: {
 			const { expression, escaped } = node as InterpolationNode;
-			return `$ejb.res += ${escaped ? `$ejb.escapeHtml(${expression})` : expression};\n`;
+			ejb.builder.add(
+				`$ejb.res += ${escaped ? `$ejb.escapeHtml(${expression})` : expression};\n`,
+			);
+			break;
 		}
 		case EjbAst.Directive:
 		case EjbAst.SubDirective:
-			return handleDirective(ejb, node, parents);
-		default:
-			return "";
+			await handleDirective(ejb, node, parents);
+			break;
 	}
 }
 
@@ -85,15 +131,14 @@ async function safeExecute(
 	handler: Function,
 	args: any[],
 	loc: any,
-): Promise<string> {
+): Promise<void> {
 	try {
-		return (await Promise.resolve(handler(...args))) || "";
+		await Promise.resolve(handler(...args));
 	} catch (error: any) {
 		const ejbError: EjbError =
 			error instanceof Error ? error : new Error(String(error));
 		ejbError.loc = loc;
 		ejb.errors.push(ejbError);
-		return "";
 	}
 }
 
@@ -101,15 +146,15 @@ async function handleDirective(
 	ejb: Ejb,
 	node: DirectiveNode | SubDirectiveNode,
 	parents: AstNode[],
-): Promise<string> {
+): Promise<void> {
 	const { name, expression, children = [], loc } = node;
 	const isSubDirective = node.type === EjbAst.SubDirective;
 
 	// Encontrar diretiva
 	const directive = isSubDirective
-		? ejb.directives[(node as SubDirectiveNode).parent_name]?.parents?.find(
-				(p) => p.name === name,
-			)
+		? ejb.directives[
+			(node as SubDirectiveNode).parent_name
+		]?.parents?.find((p) => p.name === name)
 		: ejb.directives[name];
 
 	if (!directive) {
@@ -120,7 +165,7 @@ async function handleDirective(
 		) as EjbError;
 		error.loc = loc;
 		ejb.errors.push(error);
-		return "";
+		return;
 	}
 
 	// Processar regex
@@ -128,15 +173,14 @@ async function handleDirective(
 		const match =
 			directive.onNameResolver && (directive.name as RegExp).exec(expression);
 		if (match && directive.onNameResolver) {
-			const res = await safeExecute(
+			await safeExecute(
 				ejb,
 				directive.onNameResolver,
 				[ejb, match],
 				loc,
 			);
-			return `$ejb.res += ${JSON.stringify(res || "")};`;
 		}
-		return "";
+		return;
 	}
 
 	const exp = createExpression(expression, directive.params || []);
@@ -144,16 +188,12 @@ async function handleDirective(
 		...parents,
 		...children.filter((i) => i.type === EjbAst.SubDirective),
 	];
-	let output = "";
 
 	// Métodos do ciclo de vida
 	if (directive.onInit)
-		output += await safeExecute(ejb, directive.onInit, [ejb, exp, loc], loc);
+		await safeExecute(ejb, directive.onInit, [ejb, exp, loc], loc);
 	if (directive.onParams) {
-		const paramOutput = await safeExecute(ejb, directive.onParams, [ejb, exp, loc], loc);
-		if (paramOutput) {
-			output += `$ejb.res += \`${escapeJs(paramOutput)}\`;\n`;
-		}
+		await safeExecute(ejb, directive.onParams, [ejb, exp, loc], loc);
 	}
 
 	// Processar children
@@ -163,60 +203,59 @@ async function handleDirective(
 	];
 
 	if (regularChildren.length) {
-		output += directive.onChildren
-			? await safeExecute(
-					ejb,
-					directive.onChildren,
-					[ejb, { children: regularChildren, parents: newParents }],
-					loc,
-				)
-			: await processChildren(
-					ejb,
-					regularChildren,
-					false,
-					newParents as AstNode[],
-				);
+		if (directive.onChildren) {
+			await safeExecute(
+				ejb,
+				directive.onChildren,
+				[ejb, { children: regularChildren, parents: newParents }],
+				loc,
+			);
+		} else {
+			await processChildren(
+				ejb,
+				regularChildren,
+				false,
+				newParents as AstNode[],
+			);
+		}
 	}
 
 	// Sub-diretivas
 	if (subDirectives.length) {
-		output += (
-			await Promise.all(
-				subDirectives.map((sub) =>
-					generateNodeCode(ejb, sub, newParents as AstNode[]),
-				),
-			)
-		).join("");
+		for (const sub of subDirectives) {
+			await generateNodeCode(ejb, sub, newParents as AstNode[]);
+		}
 	}
 
-	if (directive.onEnd)
-		output += await safeExecute(ejb, directive.onEnd, [ejb], loc);
-
-	return output;
+	if (directive.onEnd) await safeExecute(ejb, directive.onEnd, [ejb], loc);
 }
 
 export async function compile(ejb: Ejb, ast: RootNode): Promise<string> {
+	const builder = new EjbBuilder(ejb);
+	builder.file(EJB_VIRTUAL_FILENAME);
+
 	const fileDirectives = Object.values(ejb.directives).filter(
 		(d) => d.onInitFile || d.onEndFile,
 	);
 
-	const [initCodes, finalCodes] = await Promise.all([
-		Promise.all(
-			fileDirectives
-				.filter((d) => d.onInitFile)
-				.map((d) => Promise.resolve(d.onInitFile?.(ejb) || "")),
-		),
-		Promise.all(
-			fileDirectives
-				.filter((d) => d.onEndFile)
-				.map((d) => Promise.resolve(d.onEndFile?.(ejb) || "")),
-		),
-	]);
+	for (const d of fileDirectives.filter((d) => d.onInitFile)) {
+		await Promise.resolve(d.onInitFile?.(ejb));
+	}
 
 	const exposeCode =
 		ejb.globalexpose && Object.keys(ejb.globals).length
 			? `const { ${Object.keys(ejb.globals).join(", ")} } = ${ejb.globalvar};\n`
 			: "";
 
-	return `${initCodes.join("\n")}\n${exposeCode}${await generateNodeCode(ejb, ast)}${finalCodes.join("\n")}`;
+	builder.add(exposeCode);
+
+	await generateNodeCode(ejb, ast);
+
+	for (const d of fileDirectives.filter((d) => d.onEndFile)) {
+		await Promise.resolve(d.onEndFile?.(ejb));
+	}
+
+	const serverArtefact =
+		ejb.files[EJB_VIRTUAL_FILENAME]?.find((f) => f.loader === "server") || { content: "" };
+	return serverArtefact.content;
 }

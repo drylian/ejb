@@ -17,8 +17,6 @@ export interface EjbError extends Error {
 	loc?: SourceLocation;
 }
 
-/** Type representing any Ejb instance (sync or async) */
-export type AnyEjb = Ejb;
 
 /** Type representing a value that can be either the type or a Promise of the type */
 export type EjbAnyReturn<type> = type | Promise<type>;
@@ -50,6 +48,7 @@ export interface EjbContructor {
 	globalexpose: boolean;
 	/** Enable development mode (e.g., for virtual paths) */
 	depuration?: boolean;
+	manifest?:object;
 }
 
 /**
@@ -57,7 +56,7 @@ export interface EjbContructor {
  */
 export interface EjbFunctionContext {
 	/** Ejb instance */
-	ins: AnyEjb;
+	ins: EjbBuilder;
 	/** Result buffer */
 	res: string;
 	/** HTML escaping function */
@@ -113,10 +112,10 @@ export interface EjbDirectiveBasement {
 	 * @returns Code to insert or Promise of code
 	 */
 	onParams?: (
-		ejb: AnyEjb,
+		ejb: Ejb,
 		exp: Expression,
 		loc?: SourceLocation,
-	) => EjbAnyReturn<string | undefined>;
+	) => EjbAnyReturn<void | EjbBuilder>;
 	/**
 	 * Handler for when a regex name matches
 	 * @param ejb - Ejb instance
@@ -124,50 +123,50 @@ export interface EjbDirectiveBasement {
 	 * @returns Code to insert or Promise of code
 	 */
 	onNameResolver?: (
-		ejb: AnyEjb,
+		ejb: Ejb,
 		match: RegExpMatchArray,
-	) => EjbAnyReturn<string | undefined>;
+	) => EjbAnyReturn<void | EjbBuilder>;
 	/**
 	 * Handler for directive children
 	 * @param ejb - Ejb instance
 	 * @param opts - Children context
 	 * @returns Code to insert or Promise of code
 	 */
-	onChildren?: (ejb: AnyEjb, opts: EjbChildrenContext) => EjbAnyReturn<string>;
+	onChildren?: (ejb: Ejb, opts: EjbChildrenContext) => EjbAnyReturn<void | EjbBuilder>;
 	/**
 	 * Initialization handler
 	 * @param ejb - Ejb instance
 	 * @returns Code to insert or Promise of code
 	 */
 	onInit?: (
-		ejb: AnyEjb,
+		ejb: Ejb,
 		exp: Expression,
 		loc?: SourceLocation,
-	) => EjbAnyReturn<string>;
+	) => EjbAnyReturn<void | EjbBuilder>;
 	/**
 	 * Finalization handler
 	 * @param ejb - Ejb instance
 	 * @returns Code to insert or Promise of code
 	 */
-	onEnd?: (ejb: AnyEjb) => EjbAnyReturn<string>;
+	onEnd?: (ejb: Ejb) => EjbAnyReturn<void | EjbBuilder>;
 
 	// --- Build-specific handlers ---
 	onParamsBuild?: (
-		ejb: EjbBuilder,
+		ejb: Ejb,
 		exp: Expression,
 		loc?: SourceLocation,
-	) => EjbAnyReturn<void>;
+	) => EjbAnyReturn<void | EjbBuilder>;
 	onNameResolverBuild?: (
-		ejb: EjbBuilder,
+		ejb: Ejb,
 		match: RegExpMatchArray,
-	) => EjbAnyReturn<void>;
-	onChildrenBuild?: (ejb: EjbBuilder, opts: EjbChildrenContext) => EjbAnyReturn<void>;
+	) => EjbAnyReturn<void | EjbBuilder>;
+	onChildrenBuild?: (ejb: Ejb, opts: EjbChildrenContext) => EjbAnyReturn<void | EjbBuilder>;
 	onInitBuild?: (
-		ejb: EjbBuilder,
+		ejb: Ejb,
 		exp: Expression,
 		loc?: SourceLocation,
-	) => EjbAnyReturn<void>;
-	onEndBuild?: (ejb: EjbBuilder) => EjbAnyReturn<void>;
+	) => EjbAnyReturn<void | EjbBuilder>;
+	onEndBuild?: (ejb: Ejb) => EjbAnyReturn<void | EjbBuilder>;
 
 	/** Type of content within the directive's children */
 	children_type?: "html" | "js" | "css";
@@ -201,24 +200,24 @@ export interface EjbDirectivePlugin extends EjbDirectiveBasement {
 	 * File-level initialization handler (Build Mode)
 	 * @param ejb - EjbBuilder instance
 	 */
-	onInitFileBuild?: (ejb: EjbBuilder) => EjbAnyReturn<void>;
+	onInitFileBuild?: (ejb: Ejb) => EjbAnyReturn<void | EjbBuilder>;
 	/**
 	 * File-level finalization handler (Build Mode)
 	 * @param ejb - EjbBuilder instance
 	 */
-	onEndFileBuild?: (ejb: EjbBuilder) => EjbAnyReturn<void>;
+	onEndFileBuild?: (ejb: Ejb) => EjbAnyReturn<void | EjbBuilder>;
 	/**
 	 * File-level initialization handler
 	 * @param ejb - Ejb instance
 	 * @returns Code to insert or Promise of code
 	 */
-	onInitFile?: (ejb: AnyEjb) => EjbAnyReturn<string>;
+	onInitFile?: (ejb: Ejb) => EjbAnyReturn<void | EjbBuilder>;
 	/**
 	 * File-level finalization handler
 	 * @param ejb - Ejb instance
 	 * @returns Code to insert or Promise of code
 	 */
-	onEndFile?: (ejb: AnyEjb) => EjbAnyReturn<string>;
+	onEndFile?: (ejb: Ejb) => EjbAnyReturn<void | EjbBuilder>;
 }
 
 /** Union type of all possible AST node types */

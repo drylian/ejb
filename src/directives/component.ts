@@ -1,6 +1,6 @@
 import { ejbDirective } from "../constants";
 import { ejbParser } from "../parser";
-import { escapeJs, filepathResolver, returnEjbRes } from "../utils";
+import { escapeJs, filepathResolver } from "../utils";
 
 export default ejbDirective({
 	name: "component",
@@ -14,20 +14,28 @@ export default ejbDirective({
 		{
 			name: "slot",
 			internal: true,
-			onParams: (_, exp) => {
-				// Added exp here
-				return `$slots["$" + ${exp.raw}] = await (async ($ejb) => {`;
+			onParams: (ejb, exp) => {
+				ejb.builder.add(`$slots["$" + ${exp.raw}] = await (async ($ejb) => {`);
 			},
-			onEnd: () => "\nreturn $ejb.res;})({ ...$ejb, res:'' });",
+			onEnd: (ejb) => {
+				ejb.builder.add("\nreturn $ejb.res;})({ ...$ejb, res:'' });");
+			},
 		},
 	],
-	onInit: () => `$ejb.res += await (async ($ejb) => { const $slots = {};\n`,
-	onEnd: () =>
-		`return $_component($_import, {...$_variables, ...$slots}); })( { ...$ejb, res:'' });`,
+	onInit: (ejb) => {
+		ejb.builder.add(`$ejb.res += await (async ($ejb) => { const $slots = {};\n`);
+	},
+	onEnd: (ejb) => {
+		ejb.builder.add(
+			`return $_component($_import, {...$_variables, ...$slots}); })( { ...$ejb, res:'' });`,
+		);
+	},
 	onChildren: async (ejb, { children, parents }) => {
 		const compiledChildren = await ejb.compile(children);
 		const compiledParents = await ejb.compile(parents ?? []);
-		return `$slots.$slot = ${returnEjbRes(compiledChildren)} ?? "";\n ${compiledParents ?? ""}\n`;
+		ejb.builder.add(
+			`$slots.$slot = ((${compiledChildren}) ?? "");\n ${compiledParents ?? ""}\n`,
+		);
 	},
 	onParams: async (ejb, exp) => {
 		const path = exp.getString("path");
@@ -44,19 +52,23 @@ export default ejbDirective({
 		}
 
 		try {
-			const resolvedContent = await ejb.resolver(filepathResolver(ejb, path));
+			const resolvedContent = await ejb.resolver(
+				filepathResolver(ejb, path),
+			);
 
 			const ast = ejbParser(ejb, resolvedContent);
 			const code = await ejb.compile(ast);
 
-			return [
-				"const $_import = { ...$ejb, res: '' };",
-				`const $_variables = { ...${ejb.globalvar}, ...(${params}) };`,
-				`const $_component = new $ejb.EjbFunction('$ejb', $ejb.ins.globalvar, \`${escapeJs(code)}\\nreturn $ejb.res;\`);\n`,
-			].join("\n");
+			ejb.builder.add(
+				[
+					"const $_import = { ...$ejb, res: '' };",
+					`const $_variables = { ...${ejb.globalvar}, ...(${params}) };`,
+					`const $_component = new $ejb.EjbFunction('$ejb', $ejb.ins.globalvar, \`${escapeJs(code)}\\nreturn $ejb.res;\`);\n`,
+				].join("\n"),
+			);
 		} catch (e: any) {
 			console.error(`[EJB] Failed to resolve import for path: ${path}`, e);
-			return `return \`<!-- EJB Import Error: ${escapeJs(e.message)} -->\`;`;
+			ejb.builder.add(`return \`<!-- EJB Import Error: ${escapeJs(e.message)} -->\`;`);
 		}
 	},
 });

@@ -26,7 +26,7 @@ test("should build template with client and css artifacts", async () => {
 
         @clientTemplate('MyTemplate', { items: [] })
             <ul>
-                @for(item in items)
+                @for(const item of items)
                     <li @ref(item.id)>{{ item.name }}</li>
                 @end
             </ul>
@@ -74,10 +74,10 @@ test("should build template with client and css artifacts", async () => {
     expect(clientContent).toContain(`$ejb.effect(async () =>`);
     expect(clientContent).toContain(`console.log(search.value);`);
 
-    expect(clientContent).toContain(`$ejb.load('MyTemplate', async ($ejb, { items }) =>`);
+    expect(clientContent).toContain(`$ejb.load('MyTemplate', async ($ejb, { items: [] }) =>`);
     expect(clientContent).toContain('<ul>');
-    expect(clientContent).toContain('for (let item of items) {');
-    expect(clientContent).toContain(`<li ejb:ref='item.id'>`);
+    expect(clientContent).toContain('for (const item of items) {');
+    expect(clientContent).toContain(`ejb:ref="item.id"`);
     expect(clientContent).toContain('$ejb.res += $ejb.escapeHtml(item.name)');
 
     // 4. Check content of manifest

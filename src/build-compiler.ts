@@ -1,5 +1,4 @@
 import { EjbAst } from "./constants";
-import type { EjbBuilder } from "./builder";
 import { createExpression } from "./expression";
 import type {
 	AstNode,
@@ -9,43 +8,48 @@ import type {
 	SubDirectiveNode,
 	TextNode,
 } from "./types";
+import type { Ejb } from "./ejb";
 import { escapeJs } from "./utils";
 
 async function processChildren(
-	builder: EjbBuilder,
+	ejb: Ejb,
 	children: AstNode[],
 	parents: AstNode[] = [],
 ): Promise<void> {
 	if (!children.length) return;
 	for (const child of children) {
-		await processNode(builder, child, parents);
+		await processNode(ejb, child, parents);
 	}
 }
 
 async function processNode(
-	builder: EjbBuilder,
+	ejb: Ejb,
 	node: AstNode,
 	parents: AstNode[] = [],
 ): Promise<void> {
 	switch (node.type) {
 		case EjbAst.Root:
-			await processChildren(builder, (node as RootNode).children, parents);
+			await processChildren(ejb, (node as RootNode).children, parents);
 			break;
 		case EjbAst.Text:
 			// In build mode, text is added directly to the current loader
-			builder.add((node as TextNode).value);
+			if(['client','server'].includes(ejb.builder.loader)) {
+				ejb.builder.add(`$ejb.res += \`${escapeJs((node as TextNode).value)}\``);
+			} else {
+				ejb.builder.add((node as TextNode).value);
+			}
 			break;
 		case EjbAst.Interpolation: {
 			// In build mode, interpolation is converted to the target language's syntax
 			// For JS, this means adding `${expression}` to a template literal.
 			// This is a simplification; the final output might need more complex handling.
 			const { expression, escaped } = node as InterpolationNode;
-			builder.add(`\${${escaped ? `this.escapeHtml(${expression})` : expression}}`);
+			ejb.builder.add(`\${${escaped ? `this.escapeHtml(${expression})` : expression}}`);
 			break;
 		}
 		case EjbAst.Directive:
 		case EjbAst.SubDirective:
-			await handleDirective(builder, node, parents);
+			await handleDirective(ejb, node, parents);
 			break;
 		default:
 			break;
@@ -53,13 +57,12 @@ async function processNode(
 }
 
 async function handleDirective(
-	builder: EjbBuilder,
+	ejb: Ejb,
 	node: DirectiveNode | SubDirectiveNode,
 	parents: AstNode[],
 ): Promise<void> {
 	const { name, expression, children = [], loc } = node;
 	const isSubDirective = node.type === EjbAst.SubDirective;
-	const ejb = builder.ins;
 
 	const directive = isSubDirective
 		? ejb.directives[(node as SubDirectiveNode).parent_name]?.parents?.find(
@@ -73,7 +76,7 @@ async function handleDirective(
 				? `[EJB] Sub-directive "${name}" not found in parent "${(node as SubDirectiveNode).parent_name}"`
 				: `[EJB] Directive not found: ${name}`,
 		);
-		builder.ins.errors.push(Object.assign(error, { loc }));
+		ejb.errors.push(Object.assign(error, { loc }));
 		return;
 	}
 
@@ -89,8 +92,8 @@ async function handleDirective(
 	];
 
 	try {
-		if (directive.onInit) await Promise.resolve(directive.onInit(builder, exp, loc));
-		if (directive.onParams) await Promise.resolve(directive.onParams(builder, exp, loc));
+		if (directive.onInitBuild) await Promise.resolve(directive.onInitBuild(ejb, exp, loc));
+		if (directive.onParamsBuild) await Promise.resolve(directive.onParamsBuild(ejb, exp, loc));
 
 		const [regularChildren, subDirectives] = [
 			children.filter((child) => child.type !== EjbAst.SubDirective),
@@ -98,39 +101,38 @@ async function handleDirective(
 		];
 
 		if (regularChildren.length) {
-			if(directive.onChildren) {
-				await Promise.resolve(directive.onChildren(builder, { children: regularChildren, parents: newParents }));
+			if(directive.onChildrenBuild) {
+				await Promise.resolve(directive.onChildrenBuild(ejb, { children: regularChildren, parents: newParents }));
 			} else {
-				await processChildren(builder, regularChildren, newParents as AstNode[]);
+				await processChildren(ejb, regularChildren, newParents as AstNode[]);
 			}
 		}
 
 		if (subDirectives.length) {
 			for(const sub of subDirectives) {
-				await processNode(builder, sub, newParents as AstNode[]);
+				await processNode(ejb, sub, newParents as AstNode[]);
 			}
 		}
 
-		if (directive.onEnd) await Promise.resolve(directive.onEnd(builder));
+		if (directive.onEndBuild) await Promise.resolve(directive.onEndBuild(ejb));
 	} catch (error: any) {
 		const ejbError = error instanceof Error ? error : new Error(String(error));
-		builder.ins.errors.push(Object.assign(ejbError, { loc }));
+		ejb.errors.push(Object.assign(ejbError, { loc }));
 	}
 }
 
-export async function compileForBuild(builder: EjbBuilder, ast: RootNode): Promise<void> {
-	const ejb = builder.ins;
+export async function compileForBuild(ejb: Ejb, ast: RootNode): Promise<void> {
 	const fileDirectives = Object.values(ejb.directives).filter(
-		(d) => d.onInitFile || d.onEndFile,
+		(d) => d.onInitFileBuild || d.onEndFileBuild,
 	);
 
 	for (const d of fileDirectives) {
-		if (d.onInitFile) await Promise.resolve(d.onInitFile(builder));
+		if (d.onInitFileBuild) await Promise.resolve(d.onInitFileBuild(ejb));
 	}
 
-	await processNode(builder, ast);
+	await processNode(ejb, ast);
 
 	for (const d of fileDirectives) {
-		if (d.onEndFile) await Promise.resolve(d.onEndFile(builder));
+		if (d.onEndFileBuild) await Promise.resolve(d.onEndFileBuild(ejb));
 	}
 }

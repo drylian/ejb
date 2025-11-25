@@ -62,7 +62,14 @@ export function createExpression(
 
 	const getArg = (name: string) => {
 		const index = params.findIndex((p) => p.name === name);
-		return index >= 0 ? argStrings[index] : undefined;
+		if (index !== -1) {
+            return argStrings[index];
+        }
+		const numericIndex = parseInt(name, 10);
+		if (!isNaN(numericIndex) && numericIndex >= 0 && numericIndex < argStrings.length) {
+			return argStrings[numericIndex];
+		}
+		return undefined;
 	};
 
 	const getArgWithDefault = (name: string) => {

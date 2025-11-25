@@ -3,9 +3,9 @@ import { compile, generateNodeCode, generateNodeString } from "../src/compiler";
 import { EjbAst } from "../src/constants";
 import { Ejb } from "../src/ejb";
 
-test("should compile text node to string", () => {
+test("should compile text node to string", async () => {
 	const ejb = new Ejb();
-	const result = generateNodeString(ejb, { type: EjbAst.Text, value: "Hello" });
+	const result = await generateNodeString(ejb, { type: EjbAst.Text, value: "Hello" });
 	expect(result).toBe("Hello");
 });
 

@@ -324,9 +324,6 @@ export function ejbParser(ejb: Ejb, template: string): RootNode {
 			// Adicionar ao parent correto
 			if (isSubDirective && parentDirective) {
 				parentDirective.children.push(directiveNode);
-
-				// CORREÇÃO: Não fechar sub-diretivas anteriores automaticamente
-				// Sub-diretivas como @case, @default devem coexistir, não se fecharem
 			} else {
 				parent.children.push(directiveNode);
 			}

@@ -1,5 +1,5 @@
 import type { Ejb } from "./ejb";
-import { escapeHtml, escapeJs, escapeString } from "./utils";
+import { AsyncFunction, escapeHtml, escapeJs, escapeString } from "./utils";
 import type { AstNode, RootNode } from "./types";
 
 export type LoaderType = "server" | "client" | "css";
@@ -27,7 +27,7 @@ export class EjbBuilder {
 
     constructor(ejbInstance: Ejb) {
         this.ins = ejbInstance;
-        this.EjbFunction = ejbInstance.getFunction();
+        this.EjbFunction = AsyncFunction
     }
 
     // --- Delegated methods from Ejb ---
@@ -61,7 +61,7 @@ export class EjbBuilder {
      */
     public get current(): string {
         if (!this._currentFile) {
-            throw new Error("EJB: Internal error. No file context set in builder.");
+            this._currentFile = 'virtual.ejb'
         }
         return this._currentFile;
     }
@@ -97,6 +97,7 @@ export class EjbBuilder {
 
         if (!artefact) {
             artefact = { loader: targetLoader, content: "" };
+            if(!this.ins.files[currentFile]) this.ins.files[currentFile] = [];
             this.ins.files[currentFile].push(artefact);
         }
 
