@@ -1,4 +1,5 @@
 import type { EjbAst } from "./constants";
+import type { EjbBuilder } from "./builder";
 import type { Ejb } from "./ejb";
 
 export interface Position {
@@ -143,6 +144,25 @@ export interface EjbDirectiveBasement {
 	 * @returns Code to insert or Promise of code
 	 */
 	onEnd?: (ejb: AnyEjb) => EjbAnyReturn<string>;
+
+	// --- Build-specific handlers ---
+	onParamsBuild?: (
+		ejb: EjbBuilder,
+		exp: Expression,
+		loc?: SourceLocation,
+	) => EjbAnyReturn<void>;
+	onNameResolverBuild?: (
+		ejb: EjbBuilder,
+		match: RegExpMatchArray,
+	) => EjbAnyReturn<void>;
+	onChildrenBuild?: (ejb: EjbBuilder, opts: EjbChildrenContext) => EjbAnyReturn<void>;
+	onInitBuild?: (
+		ejb: EjbBuilder,
+		exp: Expression,
+		loc?: SourceLocation,
+	) => EjbAnyReturn<void>;
+	onEndBuild?: (ejb: EjbBuilder) => EjbAnyReturn<void>;
+
 	/** Type of content within the directive's children */
 	children_type?: "html" | "js" | "css";
 	/** A description of what the directive does. */
@@ -171,6 +191,16 @@ export interface EjbDirectivePlugin extends EjbDirectiveBasement {
 	priority?: number;
 	/** Available sub-directives */
 	parents?: EjbDirectiveParent[];
+	/**
+	 * File-level initialization handler (Build Mode)
+	 * @param ejb - EjbBuilder instance
+	 */
+	onInitFileBuild?: (ejb: EjbBuilder) => EjbAnyReturn<void>;
+	/**
+	 * File-level finalization handler (Build Mode)
+	 * @param ejb - EjbBuilder instance
+	 */
+	onEndFileBuild?: (ejb: EjbBuilder) => EjbAnyReturn<void>;
 	/**
 	 * File-level initialization handler
 	 * @param ejb - Ejb instance

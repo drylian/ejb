@@ -1,4 +1,6 @@
 import { compile, generateNodeCode, generateNodeString } from "./compiler";
+import { compileForBuild } from "./build-compiler";
+import { EjbBuilder, type FileArtefact } from "./builder";
 import {
 	EJB_DEFAULT_PREFIX_DIRECTIVE,
 	EJB_DEFAULT_PREFIX_GLOBAL,
@@ -13,6 +15,7 @@ import type {
 	EjbContructor,
 	EjbDirectivePlugin,
 	EjbError,
+	RootNode,
 } from "./types";
 import {
 	AsyncFunction,
@@ -21,7 +24,9 @@ import {
 	escapeRegExp,
 	escapeString,
 	filepathResolver,
+	md5,
 } from "./utils";
+import path from "path";
 
 /**
  * EJB Template Engine class
@@ -46,6 +51,11 @@ export class Ejb {
 	/** Stores errors during compilation */
 	public errors: EjbError[] = [];
 
+	/** Cache for build artefacts (server, client, css) */
+	public files: Record<string, FileArtefact[]> = {};
+	/** Cache for imported component functions or production-mode import paths */
+	public resolvers: Record<string, string> = {};
+
 	/**
 	 * Returns the appropriate function constructor (AsyncFunction or Function)
 	 * based on async mode
@@ -55,6 +65,75 @@ export class Ejb {
 
 	/** Registered directives */
 	public directives: EjbContructor["directives"] = {};
+
+	/**
+	 * [BUILD PROCESS] Builds an entry point and its dependencies into a dist folder.
+	 * @param entryPoint The path to the entry .ejb file.
+	 * @param dist The output directory.
+	 */
+	public async build(entryPoint: string, dist: string) {
+		this.errors = [];
+		this.files = {};
+		this.resolvers = {};
+
+		const resolvedPath = filepathResolver(this, entryPoint);
+		const content = await this.resolver(resolvedPath);
+
+		const builder = new EjbBuilder(this);
+		builder.file(resolvedPath);
+		
+		const ast = this.parser(content);
+		if (ast.errors.length) {
+			this.errors.push(...ast.errors);
+		}
+
+		if (this.errors.length) {
+			console.error("[EJB] Build failed with parsing errors.");
+			this.errors.forEach(e => console.error(e.stack || e.message));
+			return;
+		}
+
+		await compileForBuild(builder, ast);
+
+		if (this.errors.length) {
+			console.error("[EJB] Build failed with compilation errors.");
+			this.errors.forEach(e => console.error(e.stack || e.message));
+			return;
+		}
+
+		// --- File Generation (Simplified) ---
+		const manifest: Record<string, { entry: string, assets: string[] }> = {};
+
+		for (const [filepath, artefacts] of Object.entries(this.files)) {
+			const fileKey = '@/' + path.relative(this.root, filepath);
+			manifest[fileKey] = { entry: '', assets: [] };
+
+			for (const artefact of artefacts) {
+				const hash = md5(artefact.content).slice(0, 8);
+				const ext = artefact.loader === 'css' ? '.css' : '.js';
+				const baseName = path.basename(filepath, `.${this.extension}`);
+				const newFileName = `${artefact.loader}-${baseName}.${hash}${ext}`;
+				
+				// In a real scenario, you'd write this content to a file in the 'dist' folder.
+				// For now, we'll just log it.
+				console.log(`-- Writing ${dist}/${newFileName} --`);
+				// await fs.promises.writeFile(path.join(dist, newFileName), artefact.content);
+				
+				if (artefact.loader === 'server') {
+					manifest[fileKey].entry = newFileName;
+				} else {
+					manifest[fileKey].assets.push(newFileName);
+				}
+			}
+		}
+
+		// Write manifest.json
+		console.log(`-- Writing ${dist}/ejb.json --`);
+		console.log(JSON.stringify(manifest, null, 2));
+		// await fs.promises.writeFile(path.join(dist, 'ejb.json'), JSON.stringify(manifest, null, 2));
+
+		console.log("[EJB] Build completed.");
+	}
 
 	/**
 	 * Compiles a template into a function string that can be executed later
@@ -148,7 +227,7 @@ export class Ejb {
 	 * @param code - Template string to parse
 	 * @returns Root AST node
 	 */
-	public parser(code: string) {
+	public parser(code: string): RootNode {
 		return ejbParser(this, code);
 	}
 
