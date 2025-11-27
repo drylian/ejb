@@ -54,6 +54,7 @@
 		"typescript": "^5.9.2"
 	},
 	"dependencies": {
+		"daisyui": "^5.5.5",
 		"kire": "workspace:../../core",
 		"tailwindcss": "^4.1.17"
 	}

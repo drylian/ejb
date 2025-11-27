@@ -10,6 +10,7 @@ export interface KireOptions {
     resolver?: (filename: string) => Promise<string>;
     alias?: Record<string, string>;
     extension?: string;
+    directives?:boolean;
 }
 
 export class Kire {
@@ -35,18 +36,15 @@ export class Kire {
     });
     
     // Register default directives
-    this.plugin(KireDirectives);
+    if(!options.directives) this.plugin(KireDirectives);
   }
 
-  public plugin<KirePlugged extends KirePlugin>(plugin: KirePlugged, opts?: KirePlugged['options']) {
+  public plugin<KirePlugged extends KirePlugin<any>>(plugin: KirePlugged, opts?: KirePlugged['options']) {
     if (typeof plugin === 'function') {
         // Support functional plugins if any legacy ones exist, though interface says otherwise
         (plugin as any)(this, opts);
     } else if (plugin.load) {
         plugin.load(this, opts);
-    } else if ((plugin as any).install) {
-        // Legacy support
-        (plugin as any).install(this, opts);
     }
     return this;
   }

@@ -50,7 +50,7 @@ export interface DirectiveDefinition {
   onCall: (ctx: KireContext) => void | Promise<void>;
 }
 
-export interface KirePlugin<Options extends object = {}> {
+export interface KirePlugin<Options extends (object | undefined) = {}> {
   name: string;
   options:Options;
   load(kire: Kire, opts?: Options): void;

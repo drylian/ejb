@@ -30,12 +30,9 @@ async function loadStylesheet(id: string, base: string) {
   }
 }
 
-export const KireTailwind: KirePlugin = {
+export const KireTailwind: KirePlugin<TailwindCompileOptions> = {
   name: "@kirejs/tailwind",
-  options: {
-    config: {},
-    optimize: { minify: false }
-  },
+  options: {},
   async load(kire, opts) {
     const tailwindOptions: TailwindCompileOptions = {
       ...opts,

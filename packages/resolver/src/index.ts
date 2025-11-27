@@ -7,5 +7,6 @@ export const KireResolver:KirePlugin = {
         
     },
 }
+
 export type Test = {};
 export default KireResolver;
