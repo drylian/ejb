@@ -1,6 +1,34 @@
 // src/index.ts
 import type { KirePlugin } from 'kire';
-import { compile, type CompileOptions } from 'tailwindcss';
+import { compile } from 'tailwindcss';
+import { readFile } from 'fs/promises';
+import { dirname } from 'path';
+import { createRequire } from 'module';
+
+export type TailwindCompileOptions = Parameters<typeof compile>[1];
+const require = createRequire(import.meta.url);
+
+async function loadStylesheet(id: string, base: string) {
+  if (id === 'tailwindcss') {
+    try {
+      const path = require.resolve('tailwindcss/index.css');
+      const content = await readFile(path, 'utf-8');
+      return { base: dirname(path), content, path  };
+    } catch (e) {
+      console.error('Failed to resolve tailwindcss/index.css', e);
+    }
+  }
+  
+  try {
+    // Tenta resolver outros imports relativos ou do node_modules
+    const path = require.resolve(id, { paths: [base] });
+    const content = await readFile(path, 'utf-8');
+    return { base: dirname(path), content, path };
+  } catch (e) {
+    // Ignora erros de resolução para outros arquivos por enquanto
+    return { base, content: '', path:'' };
+  }
+}
 
 export const KireTailwind: KirePlugin = {
   name: "@kirejs/tailwind",
@@ -9,8 +37,9 @@ export const KireTailwind: KirePlugin = {
     optimize: { minify: false }
   },
   async load(kire, opts) {
-    const tailwindOptions: CompileOptions = {
+    const tailwindOptions: TailwindCompileOptions = {
       ...opts,
+      loadStylesheet,
       from: undefined
     };
 
@@ -21,25 +50,33 @@ export const KireTailwind: KirePlugin = {
       name: 'tailwind',
       params: ['code:string'],
       children: true,
+      childrenRaw: true,
       async onCall(ctx) {
         try {
           let code = ctx.param('code');
-          // Garantir que o código não seja undefined
-          if (!code) code = '';
           
-          // Processar o CSS com a API real do Tailwind
-          const processed = await compileCSSWithTailwind(code, tailwindOptions);
+          // Se não houver código via param, tentar pegar do corpo (children)
+          if (!code && ctx.children && ctx.children.length > 0) {
+              code = ctx.children.map(c => c.content || '').join('');
+          }
+
+          // Se ainda não houver código, usar o padrão do Tailwind
+          if (!code || !code.trim()) {
+             code = '@import "tailwindcss";';
+          }
           
-          ctx.res('$ctx.res("<style>");');
-          ctx.res(`$ctx.res(\`${processed}\`);`);
-          ctx.res('$ctx.res("</style>");');
+          // Em vez de compilar agora, geramos um elemento <tailwind>
+          // que será processado após a renderização do HTML completo
+          ctx.res('$ctx.res("<tailwind>");');
+          ctx.res(`$ctx.res(${JSON.stringify(code)});`);
+          ctx.res('$ctx.res("</tailwind>");');
         } catch (error) {
-          // Fallback para o CSS original em caso de erro
-          console.warn('Tailwind compilation error:', error);
+          console.warn('Tailwind directive error:', error);
+          // Fallback
           let code = ctx.param('code') || '';
-          ctx.res('$ctx.res("<style>");');
-          ctx.res(`$ctx.res(\`${code}\`);`);
-          ctx.res('$ctx.res("</style>");');
+          ctx.res('$ctx.res("<tailwind>");');
+          ctx.res(`$ctx.res(${JSON.stringify(code)});`);
+          ctx.res('$ctx.res("</tailwind>");');
         }
       }
     });
@@ -47,27 +84,36 @@ export const KireTailwind: KirePlugin = {
     // Elemento <tailwind> para conteúdo CSS
     kire.element('tailwind', async (ctx) => {
       try {
-        const content = ctx.content || '';
-        const processedCSS = await compileCSSWithTailwind(content, tailwindOptions);
-        ctx.update(`<style>${processedCSS}</style>`);
+        let content = ctx.element.inner || '';
+        if (!content.trim()) {
+             content = '@import "tailwindcss";';
+        }
+
+        // Scan candidates from the full content
+        const candidates = new Set<string>();
+        const classRegex = /\bclass(?:Name)?\s*=\s*(["'])(.*?)\1/g;
+        let match;
+        // We scan ctx.content which is the full HTML
+        while ((match = classRegex.exec(ctx.content)) !== null) {
+            const cls = match[2]!.split(/\s+/);
+            cls.forEach(c => { if(c) candidates.add(c); });
+        }
+
+        const processedCSS = await compileCSSWithTailwind(content, tailwindOptions, Array.from(candidates));
+        const newHtml = ctx.content.replace(ctx.element.outer, `<style>${processedCSS}</style>`);
+        ctx.update(newHtml);
       } catch (error) {
         console.warn('Tailwind compilation error:', error);
-        ctx.update(`<style>${ctx.content || ''}</style>`);
+        const newHtml = ctx.content.replace(ctx.element.outer, `<style>${ctx.element.inner || ''}</style>`);
+        ctx.update(newHtml);
       }
     });
     
-    // Elemento para aplicar classes Tailwind
-    kire.element('apply', (ctx) => {
-      const classes = (ctx.content || '').trim();
-      // IMPORTANTE: ctx.children contém o conteúdo interno do elemento
-      const childrenContent = ctx.children || '';
-      ctx.update(`<div class="${classes}">${childrenContent}</div>`);
-    });
   },
 }
 
 // Função para processar CSS com a API real do Tailwind
-async function compileCSSWithTailwind(css: string, options: CompileOptions): Promise<string> {
+async function compileCSSWithTailwind(css: string, options: TailwindCompileOptions, candidates: string[] = []): Promise<string> {
   try {
     // Se o CSS estiver vazio, retornar vazio
     if (!css || !css.trim()) return '';
@@ -75,8 +121,8 @@ async function compileCSSWithTailwind(css: string, options: CompileOptions): Pro
     // Usar a API de compilação do Tailwind
     const result = await compile(css, options);
     
-    // Construir o CSS com as classes necessárias
-    const processedCSS = result.build([]);
+    // Construir o CSS com as classes encontradas
+    const processedCSS = result.build(candidates);
     
     return processedCSS;
   } catch (error) {

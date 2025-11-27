@@ -38,7 +38,7 @@ export class Kire {
     this.plugin(KireDirectives);
   }
 
-  public plugin(plugin: KirePlugin, opts?: any) {
+  public plugin<KirePlugged extends KirePlugin>(plugin: KirePlugged, opts?: KirePlugged['options']) {
     if (typeof plugin === 'function') {
         // Support functional plugins if any legacy ones exist, though interface says otherwise
         (plugin as any)(this, opts);

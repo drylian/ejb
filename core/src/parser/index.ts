@@ -32,6 +32,18 @@ export class Parser {
         continue;
       }
 
+      // Check for escaped directive @@
+      if (remaining.startsWith('@@')) {
+          this.addNode({
+              type: 'text',
+              content: '@',
+              start: this.cursor,
+              end: this.cursor + 2
+          });
+          this.advance('@@');
+          continue;
+      }
+
       // Check for directive @name(...)
       // Regex: @(\w+)(?:\(([^)]*)\))?
       const directiveMatch = remaining.match(/^@(\w+)(?:\(([^)]*)\))?/);
@@ -47,6 +59,7 @@ export class Parser {
         const directiveDef = this.kire.getDirective(name!);
         
         // Check for sub-directive (parent logic)
+        let isSubDirective = false;
         if (this.stack.length > 0) {
             const currentParent = this.stack[this.stack.length - 1];
             const parentDef = this.kire.getDirective(currentParent!.name!);
@@ -59,6 +72,18 @@ export class Parser {
                     continue;
                 }
             }
+        }
+
+        // If not a registered directive and not a sub-directive, treat as text
+        if (!directiveDef && !isSubDirective) {
+             this.addNode({
+                 type: 'text',
+                 content: fullMatch,
+                 start: this.cursor,
+                 end: this.cursor + fullMatch.length
+             });
+             this.advance(fullMatch);
+             continue;
         }
 
         const args = argsStr ? this.parseArgs(argsStr) : [];
@@ -76,6 +101,43 @@ export class Parser {
         this.addNode(node);
         
         if (directiveDef && directiveDef.children) {
+            if (directiveDef.childrenRaw) {
+                this.stack.push(node);
+                
+                const contentStart = this.cursor + fullMatch.length;
+                const remainingTemplate = this.template.slice(contentStart);
+                
+                // Find closing @end with word boundary check
+                const endMatch = remainingTemplate.match(/@end(?![a-zA-Z0-9_])/);
+                
+                if (endMatch) {
+                    const content = remainingTemplate.slice(0, endMatch.index);
+                    
+                    // Add text node
+                    this.addNode({
+                        type: 'text',
+                        content: content,
+                        start: contentStart,
+                        end: contentStart + content.length
+                    });
+                    
+                    this.stack.pop(); // Close immediately
+                    this.advance(fullMatch + content + endMatch[0]);
+                    continue;
+                } else {
+                     // No end tag found, consume rest
+                     const content = remainingTemplate;
+                     this.addNode({
+                         type: 'text',
+                         content: content,
+                         start: contentStart,
+                         end: this.template.length
+                     });
+                     this.stack.pop();
+                     this.advance(fullMatch + content);
+                     continue;
+                }
+            }
             this.stack.push(node);
         }
         

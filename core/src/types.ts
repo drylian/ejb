@@ -45,6 +45,7 @@ export interface DirectiveDefinition {
   name: string;
   params?: string[]; // e.g. ['filepath:string']
   children?: boolean; // Does this directive accept a block ending with @end?
+  childrenRaw?: boolean; // Should the children be treated as raw text?
   parents?: DirectiveDefinition[]; // Sub-directives like elseif/else
   onCall: (ctx: KireContext) => void | Promise<void>;
 }
