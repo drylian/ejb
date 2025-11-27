@@ -58,5 +58,10 @@
 		"tsup": "^8.5.0",
 		"tsx": "^4.20.5",
 		"typescript": "^5.9.2"
+	},
+	"dependencies": {
+		"@caeljs/logger": "^3.1.1",
+		"@types/source-map": "^0.5.7",
+		"source-map": "^0.7.6"
 	}
 }

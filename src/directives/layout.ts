@@ -1,104 +1,90 @@
-import { ejbDirective } from "../constants";
-import { trimQuotes } from "../utils";
+import type { Kire } from '../kire';
+import type { KireContext } from '../types';
 
-export default Object.assign(
-	{},
-	/**
-	 * @stack directive
-	 */
-	ejbDirective({
-		name: "stack",
-		priority: 1,
-		onInitFile: (ejb) => {
-			ejb.builder.add(`$ejb._stacks = {};\n
-        $ejb.stacks = new Proxy({}, {
-            get(target, prop) {
-                if(!$ejb._stacks[prop]) $ejb._stacks[prop] = [];
-                if (!(prop in target)) {
-                    target[prop] = {
-                        add(item) {
-                            $ejb._stacks[prop].push(item);
-                            return this;
-                        },
-                        join(separator = ",") {
-                            return $ejb._stacks[prop].join(separator);
+export default (kire: Kire) => {
+    // Initialize global defines object
+    kire.$ctx('defines', {});
+
+    kire.directive({
+        name: 'define',
+        params: ['name:string'],
+        children: true,
+        onCall(ctx) {
+            const name = ctx.param('name');
+            
+            ctx.res(`$ctx.defines[${JSON.stringify(name)}] = await (async ($parentCtx) => {`);
+            ctx.res(`  const $ctx = $parentCtx.clone();`);
+            
+            if (ctx.children) ctx.set(ctx.children);
+            
+            ctx.res(`  return $ctx[Symbol.for('~response')];`);
+            ctx.res(`})($ctx);`);
+        }
+    });
+
+    kire.directive({
+        name: 'defined',
+        params: ['name:string'],
+        onCall(ctx) {
+            const name = ctx.param('name');
+            
+            ctx.res(`$ctx.res("<!-- KIRE:defined(" + ${JSON.stringify(name)} + ") -->");`);
+            
+            ctx.pos(`
+                // Post-process defined placeholders
+                if ($ctx.defines) {
+                    for (const key in $ctx.defines) {
+                        const placeholder = "<!-- KIRE:defined(" + key + ") -->";
+                        if ($ctx[Symbol.for('~response')].includes(placeholder)) {
+                             $ctx[Symbol.for('~response')] = $ctx[Symbol.for('~response')].split(placeholder).join($ctx.defines[key]);
                         }
-                    };
+                    }
+                    // Cleanup unmatched placeholders?
+                    $ctx[Symbol.for('~response')] = $ctx[Symbol.for('~response')].replace(/<!-- KIRE:defined\\(.*?\\) -->/g, '');
                 }
-                return target[prop];
-            }
-        });
-`);
-		},
-		onParams(ejb, exp) {
-			ejb.builder.add(
-				`$ejb.res += $ejb._stacks[${exp.raw}]?.length ? $ejb.stacks[${exp.raw}].join('\\n') : '<!-- EJB:stack(${trimQuotes(exp.raw)}) -->';`,
-			);
-		},
-		onEndFile: (ejb) => {
-			ejb.builder.add(`
-                Object.keys($ejb.stacks).forEach(pushname => {
-                    $ejb.res = $ejb.res.split(\`<!-- EJB:stack(\${pushname}) -->\`).join($ejb.stacks[pushname].join('\\n'));
-                });
-    
-                // remove not used stacks
-                $ejb.res = $ejb.res.replace(/<!-- EJB:stack\\(.*?\\) -->/g, '');`);
-		},
-	}),
-	/**
-	 * @push directive
-	 */
-	ejbDirective({
-		name: "push",
-		priority: 1,
-		children: true,
-		// onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
-		// onInit + onEnd + sync = $ejb.res += (($ejb) => { ...content })({ ...$ejb, res: ''});
-		onInit: (ejb, exp) => {
-			ejb.builder.add(`$ejb.stacks[${exp.raw}].add(await (async ($ejb) => {`);
-		},
-		onEnd: (ejb) => {
-			ejb.builder.add(";return $ejb.res;})({ ...$ejb, res:'' }));");
-		},
-	}),
-	/**
-	 * @defined directive
-	 */
-	ejbDirective({
-		name: "defined",
-		priority: 11,
-		onInitFile: (ejb) => {
-			ejb.builder.add(`$ejb.defines = {};`);
-		},
-		onParams(ejb, exp) {
-			ejb.builder.add(
-				`$ejb.res += $ejb.defines[${exp.raw}] ? $ejb.defines[${exp.raw}] : '<!-- EJB:defines(${trimQuotes(exp.raw)}) -->';`,
-			);
-		},
-		onEndFile: (ejb) => {
-			ejb.builder.add(`
-                Object.keys($ejb.defines).forEach(pushname => {
-                    $ejb.res = $ejb.res.split(\`<!-- EJB:defines(\${pushname}) -->\`).join($ejb.defines[pushname]);
-                });
-    
-                // remove not used defines
-                $ejb.res = $ejb.res.replace(/<!-- EJB:defines\\(.*?\\) -->/g, '');`);
-		},
-	}),
-	/**
-	 * @define directive
-	 */
-	ejbDirective({
-		name: "define",
-		priority: 11,
-		children: true,
-		// onInit + onEnd + async = $ejb.res += await(async ($ejb) => { ...content })({ ...$ejb, res: ''});
-		// onInit + onEnd + sync = $ejb.res += (($ejb) => { ...content })({ ...$ejb, res: ''});
-		onInit: (ejb, exp) => {
-			ejb.builder.add(`$ejb.defines[${exp.raw}] = await (async ($ejb) => {`);
-		},
-		onEnd: (ejb) => {
-			ejb.builder.add(";return $ejb.res;})({ ...$ejb, res:'' });");
-		},
-	}),
-);
+            `);
+        }
+    });
+
+    // Initialize global stacks object
+    kire.$ctx('stacks', {});
+
+    kire.directive({
+        name: 'stack',
+        params: ['name:string'],
+        onCall(ctx) {
+             const name = ctx.param('name');
+             ctx.res(`$ctx.res("<!-- KIRE:stack(" + ${JSON.stringify(name)} + ") -->");`);
+
+             ctx.pos(`
+                if ($ctx.stacks) {
+                    for (const key in $ctx.stacks) {
+                         const placeholder = "<!-- KIRE:stack(" + key + ") -->";
+                         if ($ctx[Symbol.for('~response')].includes(placeholder)) {
+                              const content = $ctx.stacks[key].join('\n');
+                              $ctx[Symbol.for('~response')] = $ctx[Symbol.for('~response')].split(placeholder).join(content);
+                         }
+                    }
+                    $ctx[Symbol.for('~response')] = $ctx[Symbol.for('~response')].replace(/<!-- KIRE:stack\\(.*?\\) -->/g, '');
+                }
+             `);
+        }
+    });
+
+    kire.directive({
+        name: 'push',
+        params: ['name:string'],
+        children: true,
+        onCall(ctx: KireContext) {
+            const name = ctx.param('name');
+            ctx.res(`if (!$ctx.stacks[${JSON.stringify(name)}]) $ctx.stacks[${JSON.stringify(name)}] = [];`);
+            ctx.res(`$ctx.stacks[${JSON.stringify(name)}].push(await (async ($parentCtx) => {`);
+            ctx.res(`  const $ctx = $parentCtx.clone();`);
+            
+            if (ctx.children) ctx.set(ctx.children);
+            
+            ctx.res(`  return $ctx[Symbol.for('~response')];`);
+            ctx.res(`})($ctx));`);
+        }
+    });
+};

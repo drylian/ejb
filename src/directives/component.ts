@@ -1,74 +1,100 @@
-import { ejbDirective } from "../constants";
-import { ejbParser } from "../parser";
-import { escapeJs, filepathResolver } from "../utils";
+import type { Kire } from '../kire';
 
-export default ejbDirective({
-	name: "component",
-	priority: 10,
-	children: true,
-	params: [
-		{ name: "path", type: "string", required: true },
-		{ name: "variables", type: "object", default: "{}" },
-	],
-	parents: [
-		{
-			name: "slot",
-			internal: true,
-			onParams: (ejb, exp) => {
-				ejb.builder.add(`$slots["$" + ${exp.raw}] = await (async ($ejb) => {`);
-			},
-			onEnd: (ejb) => {
-				ejb.builder.add("\nreturn $ejb.res;})({ ...$ejb, res:'' });");
-			},
-		},
-	],
-	onInit: (ejb) => {
-		ejb.builder.add(`$ejb.res += await (async ($ejb) => { const $slots = {};\n`);
-	},
-	onEnd: (ejb) => {
-		ejb.builder.add(
-			`return $_component($_import, {...$_variables, ...$slots}); })( { ...$ejb, res:'' });`,
-		);
-	},
-	onChildren: async (ejb, { children, parents }) => {
-		const compiledChildren = await ejb.compile(children);
-		const compiledParents = await ejb.compile(parents ?? []);
-		ejb.builder.add(
-			`$slots.$slot = ((${compiledChildren}) ?? "");\n ${compiledParents ?? ""}\n`,
-		);
-	},
-	onParams: async (ejb, exp) => {
-		const path = exp.getString("path");
-		const params = exp.getRaw("variables");
-
-		if (!path) {
-			throw new Error("[EJB] @component directive requires a path.");
-		}
-
-		if (!ejb.resolver) {
-			throw new Error(
-				`[EJB] @ directive requires a resolver to be configured.`,
-			);
-		}
-
-		try {
-			const resolvedContent = await ejb.resolver(
-				filepathResolver(ejb, path),
-			);
-
-			const ast = ejbParser(ejb, resolvedContent);
-			const code = await ejb.compile(ast);
-
-			ejb.builder.add(
-				[
-					"const $_import = { ...$ejb, res: '' };",
-					`const $_variables = { ...${ejb.globalvar}, ...(${params}) };`,
-					`const $_component = new $ejb.EjbFunction('$ejb', $ejb.ins.globalvar, \`${escapeJs(code)}\\nreturn $ejb.res;\`);\n`,
-				].join("\n"),
-			);
-		} catch (e: any) {
-			console.error(`[EJB] Failed to resolve import for path: ${path}`, e);
-			ejb.builder.add(`return \`<!-- EJB Import Error: ${escapeJs(e.message)} -->\`;`);
-		}
-	},
-});
+export default (kire: Kire) => {
+    // @component('path', {vars}) ... @end
+    // Uses slots.
+    
+    kire.directive({
+        name: 'component',
+        params: ['path:string', 'variables:object'],
+        children: true,
+        parents: [
+            {
+                name: 'slot',
+                params: ['name:string'],
+                children: true,
+                onCall(c) {
+                    const name = c.param('name');
+                    c.res(`$slots[${name}] = await (async ($parentCtx) => {`);
+                    c.res(`  const $ctx = $parentCtx.clone();`);
+                    if (c.children) c.set(c.children);
+                    c.res(`  return $ctx[Symbol.for('~response')];`);
+                    c.res(`})($ctx);`);
+                }
+            }
+        ],
+        onCall(ctx) {
+            const pathExpr = ctx.param('path');
+            const varsExpr = ctx.param('variables') || '{}';
+            
+            ctx.res(`await (async () => {`);
+            ctx.res(`  const $slots = {};`);
+            
+            // Process children (which may contain @slot directives or default content)
+            // Default content goes to $slot or 'default'?
+            // In old component: 
+            // "if (compiledChildren.trim()) { ejb.builder.add('$slots.$slot = ...') }"
+            // And slots are in `parents`? Wait.
+            // In old logic: `parents` were used for `@slot`.
+            // But `@slot` is usually nested INSIDE component block.
+            // `@component(...) @slot(...) ... @end @end`?
+            // Or `@component(...) <p>Default</p> @slot('x')...@end @end`.
+            
+            // If `@slot` is a child directive, we need to capture it.
+            // But normal content should be captured as default slot.
+            
+            // We need to separate @slot children from other children?
+            // Or just execute children. Normal content appends to `$ctx.res` of this IIFE?
+            // No, we want to capture slots into `$slots` object.
+            
+            // Strategy:
+            // 1. Create a context for the component body (the block where slots are defined).
+            // 2. In this context, text output goes to default slot?
+            // 3. `@slot` directives write to `$slots`.
+            
+            ctx.res(`  const $bodyCtx = $ctx.clone();`);
+            ctx.res(`  $bodyCtx.slots = $slots;`); // Expose slots map to body context so @slot can write to it?
+            // Actually, @slot needs to write to the LOCAL `$slots` variable we defined above.
+            // Directives run in the scope of `onCall`'s generated code.
+            // So `@slot` generated code will run inside this IIFE.
+            // So `$slots` is available!
+            
+            // But what about default content?
+            // We can capture `$bodyCtx` response as default slot.
+            
+            // We need to render children using `$bodyCtx`.
+            // But `ctx.set(children)` compiles children using the CURRENT compilation context.
+            // It emits code into the current stream.
+            // Code emitted: `$ctx[~response] += ...`.
+            // We want it to be `$bodyCtx[~response] += ...`.
+            
+            // Compiler doesn't support changing the context variable name easily (it uses `$ctx` hardcoded in `with($ctx)`).
+            // But we can shadow `$ctx`!
+            
+            ctx.res(`  await (async ($parentCtx) => {`);
+            ctx.res(`    const $ctx = $bodyCtx;`); // Shadow $ctx
+            ctx.res(`    with($ctx) {`);
+            
+            if (ctx.children) ctx.set(ctx.children);
+            // Note: `ctx.set` will emit code using `$ctx`. Since we shadowed it, it uses `$bodyCtx`.
+            
+            ctx.res(`    }`);
+            ctx.res(`  })($ctx);`);
+            
+            ctx.res(`  $slots.default = $bodyCtx[Symbol.for('~response')];`);
+            
+            // Now load the component template
+            ctx.res(`  const path = $ctx.resolve(${JSON.stringify(pathExpr)});`);
+            ctx.res(`  const templateFn = await $ctx.load(path);`);
+            ctx.res(`  if (templateFn) {`);
+            ctx.res(`    const locals = ${varsExpr};`);
+            ctx.res(`    const componentCtx = $ctx.clone(locals);`);
+            ctx.res(`    componentCtx.slots = $slots;`); // Pass slots to component
+            ctx.res(`    await templateFn(componentCtx);`);
+            ctx.res(`    $ctx.res(componentCtx[Symbol.for('~response')]);`);
+            ctx.res(`  }`);
+            
+            ctx.res(`})();`);
+        }
+    });
+};

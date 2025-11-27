@@ -1,5 +1,0 @@
-<div class="box">
-  @isset(it.$header)
-  @isset(it.$content)
-  @isset(it.$slot)
-</div>
