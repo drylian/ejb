@@ -1,17 +1,8 @@
 import { Parser } from './parser';
 import { Compiler, RESPONSE_SYMBOL, STRUCTURE_SYMBOL } from './compiler';
-import type { DirectiveDefinition, KirePlugin, KireContext, KireElementHandler } from './types';
+import type { DirectiveDefinition, KirePlugin, KireContext, KireElementHandler, KireSchematic, KireOptions, IParserConstructor, ICompilerConstructor } from './types';
 import { join } from './utils/path';
 import { KireDirectives } from './directives';
-
-export interface KireOptions {
-    root?: string;
-    cache?: boolean;
-    resolver?: (filename: string) => Promise<string>;
-    alias?: Record<string, string>;
-    extension?: string;
-    directives?:boolean;
-}
 
 export class Kire {
   private directives: Map<string, DirectiveDefinition> = new Map();
@@ -24,6 +15,8 @@ export class Kire {
   public alias: Record<string, string>;
   public extension: string;
   public cacheFiles: Map<string, Function> = new Map();
+  public parserConstructor: IParserConstructor;
+  public compilerConstructor: ICompilerConstructor;
 
   constructor(options: KireOptions = {}) {
     this.root = options.root ?? './';
@@ -34,6 +27,9 @@ export class Kire {
     this.resolverFn = options.resolver ?? (async (filename) => {
          throw new Error(`No resolver defined for path: ${filename}`);
     });
+
+    this.parserConstructor = options.engine?.parser ?? Parser;
+    this.compilerConstructor = options.engine?.compiler ?? Compiler;
     
     // Register default directives
     if(!options.directives) this.plugin(KireDirectives);
@@ -47,6 +43,21 @@ export class Kire {
         plugin.load(this, opts);
     }
     return this;
+  }
+
+  public pkgSchema(name: string, repository?: string | { type: string; url: string }, version?: string): KireSchematic {
+    const globals: Record<string, any> = {};
+    this.globalContext.forEach((value, key) => {
+        globals[key] = value;
+    });
+
+    return {
+        name,
+        repository,
+        version,
+        directives: Array.from(this.directives.values()),
+        globals: globals
+    };
   }
 
   public element(name: string, handler: KireElementHandler) {
@@ -73,19 +84,29 @@ export class Kire {
     return this;
   }
 
+  public parse(template: string) {
+    const parser = new this.parserConstructor(template, this);
+    return parser.parse();
+  }
+
   public async compile(template: string): Promise<string> {
-    const parser = new Parser(template, this);
+    const parser = new this.parserConstructor(template, this);
     const nodes = parser.parse();
     
-    const compiler = new Compiler(this);
+    const compiler = new this.compilerConstructor(this);
     return compiler.compile(nodes);
   }
   
   public resolvePath(filepath: string, currentFile?: string): string {
     if (!filepath) return filepath;
 
+    // If it's a URL, return it directly
+    if (filepath.startsWith('http://') || filepath.startsWith('https://')) {
+        return filepath;
+    }
+
     // Normalize
-    let resolved = filepath.replace(/\\/g, "/").replace(/\/+/g, "/");
+    let resolved = filepath.replace(/\\/g, "/").replace(/(?<!:)\/+/g, "/");
     const root = this.root.replace(/\\/g, "/").replace(/\/$/, "");
 
     // Check absolute
@@ -118,8 +139,8 @@ export class Kire {
         }
     }
 
-    // Add extension if needed
-    if (this.extension && !/\.[^/.]+$/.test(resolved)) {
+    // Add extension if needed, but not to URLs
+    if (this.extension && !/\.[^/.]+$/.test(resolved) && !(resolved.startsWith('http://') || resolved.startsWith('https://'))) {
         const ext = this.extension.charAt(0) === "." ? this.extension : `.${this.extension}`;
         resolved += ext;
     }
@@ -176,34 +197,34 @@ export class Kire {
       const fn = await this.createFunction(template);
       
       // Runtime context merging globals and locals
-      const runtimeCtx: any = {};
+      const rctx: any = {};
       for (const [k, v] of this.globalContext) {
-          runtimeCtx[k] = v;
+          rctx[k] = v;
       }
-      Object.assign(runtimeCtx, locals);
+      Object.assign(rctx, locals);
       
       // Initialize the response and structure symbols on the runtime context
-      runtimeCtx[RESPONSE_SYMBOL] = '';
-      runtimeCtx[STRUCTURE_SYMBOL] = [];
+      rctx[RESPONSE_SYMBOL] = '';
+      rctx[STRUCTURE_SYMBOL] = [];
       
       // Runtime helper to append to response
-      runtimeCtx.res = (str: any) => {
-          runtimeCtx[RESPONSE_SYMBOL] += str;
+      rctx.res = (str: any) => {
+          rctx[RESPONSE_SYMBOL] += str;
       };
 
       // Helper to resolve paths inside directives
-      runtimeCtx.resolve = (path: string) => {
+      rctx.resolve = (path: string) => {
           return this.resolvePath(path); 
       };
       
       // Helper to load templates at runtime (for @include)
-      runtimeCtx.load = async (path: string) => {
+      rctx.load = async (path: string) => {
           return this.createFunction(path);
       };
 
       // Method to create a new context based on current one (for isolation)
-      runtimeCtx.clone = (locals: Record<string, any> = {}): KireContext => {
-          const newCtx = Object.create(runtimeCtx); // Inherit prototype
+      rctx.clone = (locals: Record<string, any> = {}): KireContext => {
+          const newCtx = Object.create(rctx); // Inherit prototype
           Object.assign(newCtx, locals); // Assign locals
           // Initialize for new context
           newCtx[RESPONSE_SYMBOL] = '';
@@ -212,34 +233,34 @@ export class Kire {
       };
 
       // Method to clear response/structure for current context
-      runtimeCtx.clear = (): void => {
-          runtimeCtx[RESPONSE_SYMBOL] = '';
-          runtimeCtx[STRUCTURE_SYMBOL] = [];
+      rctx.clear = (): void => {
+          rctx[RESPONSE_SYMBOL] = '';
+          rctx[STRUCTURE_SYMBOL] = [];
       };
 
       // Helper to add to context (used by imports logic)
-      runtimeCtx.add = async (childFn: Function) => {
+      rctx.add = async (childFn: Function) => {
          if (typeof childFn === 'function') {
              // Use clone to create child context, locals are usually passed in @include
              // If childFn (e.g. from createFunction) needs locals, it's passed during its execution.
              // Here, childCtx is for its OWN response and structure.
-             const childCtx = runtimeCtx.clone();
+             const childCtx = rctx.clone();
              
              // Execute the child function with the child context
              const resultCtx = await childFn(childCtx);
              
              // Add the result context to the parent's structure
-             runtimeCtx[STRUCTURE_SYMBOL].push(resultCtx);
+             rctx[STRUCTURE_SYMBOL].push(resultCtx);
              
              // Append the child's response to the parent's response
-             runtimeCtx[RESPONSE_SYMBOL] += resultCtx[RESPONSE_SYMBOL];
+             rctx[RESPONSE_SYMBOL] += resultCtx[RESPONSE_SYMBOL];
          } else {
-             runtimeCtx[RESPONSE_SYMBOL] += childFn;
+             rctx[RESPONSE_SYMBOL] += childFn;
          }
       };
 
       // Execute the compiled function
-      const finalCtx = await fn(runtimeCtx);
+      const finalCtx = await fn(rctx);
       
       // Post-process elements
       let resultHtml = finalCtx[RESPONSE_SYMBOL];
@@ -276,7 +297,7 @@ export class Kire {
                       attributes[attrMatch[1]!] = attrMatch[2]!;
                   }
 
-                  const elCtx: any = runtimeCtx.clone();
+                  const elCtx: any = rctx.clone();
                   elCtx.content = resultHtml; 
                   elCtx.element = {
                       tagName,

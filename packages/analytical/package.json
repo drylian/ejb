@@ -1,6 +1,6 @@
 {
-	"name": "@kirejs/tailwind",
-	"description": "Tailwind plugin for Kire.",
+	"name": "@kirejs/analytical",
+	"description": "Analytical parser and compiler for Kire.",
 	"version": "0.1.0",
 	"main": "dist/cjs/index.cjs",
 	"module": "dist/mjs/index.js",
@@ -22,7 +22,9 @@
 		"backend",
 		"standardization",
 		"standard",
-		"resolver",
+		"analytical",
+		"parser",
+		"compiler",
 		"blade",
 		"npm",
 		"node",
@@ -48,14 +50,12 @@
 		"@biomejs/biome": "2.2.4",
 		"@types/bun": "^1.2.22",
 		"@types/node": "^24.10.1",
-		"daisyui": "^5.5.5",
 		"dts-bundle-generator": "^9.5.1",
 		"tsup": "^8.5.0",
 		"tsx": "^4.20.5",
 		"typescript": "^5.9.2"
 	},
 	"dependencies": {
-		"kire": "workspace:../../core",
-		"tailwindcss": "^4.1.17"
+		"kire": "workspace:../../core"
 	}
 }

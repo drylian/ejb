@@ -4,6 +4,9 @@ export default (kire: Kire) => {
     kire.directive({
         name: 'include',
         params: ['path:string', 'locals:object'],
+        type: 'html',
+        description: 'Includes and renders a template from a given path, optionally passing local variables.',
+        example: `@include('partials/header', { title: 'Welcome' })`,
         onCall(ctx) {
              const pathExpr = ctx.param('path'); 
              const localsExpr = ctx.param('locals') || '{}';

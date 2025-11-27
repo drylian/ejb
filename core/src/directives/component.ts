@@ -8,11 +8,17 @@ export default (kire: Kire) => {
         name: 'component',
         params: ['path:string', 'variables:object'],
         children: true,
+        type: 'html',
+        description: 'Loads a template as a reusable component, allowing content to be passed into named slots.',
+        example: `@component('card', { title: 'My Card' })\n  @slot('header')\n    <h1>Card Header</h1>\n  @end\n  <p>Default content.</p>\n@end`,
         parents: [
             {
                 name: 'slot',
                 params: ['name:string'],
                 children: true,
+                type: 'html',
+                description: 'Defines a named content slot within a component.',
+                example: `@slot('header')\n  <h1>This is the header</h1>\n@end`,
                 onCall(c) {
                     const name = c.param('name');
                     c.res(`$slots[${name}] = await (async ($parentCtx) => {`);

@@ -9,6 +9,9 @@ export default (kire: Kire) => {
         name: 'define',
         params: ['name:string'],
         children: true,
+        type: 'html',
+        description: 'Defines a named, reusable section of content that can be rendered elsewhere.',
+        example: `@define('header')\n  <h1>My Website</h1>\n@end`,
         onCall(ctx) {
             const name = ctx.param('name');
             
@@ -25,6 +28,9 @@ export default (kire: Kire) => {
     kire.directive({
         name: 'defined',
         params: ['name:string'],
+        type: 'html',
+        description: 'Renders a content section previously created with @define.',
+        example: `@defined('header')`,
         onCall(ctx) {
             const name = ctx.param('name');
             
@@ -52,6 +58,9 @@ export default (kire: Kire) => {
     kire.directive({
         name: 'stack',
         params: ['name:string'],
+        type: 'html',
+        description: 'Creates a placeholder where content pushed to a named stack will be rendered.',
+        example: `<html>\n<head>\n  @stack('scripts')\n</head>\n</html>`,
         onCall(ctx) {
              const name = ctx.param('name');
              ctx.res(`$ctx.res("<!-- KIRE:stack(" + ${JSON.stringify(name)} + ") -->");`);
@@ -75,6 +84,9 @@ export default (kire: Kire) => {
         name: 'push',
         params: ['name:string'],
         children: true,
+        type: 'html',
+        description: 'Pushes a block of content onto a named stack.',
+        example: `@push('scripts')\n  <script src="app.js"></script>\n@end`,
         onCall(ctx: KireContext) {
             const name = ctx.param('name');
             ctx.res(`if (!$ctx.stacks[${JSON.stringify(name)}]) $ctx.stacks[${JSON.stringify(name)}] = [];`);

@@ -5,6 +5,30 @@ export interface KireConfig {
   // Add other config options as needed
 }
 
+export interface IParser {
+  parse(): Node[];
+}
+export type IParserConstructor = new (template: string, kire: Kire) => IParser;
+
+export interface ICompiler {
+  compile(nodes: Node[]): Promise<string>;
+}
+export type ICompilerConstructor = new (kire: Kire) => ICompiler;
+
+
+export interface KireOptions {
+  root?: string;
+  cache?: boolean;
+  resolver?: (filename: string) => Promise<string>;
+  alias?: Record<string, string>;
+  extension?: string;
+  directives?: boolean;
+  engine?: {
+    parser?: IParserConstructor;
+    compiler?: ICompilerConstructor;
+  }
+}
+
 export interface KireContext {
   param(name: string | number): any;
   render(content: string): Promise<string>; // Returns compiled function string
@@ -14,7 +38,7 @@ export interface KireContext {
   pos(code: string): void;
   error(message: string): void;
   resolve(path: string): string;
-  
+
   // For nested directives
   children?: Node[];
   parents?: Node[]; // The instances of sub-directives (e.g., elseif blocks)
@@ -28,17 +52,17 @@ export interface KireContext {
 export interface KireElementContext {
   content: string; // The global HTML content (mutable/readable state representation)
   element: {
-      tagName: string;
-      attributes: Record<string, string>;
-      inner: string;
-      outer: string;
+    tagName: string;
+    attributes: Record<string, string>;
+    inner: string;
+    outer: string;
   };
   // Method to update the global content
   update(newContent: string): void;
 }
 
 export interface KireElementHandler {
-    (ctx: KireElementContext): Promise<void> | void;
+  (ctx: KireElementContext): Promise<void> | void;
 }
 
 export interface DirectiveDefinition {
@@ -48,11 +72,22 @@ export interface DirectiveDefinition {
   childrenRaw?: boolean; // Should the children be treated as raw text?
   parents?: DirectiveDefinition[]; // Sub-directives like elseif/else
   onCall: (ctx: KireContext) => void | Promise<void>;
+  description?: string;
+  example?: string;
+  type?: 'css' | 'js' | 'html';
+}
+
+export interface KireSchematic {
+  name: string;
+  repository?: string | { type: string; url: string };
+  version?: string;
+  directives?: DirectiveDefinition[];
+  globals?: Record<string, any>
 }
 
 export interface KirePlugin<Options extends (object | undefined) = {}> {
   name: string;
-  options:Options;
+  options: Options;
   load(kire: Kire, opts?: Options): void;
 }
 
