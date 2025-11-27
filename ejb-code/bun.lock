@@ -1,17 +1,18 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "ejb-intellisense",
       "dependencies": {
-        "typescript": "latest",
-        "vscode-html-languageservice": "latest",
-        "vscode-languageserver-textdocument": "latest",
-        "zustand": "latest",
+        "typescript": "^5.9.2",
+        "vscode-html-languageservice": "^5.5.1",
+        "vscode-languageserver-textdocument": "^1.0.12",
+        "zustand": "^5.0.8",
       },
       "devDependencies": {
-        "@types/node": "latest",
-        "@types/vscode": "latest",
+        "@types/node": "^24.5.2",
+        "@types/vscode": "^1.104.0",
       },
     },
   },

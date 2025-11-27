@@ -1,8 +1,7 @@
-import { expect, test, describe, beforeEach, afterEach, mock } from "bun:test";
+import { expect, test, describe, mock } from "bun:test";
 import { Kire } from "kire";
 import KireResolver from "../src/index";
-import { writeFile, rm } from 'fs/promises';
-import { join } from 'path';
+import { join } from "path";
 
 // --- Mocks ---
 
@@ -32,24 +31,7 @@ global.fetch = mock(async (url: string) => {
     return { ok: false, statusText: 'Not Found' };
 });
 
-const TEMP_BUN_FILE_NAME = 'bun-template.kire';
-const TEMP_BUN_FILE_PATH = join(import.meta.dir, TEMP_BUN_FILE_NAME);
-
 describe("@kirejs/resolver", () => {
-    
-    beforeEach(async () => {
-        // Create a real temporary file for the Bun test
-        if (typeof Bun !== 'undefined') {
-            await global.Bun.write(TEMP_BUN_FILE_PATH, 'Hello from Bun!');
-        }
-    });
-
-    afterEach(async () => {
-        // Cleanup the real temporary file
-        if (typeof Bun !== 'undefined') {
-            await rm(TEMP_BUN_FILE_PATH, { force: true });
-        }
-    });
 
     test("should use 'node' adapter by default", async () => {
         const kire = new Kire();
@@ -65,13 +47,13 @@ describe("@kirejs/resolver", () => {
         }
         const kire = new Kire({
             // Set the root to the test directory so it can find the temp file
-            root: import.meta.dir,
+            root: join(import.meta.dir, '..'),
         });
         kire.plugin(KireResolver, { adapter: 'bun' });
         
         // Pass the filename without the extension; Kire will resolve it
-        const content = await kire.render('bun-template');
-        expect(content).toBe('Hello from Bun!');
+        const content = await kire.render('template');
+        expect(content).toBe('<div> Hello </div>');
     });
 
     test("should throw error for 'deno' adapter when Deno is not available", async () => {

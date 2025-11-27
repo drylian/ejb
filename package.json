@@ -2,7 +2,7 @@
   "name": "kire",
   "type": "module",
   "private": true,
-  "workspaces": ["core", "packages/*"],
+  "workspaces": ["core", "packages/*", "vs-kire"],
   "scripts": {
     "test": "bun test",
     "build": "bun run build.ts",

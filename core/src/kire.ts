@@ -32,7 +32,7 @@ export class Kire {
     this.compilerConstructor = options.engine?.compiler ?? Compiler;
     
     // Register default directives
-    if(!options.directives) this.plugin(KireDirectives);
+    if(typeof options.directives == "undefined"  || options.directives == true) this.plugin(KireDirectives);
   }
 
   public plugin<KirePlugged extends KirePlugin<any>>(plugin: KirePlugged, opts?: KirePlugged['options']) {

@@ -1,0 +1,27 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Kire",
+    "scopeName": "text.html.kire",
+    "patterns": [
+        {
+            "include": "text.html.basic"
+        },
+        {
+            "name": "keyword.control.kire",
+            "match": "@([a-zA-Z]+)"
+        }
+    ],
+    "repository": {
+        "expression": {
+            "patterns": [
+                {
+                    "name": "keyword.control.kire",
+                    "match": "@([a-zA-Z]+)"
+                },
+                {
+                    "include": "source.js"
+                }
+            ]
+        }
+    }
+}

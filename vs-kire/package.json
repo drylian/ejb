@@ -1,0 +1,60 @@
+{
+    "name": "vs-kire",
+    "displayName": "Kire Language Support",
+    "description": "Language support for the Kire templating engine.",
+    "version": "0.0.1",
+    "type": "module",
+    "publisher": "drylian",
+    "engines": {
+        "vscode": "^1.104.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "main": "./dist/extension.js",
+    "activationEvents": [
+        "onLanguage:kire"
+    ],
+    "dependencies": {
+        "@kirejs/analytical": "workspace:../packages/analytical",
+        "@types/node": "^24.10.1",
+        "kire": "workspace:../core",
+        "zustand": "^5.0.8"
+    },
+    "devDependencies": {
+        "@types/vscode": "^1.104.0"
+    },
+    "contributes": {
+        "languages": [
+            {
+                "id": "kire",
+                "aliases": [
+                    "Kire",
+                    "kire"
+                ],
+                "extensions": [
+                    ".kire",
+                    ".kire.html"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "kire",
+                "scopeName": "text.html.kire",
+                "path": "./syntaxes/kire.tmLanguage.json",
+                "embeddedLanguages": {
+                    "source.js": "javascript",
+                    "source.css": "css"
+                }
+            }
+        ]
+    },
+    "scripts": {
+        "build": "vsce package",
+        "vscode:prepublish": "bun build  --target=node --external vscode --outdir dist src/extension.ts",
+        "watch": "bun build  --target=node --external vscode --outdir dist src/extension.ts --watch",
+        "compile": "tsc --project tsconfig.json"
+    }
+}
