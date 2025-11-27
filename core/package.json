@@ -42,14 +42,5 @@
 		"build": "bun run build.ts",
 		"test": "bun test",
 		"check": "bunx biome check src/** --write"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "2.2.4",
-		"@types/bun": "^1.2.22",
-		"@types/node": "^24.10.1",
-		"dts-bundle-generator": "^9.5.1",
-		"tsup": "^8.5.0",
-		"tsx": "^4.20.5",
-		"typescript": "^5.9.2"
 	}
 }
