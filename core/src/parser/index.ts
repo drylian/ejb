@@ -24,7 +24,7 @@ export class Parser {
       if (interpolationMatch) {
         this.addNode({
           type: 'variable',
-          content: interpolationMatch[1].trim(),
+          content: interpolationMatch[1]!.trim(),
           start: this.cursor,
           end: this.cursor + interpolationMatch[0].length
         });
@@ -44,17 +44,17 @@ export class Parser {
             continue;
         }
 
-        const directiveDef = this.kire.getDirective(name);
+        const directiveDef = this.kire.getDirective(name!);
         
         // Check for sub-directive (parent logic)
         if (this.stack.length > 0) {
             const currentParent = this.stack[this.stack.length - 1];
-            const parentDef = this.kire.getDirective(currentParent.name!);
+            const parentDef = this.kire.getDirective(currentParent!.name!);
             
             if (parentDef && parentDef.parents) {
                 const subDef = parentDef.parents.find(p => p.name === name);
                 if (subDef) {
-                    this.handleSubDirective(name, argsStr, fullMatch, currentParent, subDef);
+                    this.handleSubDirective(name!, argsStr, fullMatch, currentParent!, subDef);
                     this.advance(fullMatch);
                     continue;
                 }
@@ -112,7 +112,7 @@ export class Parser {
                  start: this.cursor,
                  end: this.cursor + 1
              });
-             this.advance(remaining[0]);
+             this.advance(remaining[0]!);
         } else {
              const text = remaining.slice(0, nextIndex);
              this.addNode({
@@ -147,7 +147,7 @@ export class Parser {
       
       if (this.stack.length > 0) {
           const parent = this.stack[this.stack.length - 1];
-          if (parent.related && parent.related.includes(popped!)) {
+          if (parent && parent.related && parent.related.includes(popped!)) {
               this.stack.pop();
           }
       }
@@ -177,8 +177,8 @@ export class Parser {
   private addNode(node: Node) {
       if (this.stack.length > 0) {
           const current = this.stack[this.stack.length - 1];
-          if (!current.children) current.children = [];
-          current.children.push(node);
+          if (current && !current.children) current.children = [];
+          if(current?.children)current.children.push(node);
       } else {
           this.rootChildren.push(node);
       }
@@ -188,7 +188,7 @@ export class Parser {
     const lines = str.split('\n');
     if (lines.length > 1) {
       this.line += lines.length - 1;
-      this.column = lines[lines.length - 1].length + 1;
+      this.column = lines[lines.length - 1]!.length + 1;
     } else {
       this.column += str.length;
     }

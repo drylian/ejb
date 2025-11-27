@@ -1,11 +1,7 @@
 {
-	"extends": "./tsconfig.json",
-	"compilerOptions": {
-		"rootDir": "src",
-		"outDir": "./",
-		"declaration": true,
-		"emitDeclarationOnly": true,
-		"skipLibCheck": true
-	},
-	"exclude": ["test", "build"]
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true
+  },
 }

@@ -274,8 +274,8 @@ export class Kire {
                   const attributes: Record<string, string> = {};
                   const attrRegex = /(\w+)="([^"]*)"/g;
                   let attrMatch;
-                  while ((attrMatch = attrRegex.exec(m.attrs)) !== null) {
-                      attributes[attrMatch[1]] = attrMatch[2];
+                  while ((attrMatch = attrRegex.exec(m.attrs!)) !== null) {
+                      attributes[attrMatch[1]!] = attrMatch[2]!;
                   }
 
                   const elCtx: any = runtimeCtx.clone();

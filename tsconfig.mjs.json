@@ -1,8 +1,12 @@
 {
-	"extends": "./tsconfig.json",
-	"compilerOptions": {
-		"rootDir": "src",
-		"outDir": "esm"
-	},
-	"exclude": ["test", "build"]
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+     "target":"ESNext",
+     "lib":[
+        "ESNext",
+        "DOM"
+     ],
+     "module":"NodeNext",
+     "moduleResolution":"NodeNext"
+  },
 }

@@ -1,67 +1,30 @@
 {
-	"name": "@caeljs/ejb",
-	"type": "module",
-	"description": "A simple view system inspired by Blade.",
-	"version": "0.1.0",
-	"main": "cjs/index.cjs",
-	"module": "esm/index.js",
-	"types": "index.d.ts",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/drylian/configjs.git"
-	},
-	"typesVersions": {
-		"*": {
-			".": [
-				"./index.d.ts"
-			]
-		}
-	},
-	"exports": {
-		".": {
-			"types": "./index.d.ts",
-			"import": "./esm/index.js",
-			"require": "./cjs/index.cjs"
-		}
-	},
-	"keywords": [
-		"backend",
-		"standardization",
-		"standard",
-		"blade",
-		"npm",
-		"node",
-		"bun",
-		"deno",
-		"typescript",
-		"debug",
-		"output",
-		"performance"
-	],
-	"author": "Drylian",
-	"license": "MIT",
-	"bugs": {
-		"url": "https://github.com/drylian/ejb/issues"
-	},
-	"homepage": "https://github.com/drylian/ejb#readme",
-	"scripts": {
-		"build": "bun run build.ts",
-		"test": "bun test",
-		"ejbconfig": "bun run build.ts --only-ejbconfig",
-		"check": "bunx biome check src/** --write"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "2.2.4",
-		"@types/bun": "^1.2.22",
-		"@types/node": "^24.10.1",
-		"dts-bundle-generator": "^9.5.1",
-		"tsup": "^8.5.0",
-		"tsx": "^4.20.5",
-		"typescript": "^5.9.2"
-	},
-	"dependencies": {
-		"@caeljs/logger": "^3.1.1",
-		"@types/source-map": "^0.5.7",
-		"source-map": "^0.7.6"
-	}
+  "name": "kire",
+  "type": "module",
+  "private": true,
+  "workspaces": ["core", "packages/*"],
+  "scripts": {
+    "test": "bun test",
+    "build": "bun run build.ts",
+    "publish": "bun run publish.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@types/bun": "latest",
+    "@types/semver": "^7.7.0",
+    "esbuild": "^0.25.11",
+    "eslint": "^9.34.0",
+    "glob": "^11.0.3",
+    "globals": "^16.3.0",
+    "json5": "^2.2.3",
+    "semver": "^7.7.2",
+    "tsup": "^8.5.0",
+    "typescript-eslint": "^8.40.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "trustedDependencies": [
+    "esbuild"
+  ]
 }

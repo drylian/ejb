@@ -52,7 +52,7 @@ export interface DirectiveDefinition {
 export interface KirePlugin<Options extends object = {}> {
   name: string;
   options:Options;
-  load(kire: Kire, opts?: any): void;
+  load(kire: Kire, opts?: Options): void;
 }
 
 // AST Types

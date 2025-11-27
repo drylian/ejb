@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    /* Environment setup & latest features */
-    "lib": ["esnext"],
+    // Environment setup & latest features
+    "lib": ["ESNext"],
     "target": "ESNext",
     "module": "ESNext",
     "moduleDetection": "force",
@@ -24,5 +24,11 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
+
+    "baseUrl": ".",
+    "paths": {
+      "@kirejs/*": ["./*/src/index.ts"],
+      "kire": ["../core/src/index.ts"]
+    }
   }
 }

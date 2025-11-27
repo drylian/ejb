@@ -1,12 +1,8 @@
 {
-	"extends": "./tsconfig.json",
-	"compilerOptions": {
-		"module": "commonjs",
-		"moduleResolution": "Node",
-		"target": "es2015",
-		"rootDir": "src",
-		"outDir": "cjs",
-    "lib": ["ESNext", "DOM", "ES2023"],
-	},
-	"exclude": ["build"]
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+      "module": "commonjs",
+      "moduleResolution": "Node",
+      "target": "es2015"
+  },
 }
