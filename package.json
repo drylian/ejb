@@ -2,11 +2,12 @@
   "name": "kire",
   "type": "module",
   "private": true,
-  "workspaces": ["core", "packages/*", "vs-kire"],
+  "workspaces": ["core", "packages/*"],
   "scripts": {
     "test": "bun test",
     "build": "bun run build.ts",
-    "publish": "bun run publish.ts"
+    "publish": "bun run publish.ts",
+    "llms": "bun run llms.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",

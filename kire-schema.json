@@ -1,0 +1,242 @@
+{
+   "package": "kire",
+   "repository": {
+      "type": "git",
+      "url": "git+https://github.com/drylian/kire.git"
+   },
+   "version": "0.1.0",
+   "directives": [
+      {
+         "name": "define",
+         "params": [
+            "name:string"
+         ],
+         "children": true,
+         "type": "html",
+         "description": "Defines a named, reusable section of content that can be rendered elsewhere.",
+         "example": "@define('header')\n  <h1>My Website</h1>\n@end"
+      },
+      {
+         "name": "defined",
+         "params": [
+            "name:string"
+         ],
+         "type": "html",
+         "description": "Renders a content section previously created with @define.",
+         "example": "@defined('header')"
+      },
+      {
+         "name": "stack",
+         "params": [
+            "name:string"
+         ],
+         "type": "html",
+         "description": "Creates a placeholder where content pushed to a named stack will be rendered.",
+         "example": "<html>\n<head>\n  @stack('scripts')\n</head>\n</html>"
+      },
+      {
+         "name": "push",
+         "params": [
+            "name:string"
+         ],
+         "children": true,
+         "type": "html",
+         "description": "Pushes a block of content onto a named stack.",
+         "example": "@push('scripts')\n  <script src=\"app.js\"></script>\n@end"
+      },
+      {
+         "name": "if",
+         "params": [
+            "cond:string"
+         ],
+         "children": true,
+         "type": "js",
+         "description": "Conditionally renders a block of content if the expression is true.",
+         "example": "@if(user.isLoggedIn)\n  Welcome, {{ user.name }}!\n@end",
+         "parents": [
+            {
+               "name": "elseif",
+               "params": [
+                  "cond:string"
+               ],
+               "children": true,
+               "type": "js",
+               "description": "Renders a block of content if the preceding @if/@elseif is false and the current expression is true.",
+               "example": "@elseif(user.isAdmin)\n  Admin access granted.\n@end"
+            },
+            {
+               "name": "elif",
+               "params": [
+                  "cond:string"
+               ],
+               "children": true,
+               "type": "js",
+               "description": "Alias for @elseif.",
+               "example": "@elif(user.isAdmin)\n  Admin access granted.\n@end"
+            },
+            {
+               "name": "else",
+               "children": true,
+               "type": "js",
+               "description": "Renders a block of content if the preceding @if/@elseif expressions are all false.",
+               "example": "@else\n  Please log in.\n@end"
+            }
+         ]
+      },
+      {
+         "name": "elseif",
+         "params": [
+            "cond:string"
+         ],
+         "children": true,
+         "type": "js",
+         "description": "Renders a block of content if the preceding @if/@elseif is false and the current expression is true.",
+         "example": "@elseif(user.isAdmin)\n  Admin access granted.\n@end"
+      },
+      {
+         "name": "elif",
+         "params": [
+            "cond:string"
+         ],
+         "children": true,
+         "type": "js",
+         "description": "Alias for @elseif.",
+         "example": "@elif(user.isAdmin)\n  Admin access granted.\n@end"
+      },
+      {
+         "name": "else",
+         "children": true,
+         "type": "js",
+         "description": "Renders a block of content if the preceding @if/@elseif expressions are all false.",
+         "example": "@else\n  Please log in.\n@end"
+      },
+      {
+         "name": "for",
+         "params": [
+            "expr:string"
+         ],
+         "children": true,
+         "type": "js",
+         "description": "Iterates over an array or object, similar to a JavaScript for...of loop.",
+         "example": "@for(user of users)\n  <p>{{ user.name }}</p>\n@end"
+      },
+      {
+         "name": "const",
+         "params": [
+            "expr:string"
+         ],
+         "type": "js",
+         "description": "Declares a block-scoped constant, similar to JavaScript `const`.",
+         "example": "@const(myVar = 'hello world')"
+      },
+      {
+         "name": "let",
+         "params": [
+            "expr:string"
+         ],
+         "type": "js",
+         "description": "Declares a block-scoped local variable, similar to JavaScript `let`.",
+         "example": "@let(counter = 0)"
+      },
+      {
+         "name": "code",
+         "children": true,
+         "type": "js",
+         "description": "Executes a block of raw JavaScript code on the server.",
+         "example": "@code\n  console.log('This runs during template compilation.');\n@end"
+      },
+      {
+         "name": "switch",
+         "params": [
+            "expr:string"
+         ],
+         "children": true,
+         "type": "js",
+         "description": "Provides a control flow statement similar to a JavaScript switch block.",
+         "example": "@switch(value)\n  @case(1) ... @end\n  @default ... @end\n@end",
+         "parents": [
+            {
+               "name": "case",
+               "params": [
+                  "val:string"
+               ],
+               "children": true,
+               "type": "js",
+               "description": "A case clause for a @switch statement.",
+               "example": "@case('A')\n  <p>Value is A</p>\n@end"
+            },
+            {
+               "name": "default",
+               "children": true,
+               "type": "js",
+               "description": "The default clause for a @switch statement.",
+               "example": "@default\n  <p>Value is something else</p>\n@end"
+            }
+         ]
+      },
+      {
+         "name": "case",
+         "params": [
+            "val:string"
+         ],
+         "children": true,
+         "type": "js",
+         "description": "A case clause for a @switch statement.",
+         "example": "@case('A')\n  <p>Value is A</p>\n@end"
+      },
+      {
+         "name": "default",
+         "children": true,
+         "type": "js",
+         "description": "The default clause for a @switch statement.",
+         "example": "@default\n  <p>Value is something else</p>\n@end"
+      },
+      {
+         "name": "include",
+         "params": [
+            "path:string",
+            "locals:object"
+         ],
+         "type": "html",
+         "description": "Includes and renders a template from a given path, optionally passing local variables.",
+         "example": "@include('partials/header', { title: 'Welcome' })"
+      },
+      {
+         "name": "component",
+         "params": [
+            "path:string",
+            "variables:object"
+         ],
+         "children": true,
+         "type": "html",
+         "description": "Loads a template as a reusable component, allowing content to be passed into named slots.",
+         "example": "@component('card', { title: 'My Card' })\n  @slot('header')\n    <h1>Card Header</h1>\n  @end\n  <p>Default content.</p>\n@end",
+         "parents": [
+            {
+               "name": "slot",
+               "params": [
+                  "name:string"
+               ],
+               "children": true,
+               "type": "html",
+               "description": "Defines a named content slot within a component.",
+               "example": "@slot('header')\n  <h1>This is the header</h1>\n@end"
+            }
+         ]
+      },
+      {
+         "name": "slot",
+         "params": [
+            "name:string"
+         ],
+         "children": true,
+         "type": "html",
+         "description": "Defines a named content slot within a component.",
+         "example": "@slot('header')\n  <h1>This is the header</h1>\n@end"
+      }
+   ],
+   "globals": {
+      "defines": {},
+      "stacks": {}
+   }
+}

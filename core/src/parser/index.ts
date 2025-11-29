@@ -45,14 +45,48 @@ export class Parser {
       }
 
       // Check for directive @name(...)
-      // Regex: @(\w+)(?:\(([^)]*)\))?
-      const directiveMatch = remaining.match(/^@(\w+)(?:\(([^)]*)\))?/);
-      if (directiveMatch) {
-        const [fullMatch, name, argsStr] = directiveMatch;
+      const directiveStartMatch = remaining.match(/^@(\w+)/);
+      if (directiveStartMatch) {
+        const [fullMatch, name] = directiveStartMatch;
+        
+        // Check if it has arguments
+        let argsStr = undefined;
+        let argsEndIndex = fullMatch.length;
+        
+        if (remaining.startsWith('(', fullMatch.length)) {
+            // Parse arguments with balanced parentheses
+            let depth = 1;
+            let i = fullMatch.length + 1;
+            let inQuote = false;
+            let quoteChar = '';
+            
+            while (i < remaining.length && depth > 0) {
+                const char = remaining[i];
+                if ((char === '"' || char === "'") && remaining[i-1] !== '\\') {
+                    if (inQuote && char === quoteChar) {
+                        inQuote = false;
+                    } else if (!inQuote) {
+                        inQuote = true;
+                        quoteChar = char;
+                    }
+                }
+                
+                if (!inQuote) {
+                    if (char === '(') depth++;
+                    else if (char === ')') depth--;
+                }
+                i++;
+            }
+            
+            if (depth === 0) {
+                argsStr = remaining.slice(fullMatch.length + 1, i - 1);
+                argsEndIndex = i;
+            }
+        }
         
         if (name === 'end') {
             this.handleEndDirective();
-            this.advance(fullMatch);
+            this.advance(remaining.slice(0, argsEndIndex));
             continue;
         }
 
@@ -67,8 +101,8 @@ export class Parser {
             if (parentDef && parentDef.parents) {
                 const subDef = parentDef.parents.find(p => p.name === name);
                 if (subDef) {
-                    this.handleSubDirective(name!, argsStr, fullMatch, currentParent!, subDef);
-                    this.advance(fullMatch);
+                    this.handleSubDirective(name!, argsStr, remaining.slice(0, argsEndIndex), currentParent!, subDef);
+                    this.advance(remaining.slice(0, argsEndIndex));
                     continue;
                 }
             }
@@ -78,11 +112,12 @@ export class Parser {
         if (!directiveDef && !isSubDirective) {
              this.addNode({
                  type: 'text',
-                 content: fullMatch,
+                 content: fullMatch, // Just the name part
                  start: this.cursor,
                  end: this.cursor + fullMatch.length
              });
              this.advance(fullMatch);
+             // Args will be processed as text in next loop
              continue;
         }
 
@@ -93,7 +128,7 @@ export class Parser {
           name: name,
           args: args,
           start: this.cursor,
-          end: this.cursor + fullMatch.length,
+          end: this.cursor + argsEndIndex,
           children: [],
           related: []
         };
@@ -104,7 +139,7 @@ export class Parser {
             if (directiveDef.childrenRaw) {
                 this.stack.push(node);
                 
-                const contentStart = this.cursor + fullMatch.length;
+                const contentStart = this.cursor + argsEndIndex;
                 const remainingTemplate = this.template.slice(contentStart);
                 
                 // Find closing @end with word boundary check
@@ -122,7 +157,7 @@ export class Parser {
                     });
                     
                     this.stack.pop(); // Close immediately
-                    this.advance(fullMatch + content + endMatch[0]);
+                    this.advance(remaining.slice(0, argsEndIndex) + content + endMatch[0]);
                     continue;
                 } else {
                      // No end tag found, consume rest
@@ -134,14 +169,14 @@ export class Parser {
                          end: this.template.length
                      });
                      this.stack.pop();
-                     this.advance(fullMatch + content);
+                     this.advance(remaining.slice(0, argsEndIndex) + content);
                      continue;
                 }
             }
             this.stack.push(node);
         }
         
-        this.advance(fullMatch);
+        this.advance(remaining.slice(0, argsEndIndex));
         continue;
       }
 

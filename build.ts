@@ -1,13 +1,21 @@
 import { $ } from 'bun'
+import { Kire } from './core/src';
 import { exec } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, writeFileSync } from 'fs'
 import { cp, mkdir, readFile, rm, writeFile } from 'fs/promises'
 import { glob } from 'glob'
-
 import { promisify } from 'util'
+import pkg from './core/package.json';
+
+const kire = new Kire();
+
+writeFileSync('kire-schema.json', JSON.stringify(kire.pkgSchema(
+	pkg.name,
+	pkg.repository,
+	pkg.version,
+), null, 3))
 
 const execAsync = promisify(exec)
-
 
 interface PackageInfo {
 	name: string

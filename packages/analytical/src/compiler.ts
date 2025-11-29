@@ -16,6 +16,25 @@ export class AnalyticalCompiler {
 
     this.resBuffer.push(`with($ctx) {`);
 
+    // Hook: onBewareDirectives
+    if (this.kire.hooks?.onBewareDirectives) {
+        if (Array.isArray(this.kire.hooks.onBewareDirectives)) {
+            for (const hook of this.kire.hooks.onBewareDirectives) {
+                // Cast 'this' to any or ICompiler compatible type if needed, 
+                // but AnalyticalCompiler implements compile(Node[]) which matches interface except private props.
+                const injected = hook(this as any);
+                if (typeof injected === 'string') {
+                    this.resBuffer.push(injected);
+                }
+            }
+        } else {
+            const injected = this.kire.hooks.onBewareDirectives(this as any);
+            if (typeof injected === 'string') {
+                this.resBuffer.push(injected);
+            }
+        }
+    }
+
     // Compile the root nodes
     await this.compileNodes(nodes);
 

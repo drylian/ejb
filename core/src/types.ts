@@ -23,6 +23,7 @@ export interface KireOptions {
   alias?: Record<string, string>;
   extension?: string;
   directives?: boolean;
+  plugins?: (KirePlugin | [KirePlugin, any])[];
   engine?: {
     parser?: IParserConstructor;
     compiler?: ICompilerConstructor;
@@ -59,10 +60,23 @@ export interface KireElementContext {
   };
   // Method to update the global content
   update(newContent: string): void;
+  replace(replacement: string): void;
+  replaceContent(replacement: string): void;
 }
 
 export interface KireElementHandler {
   (ctx: KireElementContext): Promise<void> | void;
+}
+
+export interface KireElementOptions {
+  void?: boolean;
+}
+
+export interface KireHooks {
+    onBewareDirectives?: ((compiler: ICompiler) => void | string) | ((compiler: ICompiler) => void | string)[];
+    onAfterDirectives?: ((ctx: KireContext) => void | Promise<void>) | ((ctx: KireContext) => void | Promise<void>)[];
+    onBewareElements?: ((ctx: KireContext, html: string) => void | string | Promise<string | void>) | ((ctx: KireContext, html: string) => void | string | Promise<string | void>)[];
+    onAfterElements?: ((ctx: KireContext, html: string) => void | string | Promise<string | void>) | ((ctx: KireContext, html: string) => void | string | Promise<string | void>)[];
 }
 
 export interface DirectiveDefinition {
@@ -78,7 +92,7 @@ export interface DirectiveDefinition {
 }
 
 export interface KireSchematic {
-  name: string;
+  package: string;
   repository?: string | { type: string; url: string };
   version?: string;
   directives?: DirectiveDefinition[];
@@ -87,6 +101,7 @@ export interface KireSchematic {
 
 export interface KirePlugin<Options extends (object | undefined) = {}> {
   name: string;
+  sort?: number;
   options: Options;
   load(kire: Kire, opts?: Options): void;
 }

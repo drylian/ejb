@@ -5,9 +5,10 @@ import { join } from './utils/path';
 import { KireDirectives } from './directives';
 
 export class Kire {
-  private directives: Map<string, DirectiveDefinition> = new Map();
-  private elements: Map<string, KireElementHandler> = new Map();
-  private globalContext: Map<string, any> = new Map();
+  public directives: Map<string, DirectiveDefinition> = new Map();
+  public elements: Map<string, { handler: KireElementHandler, options?: KireElementOptions }> = new Map();
+  public globalContext: Map<string, any> = new Map();
+  public hooks: KireHooks = {};
   
   public root: string;
   public cache: boolean;
@@ -31,8 +32,32 @@ export class Kire {
     this.parserConstructor = options.engine?.parser ?? Parser;
     this.compilerConstructor = options.engine?.compiler ?? Compiler;
     
+    // Collect plugins to load
+    const pluginsToLoad: Array<{p: KirePlugin<any>, o?: any}> = [];
+
     // Register default directives
-    if(typeof options.directives == "undefined"  || options.directives == true) this.plugin(KireDirectives);
+    if(typeof options.directives == "undefined"  || options.directives == true) {
+        pluginsToLoad.push({ p: KireDirectives });
+    }
+
+    // User provided plugins
+    if (options.plugins) {
+        for (const p of options.plugins) {
+            if (Array.isArray(p)) {
+                pluginsToLoad.push({ p: p[0], o: p[1] });
+            } else {
+                pluginsToLoad.push({ p });
+            }
+        }
+    }
+
+    // Sort plugins (default sort 100)
+    pluginsToLoad.sort((a, b) => (a.p.sort ?? 100) - (b.p.sort ?? 100));
+
+    // Load plugins
+    for (const item of pluginsToLoad) {
+        this.plugin(item.p, item.o);
+    }
   }
 
   public plugin<KirePlugged extends KirePlugin<any>>(plugin: KirePlugged, opts?: KirePlugged['options']) {
@@ -52,7 +77,7 @@ export class Kire {
     });
 
     return {
-        name,
+        package:name,
         repository,
         version,
         directives: Array.from(this.directives.values()),
@@ -60,8 +85,8 @@ export class Kire {
     };
   }
 
-  public element(name: string, handler: KireElementHandler) {
-      this.elements.set(name, handler);
+  public element(name: string, handler: KireElementHandler, options?: KireElementOptions) {
+      this.elements.set(name, { handler, options });
       return this;
   }
 
@@ -260,15 +285,38 @@ export class Kire {
       };
 
       // Execute the compiled function
+      if (this.hooks.onAfterDirectives) {
+          if (Array.isArray(this.hooks.onAfterDirectives)) {
+              for (const hook of this.hooks.onAfterDirectives) {
+                  await hook(rctx);
+              }
+          } else {
+              await this.hooks.onAfterDirectives(rctx);
+          }
+      }
+      
       const finalCtx = await fn(rctx);
       
       // Post-process elements
       let resultHtml = finalCtx[RESPONSE_SYMBOL];
       
+      // Hook: onBewareElements
+      if (this.hooks.onBewareElements) {
+          if (Array.isArray(this.hooks.onBewareElements)) {
+              for (const hook of this.hooks.onBewareElements) {
+                  const res = await hook(rctx, resultHtml);
+                  if (typeof res === 'string') resultHtml = res;
+              }
+          } else {
+              const res = await this.hooks.onBewareElements(rctx, resultHtml);
+              if (typeof res === 'string') resultHtml = res;
+          }
+      }
+      
       if (this.elements.size > 0) {
-          for (const [tagName, handler] of this.elements) {
+          for (const [tagName, { handler, options }] of this.elements) {
               // Check if void tag
-              const isVoid = /^(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i.test(tagName);
+              const isVoid = options?.void || /^(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i.test(tagName);
               
               const regex = isVoid 
                   ? new RegExp(`<${tagName}([^>]*)>`, 'gi')
@@ -309,6 +357,17 @@ export class Kire {
                       resultHtml = newContent;
                       elCtx.content = newContent;
                   };
+                  elCtx.replace = (replacement: string) => {
+                      resultHtml = resultHtml.replace(m.full, replacement);
+                      elCtx.content = resultHtml;
+                  };
+                  elCtx.replaceContent = (replacement: string) => {
+                      if (!isVoid) {
+                           const newOuter = m.full.replace(m.inner, replacement);
+                           resultHtml = resultHtml.replace(m.full, newOuter);
+                           elCtx.content = resultHtml;
+                      }
+                  };
                   
                   await handler(elCtx);
                   
@@ -316,6 +375,19 @@ export class Kire {
                       resultHtml = elCtx.content;
                   }
               }
+          }
+      }
+      
+      // Hook: onAfterElements
+      if (this.hooks.onAfterElements) {
+          if (Array.isArray(this.hooks.onAfterElements)) {
+              for (const hook of this.hooks.onAfterElements) {
+                  const res = await hook(rctx, resultHtml);
+                  if (typeof res === 'string') resultHtml = res;
+              }
+          } else {
+              const res = await this.hooks.onAfterElements(rctx, resultHtml);
+              if (typeof res === 'string') resultHtml = res;
           }
       }
       

@@ -52,10 +52,10 @@ export const KireResolver: KirePlugin<ResolverOptions> = {
     options:{},
     load(kire: Kire, opts) {
         // Assign the new resolver
-        (kire as any).resolverFn = createResolver(opts);
+        kire.resolverFn = createResolver(opts);
 
         // Add the .view() method to the Kire instance
-        (kire as any).view = function(filepath: string, locals: Record<string, any> = {}) {
+        kire.view = function(filepath: string, locals: Record<string, any> = {}) {
             // 'this' refers to the Kire instance on which .view() is called
             return this.render(filepath, locals);
         };

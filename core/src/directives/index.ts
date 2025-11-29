@@ -7,6 +7,7 @@ import componentDirectives from './component';
 
 export const KireDirectives: KirePlugin = {
     name: 'kire',
+    sort: 100,
     options:{},
     load(kire) {
         defineDirectives(kire);

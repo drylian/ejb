@@ -1,0 +1,65 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Kire Configuration",
+    "description": "Configuration file for Kire directives to provide IntelliSense in editors.",
+    "type": "object",
+    "required": ["name", "directives"],
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": "Name of the package providing these directives."
+        },
+        "repository": {
+            "type": ["string", "object"],
+            "properties": {
+                "type": { "type": "string" },
+                "url": { "type": "string" }
+            }
+        },
+        "version": {
+            "type": "string"
+        },
+        "globals": {
+            "type": "object"
+        },
+        "directives": {
+            "type": "array",
+            "description": "A list of directive definitions.",
+            "items": {
+                "type": "object",
+                "required": ["name", "onCall"],
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The name of the directive (without the '@')."
+                    },
+                    "params": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "children": {
+                        "type": "boolean",
+                        "description": "Does this directive accept a block ending with @end?"
+                    },
+                    "childrenRaw": {
+                        "type": "boolean"
+                    },
+                    "parents": {
+                        "type": "array",
+                        "items": { "$ref": "#/properties/directives/items" }
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "example": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": ["css", "js", "html"]
+                    }
+                }
+            }
+        }
+    }
+}

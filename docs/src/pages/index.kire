@@ -1,0 +1,3 @@
+@include('layouts/main.kire', { title: 'Kire Documentation' })
+    @markdown('content/index.md')
+@end

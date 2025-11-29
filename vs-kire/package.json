@@ -13,13 +13,15 @@
     ],
     "main": "./dist/extension.js",
     "activationEvents": [
-        "onLanguage:kire"
+        "onLanguage:kire",
+        "onLanguage:html"
     ],
     "dependencies": {
-        "@kirejs/analytical": "workspace:../packages/analytical",
         "@types/node": "^24.10.1",
-        "kire": "workspace:../core",
-        "zustand": "^5.0.8"
+        "zustand": "^5.0.8",
+        "vscode-html-languageservice": "^5.5.1",
+        "typescript": "^5.9.2",
+        "vscode-languageserver-textdocument": "^1.0.12"
     },
     "devDependencies": {
         "@types/vscode": "^1.104.0"
@@ -49,12 +51,29 @@
                     "source.css": "css"
                 }
             }
+        ],
+        "jsonValidation": [
+            {
+                "fileMatch": "kire.json",
+                "url": "./schema.json"
+            }
+        ],
+        "semanticTokenScopes": [
+            {
+                "language": "kire",
+                "scopes": {
+                    "keyword": ["keyword.control.kire"],
+                    "property": ["support.type.property-name.css"],
+                    "class": ["entity.name.tag.css"],
+                    "string": ["string.quoted.double.js"]
+                }
+            }
         ]
     },
     "scripts": {
         "build": "vsce package",
         "vscode:prepublish": "bun build  --target=node --external vscode --outdir dist src/extension.ts",
         "watch": "bun build  --target=node --external vscode --outdir dist src/extension.ts --watch",
-        "compile": "tsc --project tsconfig.json"
+        "check": "tsc --noEmit --project tsconfig.json"
     }
 }

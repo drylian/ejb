@@ -1,0 +1,14 @@
+{
+  "name": "kire-docs",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "bun run build.ts",
+    "dev": "bun run build.ts --dev"
+  },
+  "dependencies": {
+    "tailwindcss": "^4.0.0",
+    "daisyui": "^5.0.0",
+    "@tailwindcss/typography": "^0.5.10"
+  }
+}

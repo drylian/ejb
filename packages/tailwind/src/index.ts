@@ -54,8 +54,9 @@ async function loadModule(id: string, base: string) {
   }
 }
 
-export const KireTailwind: KirePlugin<TailwindCompileOptions> = {
+export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
   name: "@kirejs/tailwind",
+  sort: 110,
   options: {},
   async load(kire, opts) {
     const tailwindOptions: TailwindCompileOptions = {

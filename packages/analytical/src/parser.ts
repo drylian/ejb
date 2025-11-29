@@ -55,18 +55,53 @@ export class AnalyticalParser {
       }
 
       // Check for directive @name(...)
-      const directiveMatch = remaining.match(/^@(\w+)(?:\(([^)]*)\))?/);
-      if (directiveMatch) {
-        const [fullMatch, name, argsStr] = directiveMatch;
+      const directiveStartMatch = remaining.match(/^@(\w+)/);
+      if (directiveStartMatch) {
+        const [fullMatch, name] = directiveStartMatch;
         
+        // Check if it has arguments
+        let argsStr = undefined;
+        let argsEndIndex = fullMatch.length;
+        
+        if (remaining.startsWith('(', fullMatch.length)) {
+            // Parse arguments with balanced parentheses
+            let depth = 1;
+            let i = fullMatch.length + 1;
+            let inQuote = false;
+            let quoteChar = '';
+            
+            while (i < remaining.length && depth > 0) {
+                const char = remaining[i];
+                if ((char === '"' || char === "'") && remaining[i-1] !== '\\') {
+                    if (inQuote && char === quoteChar) {
+                        inQuote = false;
+                    } else if (!inQuote) {
+                        inQuote = true;
+                        quoteChar = char;
+                    }
+                }
+                
+                if (!inQuote) {
+                    if (char === '(') depth++;
+                    else if (char === ')') depth--;
+                }
+                i++;
+            }
+            
+            if (depth === 0) {
+                argsStr = remaining.slice(fullMatch.length + 1, i - 1);
+                argsEndIndex = i;
+            }
+        }
+
         if (name === 'end') {
             const popped = this.handleEndDirective();
             if (popped) {
-                this.advance(fullMatch);
+                this.advance(remaining.slice(0, argsEndIndex)); // Advance full length
                 popped.end = this.cursor;
                 if (popped.loc) popped.loc.end = this.getPosition();
             } else {
-                this.advance(fullMatch);
+                this.advance(remaining.slice(0, argsEndIndex));
             }
             continue;
         }
@@ -81,8 +116,8 @@ export class AnalyticalParser {
             if (parentDef?.parents) {
                 const subDef = parentDef.parents.find(p => p.name === name);
                 if (subDef) {
-                    this.handleSubDirective(name!, argsStr, fullMatch, currentParent!, subDef, startPos);
-                    this.advance(fullMatch);
+                    this.handleSubDirective(name!, argsStr, remaining.slice(0, argsEndIndex), currentParent!, subDef, startPos);
+                    this.advance(remaining.slice(0, argsEndIndex));
                     continue;
                 }
             }
@@ -90,7 +125,14 @@ export class AnalyticalParser {
 
         // If not a registered directive treat as text
         if (!directiveDef) {
-             this.advance(fullMatch);
+             this.advance(fullMatch); // Only advance the name part? 
+             // If we advanced fully, we'd swallow args of unknown directive.
+             // Existing logic treated it as text: `this.advance(fullMatch)`.
+             // Here `fullMatch` is just `@name`.
+             // So we output `@name` and args remain as text next loop.
+             // Wait, next loop `(` starts args. `(` is treated as text.
+             // So `@foo(bar)` becomes `@foo` (text) + `(bar)` (text). Correct.
+             
              const endPos = this.getPosition();
              this.addNode({
                  type: 'text',
@@ -103,6 +145,11 @@ export class AnalyticalParser {
         }
 
         const args = argsStr ? this.parseArgs(argsStr) : [];
+        
+        // Calculate end pos before advance? No, usually we advance.
+        // We need to advance `argsEndIndex`.
+        const contentStr = remaining.slice(0, argsEndIndex);
+        this.advance(contentStr);
         const endPos = this.getPosition();
 
         const node: Node = {
@@ -121,7 +168,6 @@ export class AnalyticalParser {
             this.stack.push(node);
         }
         
-        this.advance(fullMatch);
         continue;
       }
 

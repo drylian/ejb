@@ -1,4 +1,4 @@
-import type { Node, KireContext, DirectiveDefinition, KireConfig } from '../types';
+import type { Node, KireContext } from '../types';
 import { Kire } from '../kire';
 
 // Define the symbols for internal use
@@ -18,6 +18,23 @@ export class Compiler {
     this.posBuffer = [];
 
     this.resBuffer.push(`with($ctx) {`);
+
+    // Hook: onBewareDirectives
+    if (this.kire.hooks?.onBewareDirectives) {
+        if (Array.isArray(this.kire.hooks.onBewareDirectives)) {
+            for (const hook of this.kire.hooks.onBewareDirectives) {
+                const injected = hook(this);
+                if (typeof injected === 'string') {
+                    this.resBuffer.push(injected);
+                }
+            }
+        } else {
+            const injected = this.kire.hooks.onBewareDirectives(this);
+            if (typeof injected === 'string') {
+                this.resBuffer.push(injected);
+            }
+        }
+    }
 
     // Compile the root nodes
     await this.compileNodes(nodes);

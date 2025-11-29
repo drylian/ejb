@@ -1,0 +1,14 @@
+
+<html>
+<head>
+    <title>Docs</title>
+    @assets()
+    @tailwind
+    @end
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded shadow prose">
+        @markdown('docs/*.md')
+    </div>
+</body>
+</html>
