@@ -11,7 +11,7 @@ import { resolve } from "path";
 const kire = new Kire({
   root: resolve(process.cwd(), "src"),
   plugins: [
-    KireAnalytical,
+    //KireAnalytical,
     [KireSsg, { assetsPrefix: "assets" }],
     KireMarkdown,
     KireIconify,

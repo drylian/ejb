@@ -1,6 +1,6 @@
 import { Parser } from './parser';
 import { Compiler, RESPONSE_SYMBOL, STRUCTURE_SYMBOL } from './compiler';
-import type { DirectiveDefinition, KirePlugin, KireContext, KireElementHandler, KireSchematic, KireOptions, IParserConstructor, ICompilerConstructor } from './types';
+import type { DirectiveDefinition, KirePlugin, KireContext, KireElementHandler, KireSchematic, KireOptions, IParserConstructor, ICompilerConstructor, KireElementOptions, KireHooks } from './types';
 import { join } from './utils/path';
 import { KireDirectives } from './directives';
 
@@ -362,7 +362,7 @@ export class Kire {
                   };
                   elCtx.replaceContent = (replacement: string) => {
                       if (!isVoid) {
-                           const newOuter = m.full.replace(m.inner, replacement);
+                           const newOuter = m.full.replace(m.inner!, replacement);
                            resultHtml = resultHtml.replace(m.full, newOuter);
                            elCtx.content = resultHtml;
                       }

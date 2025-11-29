@@ -7,8 +7,9 @@
     "dev": "bun run build.ts --dev"
   },
   "dependencies": {
-    "tailwindcss": "^4.0.0",
+    "@tailwindcss/typography": "^0.5.10",
     "daisyui": "^5.0.0",
-    "@tailwindcss/typography": "^0.5.10"
+    "marked": "^17.0.1",
+    "tailwindcss": "^4.0.0"
   }
 }

@@ -24,7 +24,8 @@ export const KireMarkdown: KirePlugin<MarkdownOptions> = {
             name: 'markdown',
             params: ['source:string'],
             async onCall(ctx) {
-                const source = ctx.param('source');
+                console.log(ctx.param(0))
+                const source = ctx.param(0) ?? '';
                 
                 // 1. Check if it is a glob pattern (SSG layout mode)
                 // Simple heuristic: contains *

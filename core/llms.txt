@@ -127,7 +127,7 @@ export interface Node {
 // --- From: core/src/kire.ts ---
 import { Parser } from './parser';
 import { Compiler, RESPONSE_SYMBOL, STRUCTURE_SYMBOL } from './compiler';
-import type { DirectiveDefinition, KirePlugin, KireContext, KireElementHandler, KireSchematic, KireOptions, IParserConstructor, ICompilerConstructor } from './types';
+import type { DirectiveDefinition, KirePlugin, KireContext, KireElementHandler, KireSchematic, KireOptions, IParserConstructor, ICompilerConstructor, KireElementOptions, KireHooks } from './types';
 import { join } from './utils/path';
 import { KireDirectives } from './directives';
 
@@ -489,7 +489,7 @@ export class Kire {
                   };
                   elCtx.replaceContent = (replacement: string) => {
                       if (!isVoid) {
-                           const newOuter = m.full.replace(m.inner, replacement);
+                           const newOuter = m.full.replace(m.inner!, replacement);
                            resultHtml = resultHtml.replace(m.full, newOuter);
                            elCtx.content = resultHtml;
                       }
@@ -532,129 +532,44 @@ export * from './compiler';
 import type { Kire } from '../kire';
 
 export default (kire: Kire) => {
-
     kire.directive({
-
         name: 'include',
-
         params: ['path:string', 'locals:object'],
-
-        children: true, // Allow block content
-
+        children: true,
         type: 'html',
-
         description: 'Includes and renders a template from a given path, optionally passing local variables. Can also wrap content passed as "content" variable.',
-
         example: `@include('partials/card')\n  <p>Card content</p>\n@end`,
-
         onCall(ctx) {
+            const pathExpr = ctx.param('path');
+            const localsExpr = ctx.param('locals') || '{}';
+            
+            ctx.res(`await (async () => {
+    const path = $ctx.resolve(${JSON.stringify(pathExpr)});
+    const templateFn = await $ctx.load(path);
+    
+    if (templateFn) {
+        let content = '';`);
+            
+            if (ctx.children && ctx.children.length > 0) {
+                ctx.res(`const $bodyCtx = $ctx.clone();
+        await (async ($parentCtx) => {
+            const $ctx = $bodyCtx;
+            with($ctx) {`);
+                ctx.set(ctx.children);
+                ctx.res(`}
+        })($ctx);
+        content = $bodyCtx[Symbol.for('~response')];`);
+            }
 
-             const pathExpr = ctx.param('path'); 
-
-             const localsExpr = ctx.param('locals') || '{}';
-
-             
-
-                                       ctx.res(`
-
-             
-
-                                           await (async () => {
-
-             
-
-                                               const path = $ctx.resolve(${JSON.stringify(pathExpr)}); 
-
-             
-
-                                               const templateFn = await $ctx.load(path);
-
-             
-
-                                               if (templateFn) {
-
-             
-
-                                                   // Capture children content if any
-
-             
-
-                                                   let content = '';
-
-             
-
-                                                   `);
-
-             
-
-                          
-
-             
-
-             
-
-             
-
-             if (ctx.children && ctx.children.length > 0) {
-
-                 ctx.res(`
-
-                         const $bodyCtx = $ctx.clone();
-
-                         await (async ($parentCtx) => {
-
-                             const $ctx = $bodyCtx;
-
-                             with($ctx) {
-
-                 `);
-
-                 
-
-                 ctx.set(ctx.children);
-
-                 
-
-                 ctx.res(`
-
-                             }
-
-                         })($ctx);
-
-                         content = $bodyCtx[Symbol.for('~response')];
-
-                 `);
-
-             }
-
-             
-
-             ctx.res(`
-
-                         const locals = Object.assign({ content }, ${localsExpr}); 
-
-                         const childCtx = $ctx.clone(locals);
-
-                         
-
-                         await templateFn(childCtx);
-
-                         
-
-                         $ctx.res(childCtx[Symbol.for('~response')]);
-
-                     }
-
-                 })();
-
-             `);
-
+            ctx.res(`const locals = Object.assign({ content }, ${localsExpr});
+        const childCtx = $ctx.clone(locals);
+        await templateFn(childCtx);
+        $ctx.res(childCtx[Symbol.for('~response')]);
+    }
+})();`);
         }
-
     });
-
 };
-
 
 // --- From: core/src/directives/natives.ts ---
 import type { Kire } from '../kire';
@@ -791,9 +706,9 @@ export default (kire: Kire) => {
                 description: 'A case clause for a @switch statement.',
                 example: `@case('A')\n  <p>Value is A</p>\n@end`,
                 onCall(c) {
-                    c.res(`case ${JSON.stringify(c.param('val'))}:`);
+                    c.res(`case ${JSON.stringify(c.param('val'))}: {`);
                     if (c.children) c.set(c.children);
-                    c.res(`break;`);
+                    c.res(`break; }`);
                 }
             }, {
                 name: 'default',
@@ -802,8 +717,9 @@ export default (kire: Kire) => {
                 description: 'The default clause for a @switch statement.',
                 example: `@default\n  <p>Value is something else</p>\n@end`,
                 onCall(c) {
-                    c.res(`default:`);
+                    c.res(`default: {`);
                     if (c.children) c.set(c.children);
+                    c.res(`}`);
                 }
             }
         ],
