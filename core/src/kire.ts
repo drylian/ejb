@@ -117,7 +117,6 @@ export class Kire {
   public async compile(template: string): Promise<string> {
     const parser = new this.parserConstructor(template, this);
     const nodes = parser.parse();
-    
     const compiler = new this.compilerConstructor(this);
     return compiler.compile(nodes);
   }

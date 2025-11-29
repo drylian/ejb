@@ -17,7 +17,11 @@ export class Parser {
     
     while (this.cursor < this.template.length) {
       const remaining = this.template.slice(this.cursor);
-      // console.log('PARSER:', { cursor: this.cursor, remaining: remaining.slice(0, 20) });
+      //console.log('PARSER:', { 
+      //  cursor: this.cursor, 
+      //  remaining: remaining.slice(0, 30),
+      //  stack: this.stack.map(s => s.name)
+      //});
       
       // Check for interpolation {{ ... }}
       const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
@@ -44,16 +48,19 @@ export class Parser {
           continue;
       }
 
-      // Check for directive @name(...)
+      // Check for directive @name(...) or @name without parentheses
       const directiveStartMatch = remaining.match(/^@(\w+)/);
       if (directiveStartMatch) {
         const [fullMatch, name] = directiveStartMatch;
+        
+        //console.log('FOUND DIRECTIVE:', { name, fullMatch, stack: this.stack.map(s => s.name) });
         
         // Check if it has arguments
         let argsStr = undefined;
         let argsEndIndex = fullMatch.length;
         
-        if (remaining.startsWith('(', fullMatch.length)) {
+        // Verifica se tem parênteses APENAS se o próximo caractere for '('
+        if (remaining[fullMatch.length] === '(') {
             // Parse arguments with balanced parentheses
             let depth = 1;
             let i = fullMatch.length + 1;
@@ -62,7 +69,7 @@ export class Parser {
             
             while (i < remaining.length && depth > 0) {
                 const char = remaining[i];
-                if ((char === '"' || char === "'") && remaining[i-1] !== '\\') {
+                if ((char === '"' || char === "'") && (i === 0 || remaining[i-1] !== '\\')) {
                     if (inQuote && char === quoteChar) {
                         inQuote = false;
                     } else if (!inQuote) {
@@ -85,12 +92,14 @@ export class Parser {
         }
         
         if (name === 'end') {
+            //console.log('HANDLING END DIRECTIVE');
             this.handleEndDirective();
             this.advance(remaining.slice(0, argsEndIndex));
             continue;
         }
 
         const directiveDef = this.kire.getDirective(name!);
+        //console.log('DIRECTIVE DEF:', { name, directiveDef });
         
         // Check for sub-directive (parent logic)
         let isSubDirective = false;
@@ -98,11 +107,20 @@ export class Parser {
             const currentParent = this.stack[this.stack.length - 1];
             const parentDef = this.kire.getDirective(currentParent!.name!);
             
+            //console.log('CHECKING SUB DIRECTIVE:', {
+            //  parent: currentParent!.name,
+            //  candidate: name,
+            //  parentDef: parentDef
+            //});
+            
             if (parentDef && parentDef.parents) {
                 const subDef = parentDef.parents.find(p => p.name === name);
+                //console.log('SUB DIRECTIVE RESULT:', { subDef });
                 if (subDef) {
+                    //console.log('FOUND SUB DIRECTIVE! Processing:', name);
                     this.handleSubDirective(name!, argsStr, remaining.slice(0, argsEndIndex), currentParent!, subDef);
                     this.advance(remaining.slice(0, argsEndIndex));
+                    isSubDirective = true;
                     continue;
                 }
             }
@@ -110,14 +128,14 @@ export class Parser {
 
         // If not a registered directive and not a sub-directive, treat as text
         if (!directiveDef && !isSubDirective) {
+             //console.log('TREATING AS TEXT:', name);
              this.addNode({
                  type: 'text',
-                 content: fullMatch, // Just the name part
+                 content: fullMatch,
                  start: this.cursor,
                  end: this.cursor + fullMatch.length
              });
              this.advance(fullMatch);
-             // Args will be processed as text in next loop
              continue;
         }
 
@@ -133,6 +151,7 @@ export class Parser {
           related: []
         };
 
+        //console.log('ADDING DIRECTIVE NODE:', node);
         this.addNode(node);
         
         if (directiveDef && directiveDef.children) {
@@ -173,6 +192,7 @@ export class Parser {
                      continue;
                 }
             }
+            //console.log('PUSHING TO STACK:', name);
             this.stack.push(node);
         }
         
@@ -223,31 +243,24 @@ export class Parser {
       }
     }
     
+    //console.log('FINAL RESULT:', JSON.stringify(this.rootChildren, null, 2));
     return this.rootChildren;
   }
 
   private handleEndDirective() {
+      //console.log('HANDLE END - Stack before:', this.stack.map(s => s.name));
       if (this.stack.length === 0) return;
       const popped = this.stack.pop();
-      
-      // If we popped a 'related' directive (like elseif),
-      // we check if we need to pop its parent (the if) too.
-      // However, the logic is slightly tricky:
-      // 1. stack=[if]. elseif comes.
-      // 2. handleSubDirective adds elseif to if.related AND pushes elseif to stack. stack=[if, elseif].
-      // 3. elseif collects children.
-      // 4. @end comes. Pop elseif. stack=[if].
-      // 5. Since elseif IS a related directive of 'if', 'if' logic is now done too?
-      //    Usually: @if ... @elseif ... @end
-      //    The @end closes the whole block.
-      //    So yes, we should pop 'if' too.
+      //console.log('HANDLE END - Popped:', popped?.name);
       
       if (this.stack.length > 0) {
           const parent = this.stack[this.stack.length - 1];
           if (parent && parent.related && parent.related.includes(popped!)) {
+              //console.log('HANDLE END - Also popping parent:', parent.name);
               this.stack.pop();
           }
       }
+      //console.log('HANDLE END - Stack after:', this.stack.map(s => s.name));
   }
 
   private handleSubDirective(name: string, argsStr: string | undefined, fullMatch: string, parentNode: Node, subDef: DirectiveDefinition) {
@@ -263,10 +276,18 @@ export class Parser {
           related: []
       };
       
+      //console.log('HANDLING SUB DIRECTIVE:', {
+      //  name,
+      //  parent: parentNode.name,
+      //  node,
+      //  parentRelated: parentNode.related
+      //});
+      
       if (!parentNode.related) parentNode.related = [];
       parentNode.related.push(node);
       
       if (subDef.children) {
+          //console.log('PUSHING SUB DIRECTIVE TO STACK:', name);
           this.stack.push(node);
       }
   }
@@ -275,8 +296,12 @@ export class Parser {
       if (this.stack.length > 0) {
           const current = this.stack[this.stack.length - 1];
           if (current && !current.children) current.children = [];
-          if(current?.children)current.children.push(node);
+          if(current?.children) {
+            //console.log('ADDING TO CHILDREN of', current.name, ':', node.type, node.name || node.content);
+            current.children.push(node);
+          }
       } else {
+          //console.log('ADDING TO ROOT:', node.type, node.name || node.content);
           this.rootChildren.push(node);
       }
   }

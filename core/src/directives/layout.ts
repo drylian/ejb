@@ -70,7 +70,7 @@ export default (kire: Kire) => {
                     for (const key in $ctx.stacks) {
                          const placeholder = "<!-- KIRE:stack(" + key + ") -->";
                          if ($ctx[Symbol.for('~response')].includes(placeholder)) {
-                              const content = $ctx.stacks[key].join('\n');
+                              const content = $ctx.stacks[key].join('\\n');
                               $ctx[Symbol.for('~response')] = $ctx[Symbol.for('~response')].split(placeholder).join(content);
                          }
                     }
