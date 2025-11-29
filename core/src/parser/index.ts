@@ -24,12 +24,11 @@ export class Parser {
       //});
       
       // Check for interpolation {{ ... }}
-      const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
-      if (interpolationMatch) {
-        this.addNode({
-          type: 'variable',
-          content: interpolationMatch[1]!.trim(),
-          start: this.cursor,
+              const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
+              if (interpolationMatch) {
+                        this.addNode({
+                      type: 'variable',
+                      content: interpolationMatch[1]!.trim(),          start: this.cursor,
           end: this.cursor + interpolationMatch[0].length
         });
         this.advance(interpolationMatch[0]);

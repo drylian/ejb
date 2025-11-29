@@ -638,7 +638,7 @@ export default (kire: Kire) => {
             const expr = ctx.param('expr');
             if (expr.includes(' in ')) {
                 const [lhs, rhs] = expr.split(' in ');
-                ctx.res(`for (const ${lhs} of ${rhs}) {`);
+                ctx.res(`for (const ${lhs} in ${rhs}) {`);
             } else if (expr.includes(' of ')) {
                 const [lhs, rhs] = expr.split(' of ');
                 ctx.res(`for (const ${lhs} of ${rhs}) {`);
@@ -730,7 +730,6 @@ export default (kire: Kire) => {
         }
     });
 };
-
 
 // --- From: core/src/directives/component.ts ---
 import type { Kire } from '../kire';
@@ -955,12 +954,11 @@ export class Parser {
       //});
       
       // Check for interpolation {{ ... }}
-      const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
-      if (interpolationMatch) {
-        this.addNode({
-          type: 'variable',
-          content: interpolationMatch[1]!.trim(),
-          start: this.cursor,
+              const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
+              if (interpolationMatch) {
+                        this.addNode({
+                      type: 'variable',
+                      content: interpolationMatch[1]!.trim(),          start: this.cursor,
           end: this.cursor + interpolationMatch[0].length
         });
         this.advance(interpolationMatch[0]);
@@ -1293,63 +1291,6 @@ export class Parser {
   }
 }
 
-// --- From: core/src/utils/path.ts ---
-/**
- * Joins path segments and normalizes the resulting path
- */
-export function join(...segments: string[]): string {
-	if (!segments.length) return ".";
-
-	const windowsAbsoluteRegex = /^[a-zA-Z]:[\\/]/;
-	const isWindowsAbsolute = segments.some((s) => windowsAbsoluteRegex.test(s));
-	const driveLetter = isWindowsAbsolute
-		? segments
-				.find((s) => windowsAbsoluteRegex.test(s))
-				?.charAt(0)
-				.toUpperCase()
-		: null;
-
-	// Normalize all segments at once
-	const normalized = segments
-		.join("/")
-		.replace(/\\/g, "/")
-		.replace(/\/+/g, "/");
-	const isAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(normalized);
-
-	const parts = normalized.split("/");
-	const result: string[] = [];
-	let i = 0;
-
-	while (i < parts.length) {
-		const part = parts[i++];
-		if (!part || part === ".") continue;
-
-		if (part === "..") {
-			if (result.length && result[result.length - 1] !== "..") {
-				result.pop();
-			} else {
-				result.push(part);
-			}
-		} else {
-			result.push(part);
-		}
-	}
-
-	let path = result.join("/");
-
-	if (isWindowsAbsolute && driveLetter) {
-		path = path.replace(/^[a-zA-Z]:/, "").replace(/^\//, "");
-		path = `${driveLetter}:\\${path.replace(/\//g, "\\")}`.replace(
-			/\\+/g,
-			"\\",
-		);
-		return path || ".";
-	}
-
-	return isAbsolute ? `/${path.replace(/^\//, "")}` : path || ".";
-}
-
-
 // --- From: core/src/compiler/index.ts ---
 import type { Node, KireContext } from '../types';
 import { Kire } from '../kire';
@@ -1486,5 +1427,62 @@ export class Compiler {
   }
 }
 
+
+
+// --- From: core/src/utils/path.ts ---
+/**
+ * Joins path segments and normalizes the resulting path
+ */
+export function join(...segments: string[]): string {
+	if (!segments.length) return ".";
+
+	const windowsAbsoluteRegex = /^[a-zA-Z]:[\\/]/;
+	const isWindowsAbsolute = segments.some((s) => windowsAbsoluteRegex.test(s));
+	const driveLetter = isWindowsAbsolute
+		? segments
+				.find((s) => windowsAbsoluteRegex.test(s))
+				?.charAt(0)
+				.toUpperCase()
+		: null;
+
+	// Normalize all segments at once
+	const normalized = segments
+		.join("/")
+		.replace(/\\/g, "/")
+		.replace(/\/+/g, "/");
+	const isAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(normalized);
+
+	const parts = normalized.split("/");
+	const result: string[] = [];
+	let i = 0;
+
+	while (i < parts.length) {
+		const part = parts[i++];
+		if (!part || part === ".") continue;
+
+		if (part === "..") {
+			if (result.length && result[result.length - 1] !== "..") {
+				result.pop();
+			} else {
+				result.push(part);
+			}
+		} else {
+			result.push(part);
+		}
+	}
+
+	let path = result.join("/");
+
+	if (isWindowsAbsolute && driveLetter) {
+		path = path.replace(/^[a-zA-Z]:/, "").replace(/^\//, "");
+		path = `${driveLetter}:\\${path.replace(/\//g, "\\")}`.replace(
+			/\\+/g,
+			"\\",
+		);
+		return path || ".";
+	}
+
+	return isAbsolute ? `/${path.replace(/^\//, "")}` : path || ".";
+}
 
 

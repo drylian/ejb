@@ -197,32 +197,10 @@
             "path:string",
             "locals:object"
          ],
-         "type": "html",
-         "description": "Includes and renders a template from a given path, optionally passing local variables.",
-         "example": "@include('partials/header', { title: 'Welcome' })"
-      },
-      {
-         "name": "component",
-         "params": [
-            "path:string",
-            "variables:object"
-         ],
          "children": true,
          "type": "html",
-         "description": "Loads a template as a reusable component, allowing content to be passed into named slots.",
-         "example": "@component('card', { title: 'My Card' })\n  @slot('header')\n    <h1>Card Header</h1>\n  @end\n  <p>Default content.</p>\n@end",
-         "parents": [
-            {
-               "name": "slot",
-               "params": [
-                  "name:string"
-               ],
-               "children": true,
-               "type": "html",
-               "description": "Defines a named content slot within a component.",
-               "example": "@slot('header')\n  <h1>This is the header</h1>\n@end"
-            }
-         ]
+         "description": "Includes and renders a template from a given path, optionally passing local variables. Can also wrap content passed as \"content\" variable.",
+         "example": "@include('partials/card')\n  <p>Card content</p>\n@end"
       },
       {
          "name": "slot",
@@ -233,6 +211,17 @@
          "type": "html",
          "description": "Defines a named content slot within a component.",
          "example": "@slot('header')\n  <h1>This is the header</h1>\n@end"
+      },
+      {
+         "name": "component",
+         "params": [
+            "path:string",
+            "variables:object"
+         ],
+         "children": true,
+         "type": "html",
+         "description": "Loads a template as a reusable component, allowing content to be passed into named slots.",
+         "example": "@component('card', { title: 'My Card' })\n  @slot('header')\n    <h1>Card Header</h1>\n  @end\n  <p>Default content.</p>\n@end"
       }
    ],
    "globals": {

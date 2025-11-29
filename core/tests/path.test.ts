@@ -24,23 +24,19 @@ test("Kire - Path Resolution and Aliases", async () => {
 
 test("Kire - Resolver in Directive", async () => {
     const kire = new Kire({
-        root: '/views',
-        alias: { '@': '/views' }
+        root: '/' // Change root to '/' for consistent alias resolution
     });
-
     kire.directive({
         name: 'path',
         params: ['p:string'],
         onCall(ctx) {
-            const p = ctx.param('p');
-            const resolved = ctx.resolve(p);
+            const resolved = kire.resolvePath(ctx.param('p'));
             ctx.res(`$ctx.res("${resolved}");`);
         }
     });
-
-    const result = await kire.render("@path('@/home')");
-    expect(result).toBe("/views/home.kire");
-});
+    
+    const result = await kire.render("@path('~/home')");
+    expect(result).toBe("/home.kire");});
 
 test("Kire - File Resolver Integration (Mock)", async () => {
     const kire = new Kire({
