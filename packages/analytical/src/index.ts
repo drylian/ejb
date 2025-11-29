@@ -1,18 +1,18 @@
-import type { KirePlugin, Kire } from 'kire';
-import { AnalyticalParser } from './parser';
-import { AnalyticalCompiler } from './compiler';
-import './types';
+import type { KirePlugin } from "kire";
+import { AnalyticalCompiler } from "./compiler";
+import { AnalyticalParser } from "./parser";
+import "./types";
 
-export const KireAnalytical:KirePlugin = {
-    name:"@kirejs/analytical",
-    options:{},
-    load(kire, opts) {
-        // This plugin can be used to automatically set the engine
-        kire.parserConstructor = AnalyticalParser;
-        kire.compilerConstructor = AnalyticalCompiler;
-    },
-}
+export const KireAnalytical: KirePlugin = {
+	name: "@kirejs/analytical",
+	options: {},
+	load(kire, _opts) {
+		// This plugin can be used to automatically set the engine
+		kire.parserConstructor = AnalyticalParser;
+		kire.compilerConstructor = AnalyticalCompiler;
+	},
+};
 
 export default KireAnalytical;
-export { AnalyticalParser } from './parser';
-export { AnalyticalCompiler } from './compiler';
+export { AnalyticalCompiler } from "./compiler";
+export { AnalyticalParser } from "./parser";

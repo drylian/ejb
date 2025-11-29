@@ -1,66 +1,72 @@
-import type { KirePlugin, Kire } from 'kire';
-import { readFile } from 'fs/promises';
-import './types';
+import { readFile } from "node:fs/promises";
+import type { Kire, KirePlugin } from "kire";
+import "./types";
 
 // These are global objects that may or may not exist depending on the runtime
 declare const Bun: any;
 declare const Deno: any;
 
 export interface ResolverOptions {
-    adapter?: 'node' | 'bun' | 'deno' | 'fetch';
+	adapter?: "node" | "bun" | "deno" | "fetch";
 }
 
 function createResolver(options: ResolverOptions = {}) {
-    const adapter = options.adapter ?? 'node';
+	const adapter = options.adapter ?? "node";
 
-    return async (path: string): Promise<string> => {
-        // Handle URLs for fetch adapter or if path is a URL
-        if (adapter === 'fetch' || path.startsWith('http://') || path.startsWith('https://')) {
-            try {
-                const response = await fetch(path);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch '${path}': ${response.statusText}`);
-                }
-                return await response.text();
-            } catch (e: any) {
-                throw new Error(`Fetch adapter failed for '${path}': ${e.message}`);
-            }
-        }
+	return async (path: string): Promise<string> => {
+		// Handle URLs for fetch adapter or if path is a URL
+		if (
+			adapter === "fetch" ||
+			path.startsWith("http://") ||
+			path.startsWith("https://")
+		) {
+			try {
+				const response = await fetch(path);
+				if (!response.ok) {
+					throw new Error(`Failed to fetch '${path}': ${response.statusText}`);
+				}
+				return await response.text();
+			} catch (e: any) {
+				throw new Error(`Fetch adapter failed for '${path}': ${e.message}`);
+			}
+		}
 
-        // Handle file paths for runtime-specific adapters
-        try {
-            switch (adapter) {
-                case 'bun':
-                    if (typeof Bun === 'undefined') throw new Error('Bun runtime is not available.');
-                    return await Bun.file(path).text();
-                case 'deno':
-                    if (typeof Deno === 'undefined') throw new Error('Deno runtime is not available.');
-                    return await Deno.readTextFile(path);
-                case 'node':
-                default:
-                    return await readFile(path, 'utf-8');
-            }
-        } catch (e: any) {
-            throw new Error(`Failed to read file '${path}' with ${adapter} adapter: ${e.message}`);
-        }
-    };
+		// Handle file paths for runtime-specific adapters
+		try {
+			switch (adapter) {
+				case "bun":
+					if (typeof Bun === "undefined")
+						throw new Error("Bun runtime is not available.");
+					return await Bun.file(path).text();
+				case "deno":
+					if (typeof Deno === "undefined")
+						throw new Error("Deno runtime is not available.");
+					return await Deno.readTextFile(path);
+				default:
+					return await readFile(path, "utf-8");
+			}
+		} catch (e: any) {
+			throw new Error(
+				`Failed to read file '${path}' with ${adapter} adapter: ${e.message}`,
+			);
+		}
+	};
 }
-
 
 export const KireResolver: KirePlugin<ResolverOptions> = {
-    name:"@kirejs/resolver",
-    options:{},
-    load(kire: Kire, opts) {
-        // Assign the new resolver
-        kire.resolverFn = createResolver(opts);
+	name: "@kirejs/resolver",
+	options: {},
+	load(kire: Kire, opts) {
+		// Assign the new resolver
+		kire.resolverFn = createResolver(opts);
 
-        // Add the .view() method to the Kire instance
-        kire.view = function(filepath: string, locals: Record<string, any> = {}) {
-            // 'this' refers to the Kire instance on which .view() is called
-            return this.render(filepath, locals);
-        };
-    },
-}
+		// Add the .view() method to the Kire instance
+		kire.view = function (filepath: string, locals: Record<string, any> = {}) {
+			// 'this' refers to the Kire instance on which .view() is called
+			return this.render(filepath, locals);
+		};
+	},
+};
 
 export default KireResolver;
 export { createResolver };

@@ -1,121 +1,140 @@
 import type { Kire } from "./kire";
 
 export interface KireConfig {
-  globals?: Record<string, any>;
-  // Add other config options as needed
+	globals?: Record<string, any>;
+	// Add other config options as needed
 }
 
 export interface IParser {
-  parse(): Node[];
+	parse(): Node[];
 }
 export type IParserConstructor = new (template: string, kire: Kire) => IParser;
 
 export interface ICompiler {
-  compile(nodes: Node[]): Promise<string>;
+	compile(nodes: Node[]): Promise<string>;
 }
 export type ICompilerConstructor = new (kire: Kire) => ICompiler;
 
-
 export interface KireOptions {
-  root?: string;
-  cache?: boolean;
-  resolver?: (filename: string) => Promise<string>;
-  alias?: Record<string, string>;
-  extension?: string;
-  directives?: boolean;
-  plugins?: (KirePlugin | [KirePlugin, any])[];
-  engine?: {
-    parser?: IParserConstructor;
-    compiler?: ICompilerConstructor;
-  }
+	root?: string;
+	cache?: boolean;
+	resolver?: (filename: string) => Promise<string>;
+	alias?: Record<string, string>;
+	extension?: string;
+	directives?: boolean;
+	plugins?: (KirePlugin | [KirePlugin, any])[];
+	engine?: {
+		parser?: IParserConstructor;
+		compiler?: ICompilerConstructor;
+	};
 }
 
 export interface KireContext {
-  param(name: string | number): any;
-  render(content: string): Promise<string>; // Returns compiled function string
-  func(code: string): string; // Wraps code in a function definition
-  pre(code: string): void;
-  res(code: string): void;
-  pos(code: string): void;
-  error(message: string): void;
-  resolve(path: string): string;
+	param(name: string | number): any;
+	render(content: string): Promise<string>; // Returns compiled function string
+	func(code: string): string; // Wraps code in a function definition
+	pre(code: string): void;
+	res(code: string): void;
+	pos(code: string): void;
+	error(message: string): void;
+	resolve(path: string): string;
 
-  // For nested directives
-  children?: Node[];
-  parents?: Node[]; // The instances of sub-directives (e.g., elseif blocks)
-  set(nodes: Node[]): Promise<void>;
+	// For nested directives
+	children?: Node[];
+	parents?: Node[]; // The instances of sub-directives (e.g., elseif blocks)
+	set(nodes: Node[]): Promise<void>;
 
-  // Context management (compile-time, generates code)
-  clone(locals?: Record<string, any>): KireContext; // Returns code string for cloning
-  clear(): KireContext; // Returns code string for clearing
+	// Context management (compile-time, generates code)
+	clone(locals?: Record<string, any>): KireContext; // Returns code string for cloning
+	clear(): KireContext; // Returns code string for clearing
 }
 
 export interface KireElementContext {
-  content: string; // The global HTML content (mutable/readable state representation)
-  element: {
-    tagName: string;
-    attributes: Record<string, string>;
-    inner: string;
-    outer: string;
-  };
-  // Method to update the global content
-  update(newContent: string): void;
-  replace(replacement: string): void;
-  replaceContent(replacement: string): void;
+	content: string; // The global HTML content (mutable/readable state representation)
+	element: {
+		tagName: string;
+		attributes: Record<string, string>;
+		inner: string;
+		outer: string;
+	};
+	// Method to update the global content
+	update(newContent: string): void;
+	replace(replacement: string): void;
+	replaceContent(replacement: string): void;
 }
 
-export interface KireElementHandler {
-  (ctx: KireElementContext): Promise<void> | void;
-}
+export type KireElementHandler = (
+	ctx: KireElementContext,
+) => Promise<void> | void;
 
 export interface KireElementOptions {
-  void?: boolean;
+	void?: boolean;
 }
 
 export interface KireHooks {
-    onBewareDirectives?: ((compiler: ICompiler) => void | string) | ((compiler: ICompiler) => void | string)[];
-    onAfterDirectives?: ((ctx: KireContext) => void | Promise<void>) | ((ctx: KireContext) => void | Promise<void>)[];
-    onBewareElements?: ((ctx: KireContext, html: string) => void | string | Promise<string | void>) | ((ctx: KireContext, html: string) => void | string | Promise<string | void>)[];
-    onAfterElements?: ((ctx: KireContext, html: string) => void | string | Promise<string | void>) | ((ctx: KireContext, html: string) => void | string | Promise<string | void>)[];
+	onBewareDirectives?:
+		| ((compiler: ICompiler) => undefined | string)
+		| ((compiler: ICompiler) => undefined | string)[];
+	onAfterDirectives?:
+		| ((ctx: KireContext) => void | Promise<void>)
+		| ((ctx: KireContext) => void | Promise<void>)[];
+	onBewareElements?:
+		| ((
+				ctx: KireContext,
+				html: string,
+		  ) => undefined | string | Promise<string | undefined>)
+		| ((
+				ctx: KireContext,
+				html: string,
+		  ) => undefined | string | Promise<string | undefined>)[];
+	onAfterElements?:
+		| ((
+				ctx: KireContext,
+				html: string,
+		  ) => undefined | string | Promise<string | undefined>)
+		| ((
+				ctx: KireContext,
+				html: string,
+		  ) => undefined | string | Promise<string | undefined>)[];
 }
 
 export interface DirectiveDefinition {
-  name: string;
-  params?: string[]; // e.g. ['filepath:string']
-  children?: boolean; // Does this directive accept a block ending with @end?
-  childrenRaw?: boolean; // Should the children be treated as raw text?
-  parents?: DirectiveDefinition[]; // Sub-directives like elseif/else
-  onCall: (ctx: KireContext) => void | Promise<void>;
-  description?: string;
-  example?: string;
-  type?: 'css' | 'js' | 'html';
+	name: string;
+	params?: string[]; // e.g. ['filepath:string']
+	children?: boolean; // Does this directive accept a block ending with @end?
+	childrenRaw?: boolean; // Should the children be treated as raw text?
+	parents?: DirectiveDefinition[]; // Sub-directives like elseif/else
+	onCall: (ctx: KireContext) => void | Promise<void>;
+	description?: string;
+	example?: string;
+	type?: "css" | "js" | "html";
 }
 
 export interface KireSchematic {
-  package: string;
-  repository?: string | { type: string; url: string };
-  version?: string;
-  directives?: DirectiveDefinition[];
-  globals?: Record<string, any>
+	package: string;
+	repository?: string | { type: string; url: string };
+	version?: string;
+	directives?: DirectiveDefinition[];
+	globals?: Record<string, any>;
 }
 
-export interface KirePlugin<Options extends (object | undefined) = {}> {
-  name: string;
-  sort?: number;
-  options: Options;
-  load(kire: Kire, opts?: Options): void;
+export interface KirePlugin<Options extends object | undefined = {}> {
+	name: string;
+	sort?: number;
+	options: Options;
+	load(kire: Kire, opts?: Options): void;
 }
 
 // AST Types
-export type NodeType = 'text' | 'variable' | 'directive';
+export type NodeType = "text" | "variable" | "directive";
 
 export interface Node {
-  type: NodeType;
-  content?: string;
-  name?: string; // For directives
-  args?: any[]; // For directives
-  start?: number;
-  end?: number;
-  children?: Node[]; // Inner content
-  related?: Node[]; // For 'parents' (elseif, etc)
+	type: NodeType;
+	content?: string;
+	name?: string; // For directives
+	args?: any[]; // For directives
+	start?: number;
+	end?: number;
+	children?: Node[]; // Inner content
+	related?: Node[]; // For 'parents' (elseif, etc)
 }

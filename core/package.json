@@ -40,7 +40,6 @@
 	"homepage": "https://github.com/drylian/kire#readme",
 	"scripts": {
 		"build": "bun run build.ts",
-		"test": "bun test",
-		"check": "bunx biome check src/** --write"
+		"test": "bun test"
 	}
 }

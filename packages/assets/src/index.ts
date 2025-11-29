@@ -1,10 +1,10 @@
-import type { KirePlugin, Kire } from 'kire';
-import { createHash } from 'crypto';
+import { createHash } from "node:crypto";
+import type { Kire, KirePlugin } from "kire";
 
 interface Asset {
-    hash: string;
-    content: string;
-    type: 'js' | 'css';
+	hash: string;
+	content: string;
+	type: "js" | "css";
 }
 
 // Global cache to store asset content by hash
@@ -12,177 +12,196 @@ interface Asset {
 export const assetsCache = new Map<string, Asset>();
 
 interface KireAssetsOptions {
-    prefix?: string;
-    domain?: string;
+	prefix?: string;
+	domain?: string;
 }
 
 // Extend KireContext to include our assets collection
-declare module 'kire' {
-    interface KireContext {
-        _assets?: {
-            scripts: string[]; // List of hashes
-            styles: string[]; // List of hashes
-        };
-    }
+declare module "kire" {
+	interface KireContext {
+		_assets?: {
+			scripts: string[]; // List of hashes
+			styles: string[]; // List of hashes
+		};
+	}
 }
 
 export const KireAssets: KirePlugin<KireAssetsOptions> = {
-    name: '@kirejs/assets',
-    sort: 200,
-    options: {
-        prefix: '_kire'
-    },
-    load(kire: Kire, opts) {
-        const prefix = opts?.prefix || '_kire';
-        const domain = opts?.domain || '';
-        const injectionTag = 'kire-assets-injection-point';
+	name: "@kirejs/assets",
+	sort: 200,
+	options: {
+		prefix: "_kire",
+	},
+	load(kire: Kire, opts) {
+		const prefix = opts?.prefix || "_kire";
+		const domain = opts?.domain || "";
+		const injectionTag = "kire-assets-injection-point";
 
-        // 1. Register handlers for script and style tags to capture inline content
-        // Important: Register these BEFORE the injection tag handler so they run first
-        
-        // Handle <style>
-        kire.element('style', (ctx) => {
-            const content = ctx.element.inner;
-            if (!content.trim()) return;
+		// 1. Register handlers for script and style tags to capture inline content
+		// Important: Register these BEFORE the injection tag handler so they run first
 
-            // Generate hash
-            const hash = createHash('sha256').update(content).digest('hex').slice(0, 8);
-            
-            // Store in global cache
-            if (!assetsCache.has(hash)) {
-                assetsCache.set(hash, { hash, content, type: 'css' });
-            }
+		// Handle <style>
+		kire.element("style", (ctx) => {
+			const content = ctx.element.inner;
+			if (!content.trim()) return;
 
-            // Add to request context
-            // We need to access the shared request context. 
-            // ctx is a clone, but if _assets was initialized on the parent context as an object, 
-            // the reference is shared.
-            if (ctx._assets) {
-                ctx._assets.styles.push(hash);
-                // Remove the original tag
-                ctx.replace('');
-            }
-        });
+			// Generate hash
+			const hash = createHash("sha256")
+				.update(content)
+				.digest("hex")
+				.slice(0, 8);
 
-        // Handle <script>
-        kire.element('script', (ctx) => {
-            // Check if it's an inline script (no src attribute)
-            if (ctx.element.attributes.src) return;
-            
-            const content = ctx.element.inner;
-            if (!content.trim()) return;
+			// Store in global cache
+			if (!assetsCache.has(hash)) {
+				assetsCache.set(hash, { hash, content, type: "css" });
+			}
 
-            const hash = createHash('sha256').update(content).digest('hex').slice(0, 8);
-            
-            if (!assetsCache.has(hash)) {
-                assetsCache.set(hash, { hash, content, type: 'js' });
-            }
+			// Add to request context
+			// We need to access the shared request context.
+			// ctx is a clone, but if _assets was initialized on the parent context as an object,
+			// the reference is shared.
+			if (ctx._assets) {
+				ctx._assets.styles.push(hash);
+				// Remove the original tag
+				ctx.replace("");
+			}
+		});
 
-            if (ctx._assets) {
-                ctx._assets.scripts.push(hash);
-                ctx.replace('');
-            }
-        });
+		// Handle <script>
+		kire.element("script", (ctx) => {
+			// Check if it's an inline script (no src attribute)
+			if (ctx.element.attributes.src) return;
 
-        // 2. Register directive @assets()
-        kire.directive({
-            name: 'assets',
-            onCall(ctx) {
-                // Initialize the assets collection for this request
-                ctx.pre(`$ctx._assets = { scripts: [], styles: [] };`);
-                // Output the placeholder tag
-                ctx.res(`$ctx.res('<${injectionTag}></${injectionTag}>');`);
-            }
-        });
+			const content = ctx.element.inner;
+			if (!content.trim()) return;
 
-        // 3. Register handler for the injection point
-        kire.element(injectionTag, (ctx) => {
-            if (!ctx._assets) {
-                ctx.replace('');
-                return;
-            }
+			const hash = createHash("sha256")
+				.update(content)
+				.digest("hex")
+				.slice(0, 8);
 
-            let output = '';
-            const baseUrl = domain ? `${domain}/${prefix}` : `/${prefix}`;
+			if (!assetsCache.has(hash)) {
+				assetsCache.set(hash, { hash, content, type: "js" });
+			}
 
-            // Generate links for styles
-            // Use Set to avoid duplicates if any
-            const uniqueStyles = [...new Set(ctx._assets.styles)];
-            for (const hash of uniqueStyles) {
-                output += `<link rel="stylesheet" href="${baseUrl}/${hash}.css" />\n`;
-            }
+			if (ctx._assets) {
+				ctx._assets.scripts.push(hash);
+				ctx.replace("");
+			}
+		});
 
-            // Generate scripts
-            const uniqueScripts = [...new Set(ctx._assets.scripts)];
-            for (const hash of uniqueScripts) {
-                output += `<script src="${baseUrl}/${hash}.js" defer></script>\n`;
-            }
+		// 2. Register directive @assets()
+		kire.directive({
+			name: "assets",
+			onCall(ctx) {
+				// Initialize the assets collection for this request
+				ctx.pre(`$ctx._assets = { scripts: [], styles: [] };`);
+				// Output the placeholder tag
+				ctx.res(`$ctx.res('<${injectionTag}></${injectionTag}>');`);
+			},
+		});
 
-            ctx.replace(output);
-        });
-    }
+		// 3. Register handler for the injection point
+		kire.element(injectionTag, (ctx) => {
+			if (!ctx._assets) {
+				ctx.replace("");
+				return;
+			}
+
+			let output = "";
+			const baseUrl = domain ? `${domain}/${prefix}` : `/${prefix}`;
+
+			// Generate links for styles
+			// Use Set to avoid duplicates if any
+			const uniqueStyles = [...new Set(ctx._assets.styles)];
+			for (const hash of uniqueStyles) {
+				output += `<link rel="stylesheet" href="${baseUrl}/${hash}.css" />\n`;
+			}
+
+			// Generate scripts
+			const uniqueScripts = [...new Set(ctx._assets.scripts)];
+			for (const hash of uniqueScripts) {
+				output += `<script src="${baseUrl}/${hash}.js" defer></script>\n`;
+			}
+
+			ctx.replace(output);
+		});
+	},
 };
 
-function getAssetFromPath(path: string): { content: string, type: 'js' | 'css' } | null {
-    // Validate path and extract hash/type
-    // Ensures path ends with /hash.ext to prevent directory traversal
-    const match = path.match(/\/([a-f0-9]{8})\.(js|css)$/);
-    if (!match) return null;
+function getAssetFromPath(
+	path: string,
+): { content: string; type: "js" | "css" } | null {
+	// Validate path and extract hash/type
+	// Ensures path ends with /hash.ext to prevent directory traversal
+	const match = path.match(/\/([a-f0-9]{8})\.(js|css)$/);
+	if (!match) return null;
 
-    const hash = match[1];
-    const ext = match[2] as 'js' | 'css';
-    
-    const asset = assetsCache.get(hash!);
-    if (asset && asset.type === ext) {
-        return { content: asset.content, type: ext };
-    }
-    return null;
+	const hash = match[1];
+	const ext = match[2] as "js" | "css";
+
+	const asset = assetsCache.get(hash!);
+	if (asset && asset.type === ext) {
+		return { content: asset.content, type: ext };
+	}
+	return null;
 }
 
 export const KireFS = {
-    // Express middleware
-    express: (req: any, res: any, next: any) => {
-        const asset = getAssetFromPath(req.path || req.url);
-        if (asset) {
-             res.setHeader('Content-Type', asset.type === 'js' ? 'application/javascript' : 'text/css');
-             res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-             return res.send(asset.content);
-        }
-        next();
-    },
-    
-    // Fastify handler
-    fastify: async (req: any, reply: any) => {
-        const asset = getAssetFromPath(req.raw.url || req.url); 
-        if (asset) {
-             reply.header('Content-Type', asset.type === 'js' ? 'application/javascript' : 'text/css');
-             reply.header('Cache-Control', 'public, max-age=31536000, immutable');
-             return reply.send(asset.content);
-        }
-        // Fallback for Fastify route handler if not found
-        return reply.code(404).send('Not Found');
-    },
+	// Express middleware
+	express: (req: any, res: any, next: any) => {
+		const asset = getAssetFromPath(req.path || req.url);
+		if (asset) {
+			res.setHeader(
+				"Content-Type",
+				asset.type === "js" ? "application/javascript" : "text/css",
+			);
+			res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+			return res.send(asset.content);
+		}
+		next();
+	},
 
-    // Hono middleware
-    hono: async (c: any, next: any) => {
-        const asset = getAssetFromPath(c.req.path);
-        if (asset) {
-            c.header('Content-Type', asset.type === 'js' ? 'application/javascript' : 'text/css');
-            c.header('Cache-Control', 'public, max-age=31536000, immutable');
-            return c.body(asset.content);
-        }
-        await next();
-    },
+	// Fastify handler
+	fastify: async (req: any, reply: any) => {
+		const asset = getAssetFromPath(req.raw.url || req.url);
+		if (asset) {
+			reply.header(
+				"Content-Type",
+				asset.type === "js" ? "application/javascript" : "text/css",
+			);
+			reply.header("Cache-Control", "public, max-age=31536000, immutable");
+			return reply.send(asset.content);
+		}
+		// Fallback for Fastify route handler if not found
+		return reply.code(404).send("Not Found");
+	},
 
-    // Elysia handler
-    elysia: (context: any) => {
-         const asset = getAssetFromPath(context.path);
-         if (asset) {
-             context.set.headers['Content-Type'] = asset.type === 'js' ? 'application/javascript' : 'text/css';
-             context.set.headers['Cache-Control'] = 'public, max-age=31536000, immutable';
-             return asset.content;
-         }
-    }
+	// Hono middleware
+	hono: async (c: any, next: any) => {
+		const asset = getAssetFromPath(c.req.path);
+		if (asset) {
+			c.header(
+				"Content-Type",
+				asset.type === "js" ? "application/javascript" : "text/css",
+			);
+			c.header("Cache-Control", "public, max-age=31536000, immutable");
+			return c.body(asset.content);
+		}
+		await next();
+	},
+
+	// Elysia handler
+	elysia: (context: any) => {
+		const asset = getAssetFromPath(context.path);
+		if (asset) {
+			context.set.headers["Content-Type"] =
+				asset.type === "js" ? "application/javascript" : "text/css";
+			context.set.headers["Cache-Control"] =
+				"public, max-age=31536000, immutable";
+			return asset.content;
+		}
+	},
 };
 
 export default KireAssets;

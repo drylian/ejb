@@ -1,325 +1,357 @@
-import type { Kire, Node, DirectiveDefinition } from 'kire';
-import './types'; // This is for module augmentation
+import type { DirectiveDefinition, Kire, Node } from "kire";
+import "./types"; // This is for module augmentation
 
 export class AnalyticalParser {
-  private cursor = 0;
-  private line = 1;
-  private column = 1;
-  private stack: Node[] = [];
-  private rootChildren: Node[] = [];
+	private cursor = 0;
+	private line = 1;
+	private column = 1;
+	private stack: Node[] = [];
+	private rootChildren: Node[] = [];
 
-  constructor(private template: string, private kire: Kire, private source = 'template') {}
+	constructor(
+		private template: string,
+		private kire: Kire,
+		private source = "template",
+	) {}
 
-  private getPosition() {
-    return { line: this.line, column: this.column, offset: this.cursor };
-  }
+	private getPosition() {
+		return { line: this.line, column: this.column, offset: this.cursor };
+	}
 
-  public parse(): Node[] {
-    this.cursor = 0;
-    this.stack = [];
-    this.rootChildren = [];
-    
-    while (this.cursor < this.template.length) {
-      const remaining = this.template.slice(this.cursor);
-      const startPos = this.getPosition();
+	public parse(): Node[] {
+		this.cursor = 0;
+		this.stack = [];
+		this.rootChildren = [];
 
-      // Check for interpolation {{ ... }}
-      const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
-      if (interpolationMatch) {
-        const fullMatch = interpolationMatch[0];
-        const content = interpolationMatch[1]!.trim();
-        this.advance(fullMatch);
-        const endPos = this.getPosition();
-        this.addNode({
-          type: 'variable',
-          content: content,
-          start: startPos.offset,
-          end: endPos.offset,
-          loc: { source: this.source, start: startPos, end: endPos },
-        });
-        continue;
-      }
+		while (this.cursor < this.template.length) {
+			const remaining = this.template.slice(this.cursor);
+			const startPos = this.getPosition();
 
-      // Check for escaped directive @@
-      if (remaining.startsWith('@@')) {
-          this.advance('@@');
-          const endPos = this.getPosition();
-          this.addNode({
-              type: 'text',
-              content: '@',
-              start: startPos.offset,
-              end: endPos.offset,
-              loc: { source: this.source, start: startPos, end: endPos },
-          });
-          continue;
-      }
+			// Check for interpolation {{ ... }}
+			const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
+			if (interpolationMatch) {
+				const fullMatch = interpolationMatch[0];
+				const content = interpolationMatch[1]?.trim();
+				this.advance(fullMatch);
+				const endPos = this.getPosition();
+				this.addNode({
+					type: "variable",
+					content: content,
+					start: startPos.offset,
+					end: endPos.offset,
+					loc: { source: this.source, start: startPos, end: endPos },
+				});
+				continue;
+			}
 
-      // Check for directive @name(...)
-      const directiveStartMatch = remaining.match(/^@(\w+)/);
-      if (directiveStartMatch) {
-        const [fullMatch, name] = directiveStartMatch;
-        
-        // Check if it has arguments
-        let argsStr = undefined;
-        let argsEndIndex = fullMatch.length;
-        
-        if (remaining.startsWith('(', fullMatch.length)) {
-            // Parse arguments with balanced parentheses
-            let depth = 1;
-            let i = fullMatch.length + 1;
-            let inQuote = false;
-            let quoteChar = '';
-            
-            while (i < remaining.length && depth > 0) {
-                const char = remaining[i];
-                if ((char === '"' || char === "'") && remaining[i-1] !== '\\') {
-                    if (inQuote && char === quoteChar) {
-                        inQuote = false;
-                    } else if (!inQuote) {
-                        inQuote = true;
-                        quoteChar = char;
-                    }
-                }
-                
-                if (!inQuote) {
-                    if (char === '(') depth++;
-                    else if (char === ')') depth--;
-                }
-                i++;
-            }
-            
-            if (depth === 0) {
-                argsStr = remaining.slice(fullMatch.length + 1, i - 1);
-                argsEndIndex = i;
-            }
-        }
+			// Check for escaped directive @@
+			if (remaining.startsWith("@@")) {
+				this.advance("@@");
+				const endPos = this.getPosition();
+				this.addNode({
+					type: "text",
+					content: "@",
+					start: startPos.offset,
+					end: endPos.offset,
+					loc: { source: this.source, start: startPos, end: endPos },
+				});
+				continue;
+			}
 
-        if (name === 'end') {
-            const popped = this.handleEndDirective();
-            if (popped) {
-                this.advance(remaining.slice(0, argsEndIndex)); // Advance full length
-                popped.end = this.cursor;
-                if (popped.loc) popped.loc.end = this.getPosition();
-            } else {
-                this.advance(remaining.slice(0, argsEndIndex));
-            }
-            continue;
-        }
+			// Check for directive @name(...)
+			const directiveStartMatch = remaining.match(/^@(\w+)/);
+			if (directiveStartMatch) {
+				const [fullMatch, name] = directiveStartMatch;
 
-        const directiveDef = this.kire.getDirective(name!);
-        
-        // Check for sub-directive (parent logic)
-        if (this.stack.length > 0) {
-            const currentParent = this.stack[this.stack.length - 1];
-            const parentDef = this.kire.getDirective(currentParent!.name!);
-            
-            if (parentDef?.parents) {
-                const subDef = parentDef.parents.find(p => p.name === name);
-                if (subDef) {
-                    this.handleSubDirective(name!, argsStr, remaining.slice(0, argsEndIndex), currentParent!, subDef, startPos);
-                    this.advance(remaining.slice(0, argsEndIndex));
-                    continue;
-                }
-            }
-        }
+				// Check if it has arguments
+				let argsStr: string;
+				let argsEndIndex = fullMatch.length;
 
-        // If not a registered directive treat as text
-        if (!directiveDef) {
-             this.advance(fullMatch); // Only advance the name part? 
-             // If we advanced fully, we'd swallow args of unknown directive.
-             // Existing logic treated it as text: `this.advance(fullMatch)`.
-             // Here `fullMatch` is just `@name`.
-             // So we output `@name` and args remain as text next loop.
-             // Wait, next loop `(` starts args. `(` is treated as text.
-             // So `@foo(bar)` becomes `@foo` (text) + `(bar)` (text). Correct.
-             
-             const endPos = this.getPosition();
-             this.addNode({
-                 type: 'text',
-                 content: fullMatch,
-                 start: startPos.offset,
-                 end: endPos.offset,
-                 loc: { source: this.source, start: startPos, end: endPos },
-             });
-             continue;
-        }
+				if (remaining.startsWith("(", fullMatch.length)) {
+					// Parse arguments with balanced parentheses
+					let depth = 1;
+					let i = fullMatch.length + 1;
+					let inQuote = false;
+					let quoteChar = "";
 
-        const args = argsStr ? this.parseArgs(argsStr) : [];
-        
-        // Calculate end pos before advance? No, usually we advance.
-        // We need to advance `argsEndIndex`.
-        const contentStr = remaining.slice(0, argsEndIndex);
-        this.advance(contentStr);
-        const endPos = this.getPosition();
+					while (i < remaining.length && depth > 0) {
+						const char = remaining[i];
+						if ((char === '"' || char === "'") && remaining[i - 1] !== "\\") {
+							if (inQuote && char === quoteChar) {
+								inQuote = false;
+							} else if (!inQuote) {
+								inQuote = true;
+								quoteChar = char;
+							}
+						}
 
-        const node: Node = {
-          type: 'directive',
-          name: name,
-          args: args,
-          start: startPos.offset,
-          end: endPos.offset,
-          loc: { source: this.source, start: startPos, end: endPos },
-          children: [],
-          related: []
-        };
-        this.addNode(node);
+						if (!inQuote) {
+							if (char === "(") depth++;
+							else if (char === ")") depth--;
+						}
+						i++;
+					}
 
-        if (directiveDef.children) {
-            this.stack.push(node);
-        }
-        
-        continue;
-      }
+					if (depth === 0) {
+						argsStr = remaining.slice(fullMatch.length + 1, i - 1);
+						argsEndIndex = i;
+					}
+				}
 
-      // Text
-      const nextInterpolation = remaining.indexOf('{{');
-      const nextDirective = remaining.indexOf('@');
-      
-      let nextIndex = -1;
-      if (nextInterpolation !== -1 && nextDirective !== -1) {
-        nextIndex = Math.min(nextInterpolation, nextDirective);
-      } else if (nextInterpolation !== -1) {
-        nextIndex = nextInterpolation;
-      } else if (nextDirective !== -1) {
-        nextIndex = nextDirective;
-      }
+				if (name === "end") {
+					const popped = this.handleEndDirective();
+					if (popped) {
+						this.advance(remaining.slice(0, argsEndIndex)); // Advance full length
+						popped.end = this.cursor;
+						if (popped.loc) popped.loc.end = this.getPosition();
+					} else {
+						this.advance(remaining.slice(0, argsEndIndex));
+					}
+					continue;
+				}
 
-      if (nextIndex === -1) {
-        this.advance(remaining);
-        const endPos = this.getPosition();
-        this.addNode({
-          type: 'text',
-          content: remaining,
-          start: startPos.offset,
-          end: endPos.offset,
-          loc: { source: this.source, start: startPos, end: endPos },
-        });
-      } else {
-        const text = remaining.slice(0, nextIndex > 0 ? nextIndex : 1);
-        this.advance(text);
-        const endPos = this.getPosition();
-        this.addNode({
-          type: 'text',
-          content: text,
-          start: startPos.offset,
-          end: endPos.offset,
-          loc: { source: this.source, start: startPos, end: endPos },
-        });
-      }
-    }
-    
-    return this.rootChildren;
-  }
+				const directiveDef = this.kire.getDirective(name as string);
 
-  private handleEndDirective(): Node | undefined {
-      if (this.stack.length === 0) return undefined;
-      const popped = this.stack.pop();
-      
-      if (this.stack.length > 0) {
-          const parent = this.stack[this.stack.length - 1];
-          if (parent?.related?.includes(popped!)) {
-              // This is a chained directive like `@elseif`, so its parent (`@if`) should be closed by the same `@end`
-              return this.stack.pop();
-          }
-      }
-      return popped;
-  }
+				// Check for sub-directive (parent logic)
+				if (this.stack.length > 0) {
+					const currentParent = this.stack[this.stack.length - 1];
+					const parentDef = this.kire.getDirective(
+						currentParent?.name as string,
+					);
 
-  private handleSubDirective(name: string, argsStr: string | undefined, fullMatch: string, parentNode: Node, subDef: DirectiveDefinition, startPos: any) {
-      const args = argsStr ? this.parseArgs(argsStr) : [];
-      this.advance(fullMatch);
-      const endPos = this.getPosition();
-      
-      const node: Node = {
-          type: 'directive',
-          name: name,
-          args: args,
-          start: startPos.offset,
-          end: endPos.offset,
-          loc: { source: this.source, start: startPos, end: endPos },
-          children: [],
-          related: []
-      };
-      
-      parentNode.related ??= [];
-      parentNode.related.push(node);
-      
-      if (subDef.children) {
-          // Pop the parent `if` and push the `elseif`
-          this.stack.pop();
-          this.stack.push(parentNode);
-          this.stack.push(node);
-      }
-  }
+					if (parentDef?.parents) {
+						const subDef = parentDef.parents.find((p) => p.name === name);
+						if (subDef) {
+							this.handleSubDirective(
+								name as string,
+								argsStr,
+								remaining.slice(0, argsEndIndex),
+								currentParent as Node,
+								subDef,
+								startPos,
+							);
+							this.advance(remaining.slice(0, argsEndIndex));
+							continue;
+						}
+					}
+				}
 
-  private addNode(node: Node) {
-      if (this.stack.length > 0) {
-          const current = this.stack[this.stack.length - 1];
-          current!.children ??= [];
-          current!.children.push(node);
-      } else {
-          this.rootChildren.push(node);
-      }
-  }
+				// If not a registered directive treat as text
+				if (!directiveDef) {
+					this.advance(fullMatch); // Only advance the name part?
+					// If we advanced fully, we'd swallow args of unknown directive.
+					// Existing logic treated it as text: `this.advance(fullMatch)`.
+					// Here `fullMatch` is just `@name`.
+					// So we output `@name` and args remain as text next loop.
+					// Wait, next loop `(` starts args. `(` is treated as text.
+					// So `@foo(bar)` becomes `@foo` (text) + `(bar)` (text). Correct.
 
-  private advance(str: string) {
-    const lines = str.split('\n');
-    if (lines.length > 1) {
-      this.line += lines.length - 1;
-      this.column = lines[lines.length - 1]!.length + 1;
-    } else {
-      this.column += str.length;
-    }
-    this.cursor += str.length;
-  }
+					const endPos = this.getPosition();
+					this.addNode({
+						type: "text",
+						content: fullMatch,
+						start: startPos.offset,
+						end: endPos.offset,
+						loc: { source: this.source, start: startPos, end: endPos },
+					});
+					continue;
+				}
 
-  private parseArgs(argsStr: string): any[] {
-     const args: any[] = [];
-     let current = '';
-     let inQuote = false;
-     let quoteChar = '';
-     let braceDepth = 0;
-     let bracketDepth = 0;
-     let parenDepth = 0;
-     
-     for (let i = 0; i < argsStr.length; i++) {
-       const char = argsStr[i];
-       
-       if ((char === '"' || char === "'") && (i === 0 || argsStr[i-1] !== '\\')) {
-         if (inQuote && char === quoteChar) {
-           inQuote = false;
-         } else if (!inQuote) {
-           inQuote = true;
-           quoteChar = char;
-         }
-       }
-       
-       if (!inQuote) {
-           if (char === '{') braceDepth++;
-           else if (char === '}') braceDepth--;
-           else if (char === '[') bracketDepth++;
-           else if (char === ']') bracketDepth--;
-           else if (char === '(') parenDepth++;
-           else if (char === ')') parenDepth--;
-       }
-       
-       if (char === ',' && !inQuote && braceDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
-         args.push(current.trim());
-         current = '';
-       } else {
-         current += char;
-       }
-     }
-     if (current) args.push(current.trim());
-     
-     return args.map(arg => {
-         if ((arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'") && arg.endsWith("'"))) {
-             return arg.slice(1, -1);
-         }
-         if (arg === 'true') return true;
-         if (arg === 'false') return false;
-         if (!isNaN(Number(arg))) return Number(arg);
-         return arg;
-     });
-  }
+				const args = argsStr ? this.parseArgs(argsStr) : [];
+
+				// Calculate end pos before advance? No, usually we advance.
+				// We need to advance `argsEndIndex`.
+				const contentStr = remaining.slice(0, argsEndIndex);
+				this.advance(contentStr);
+				const endPos = this.getPosition();
+
+				const node: Node = {
+					type: "directive",
+					name: name,
+					args: args,
+					start: startPos.offset,
+					end: endPos.offset,
+					loc: { source: this.source, start: startPos, end: endPos },
+					children: [],
+					related: [],
+				};
+				this.addNode(node);
+
+				if (directiveDef.children) {
+					this.stack.push(node);
+				}
+
+				continue;
+			}
+
+			// Text
+			const nextInterpolation = remaining.indexOf("{{");
+			const nextDirective = remaining.indexOf("@");
+
+			let nextIndex = -1;
+			if (nextInterpolation !== -1 && nextDirective !== -1) {
+				nextIndex = Math.min(nextInterpolation, nextDirective);
+			} else if (nextInterpolation !== -1) {
+				nextIndex = nextInterpolation;
+			} else if (nextDirective !== -1) {
+				nextIndex = nextDirective;
+			}
+
+			if (nextIndex === -1) {
+				this.advance(remaining);
+				const endPos = this.getPosition();
+				this.addNode({
+					type: "text",
+					content: remaining,
+					start: startPos.offset,
+					end: endPos.offset,
+					loc: { source: this.source, start: startPos, end: endPos },
+				});
+			} else {
+				const text = remaining.slice(0, nextIndex > 0 ? nextIndex : 1);
+				this.advance(text);
+				const endPos = this.getPosition();
+				this.addNode({
+					type: "text",
+					content: text,
+					start: startPos.offset,
+					end: endPos.offset,
+					loc: { source: this.source, start: startPos, end: endPos },
+				});
+			}
+		}
+
+		return this.rootChildren;
+	}
+
+	private handleEndDirective(): Node | undefined {
+		if (this.stack.length === 0) return undefined;
+		const popped = this.stack.pop();
+
+		if (this.stack.length > 0) {
+			const parent = this.stack[this.stack.length - 1];
+			if (parent?.related?.includes(popped!)) {
+				// This is a chained directive like `@elseif`, so its parent (`@if`) should be closed by the same `@end`
+				return this.stack.pop();
+			}
+		}
+		return popped;
+	}
+
+	private handleSubDirective(
+		name: string,
+		argsStr: string | undefined,
+		fullMatch: string,
+		parentNode: Node,
+		subDef: DirectiveDefinition,
+		startPos: any,
+	) {
+		const args = argsStr ? this.parseArgs(argsStr) : [];
+		this.advance(fullMatch);
+		const endPos = this.getPosition();
+
+		const node: Node = {
+			type: "directive",
+			name: name,
+			args: args,
+			start: startPos.offset,
+			end: endPos.offset,
+			loc: { source: this.source, start: startPos, end: endPos },
+			children: [],
+			related: [],
+		};
+
+		parentNode.related ??= [];
+		parentNode.related.push(node);
+
+		if (subDef.children) {
+			// Pop the parent `if` and push the `elseif`
+			this.stack.pop();
+			this.stack.push(parentNode);
+			this.stack.push(node);
+		}
+	}
+
+	private addNode(node: Node) {
+		if (this.stack.length > 0) {
+			const current = this.stack[this.stack.length - 1];
+			current!.children ??= [];
+			current?.children.push(node);
+		} else {
+			this.rootChildren.push(node);
+		}
+	}
+
+	private advance(str: string) {
+		const lines = str.split("\n");
+		if (lines.length > 1) {
+			this.line += lines.length - 1;
+			this.column = lines[lines.length - 1]?.length + 1;
+		} else {
+			this.column += str.length;
+		}
+		this.cursor += str.length;
+	}
+
+	private parseArgs(argsStr: string): any[] {
+		const args: any[] = [];
+		let current = "";
+		let inQuote = false;
+		let quoteChar = "";
+		let braceDepth = 0;
+		let bracketDepth = 0;
+		let parenDepth = 0;
+
+		for (let i = 0; i < argsStr.length; i++) {
+			const char = argsStr[i];
+
+			if (
+				(char === '"' || char === "'") &&
+				(i === 0 || argsStr[i - 1] !== "\\")
+			) {
+				if (inQuote && char === quoteChar) {
+					inQuote = false;
+				} else if (!inQuote) {
+					inQuote = true;
+					quoteChar = char;
+				}
+			}
+
+			if (!inQuote) {
+				if (char === "{") braceDepth++;
+				else if (char === "}") braceDepth--;
+				else if (char === "[") bracketDepth++;
+				else if (char === "]") bracketDepth--;
+				else if (char === "(") parenDepth++;
+				else if (char === ")") parenDepth--;
+			}
+
+			if (
+				char === "," &&
+				!inQuote &&
+				braceDepth === 0 &&
+				bracketDepth === 0 &&
+				parenDepth === 0
+			) {
+				args.push(current.trim());
+				current = "";
+			} else {
+				current += char;
+			}
+		}
+		if (current) args.push(current.trim());
+
+		return args.map((arg) => {
+			if (
+				(arg.startsWith('"') && arg.endsWith('"')) ||
+				(arg.startsWith("'") && arg.endsWith("'"))
+			) {
+				return arg.slice(1, -1);
+			}
+			if (arg === "true") return true;
+			if (arg === "false") return false;
+			if (!Number.isNaN(Number(arg))) return Number(arg);
+			return arg;
+		});
+	}
 }
