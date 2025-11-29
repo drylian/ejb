@@ -244,7 +244,6 @@ export class Kire {
   public async compile(template: string): Promise<string> {
     const parser = new this.parserConstructor(template, this);
     const nodes = parser.parse();
-    
     const compiler = new this.compilerConstructor(this);
     return compiler.compile(nodes);
   }
@@ -669,40 +668,40 @@ export default (kire: Kire) => {
         description: 'Conditionally renders a block of content if the expression is true.',
         example: `@if(user.isLoggedIn)\n  Welcome, {{ user.name }}!\n@end`,
         parents: [
-            { 
+            {
                 name: 'elseif',
                 params: ['cond:string'],
                 children: true,
                 type: 'js',
                 description: 'Renders a block of content if the preceding @if/@elseif is false and the current expression is true.',
                 example: `@elseif(user.isAdmin)\n  Admin access granted.\n@end`,
-                onCall(c) { 
-                    c.res(`} else if (${c.param('cond')}) {`); 
-                    if(c.children) c.set(c.children); 
-                } 
+                onCall(c) {
+                    c.res(`} else if (${c.param('cond')}) {`);
+                    if (c.children) c.set(c.children);
+                }
             },
-            { 
+            {
                 name: 'elif', // alias for elseif
                 params: ['cond:string'],
-                children: true, 
+                children: true,
                 type: 'js',
                 description: 'Alias for @elseif.',
                 example: `@elif(user.isAdmin)\n  Admin access granted.\n@end`,
-                onCall(c) { 
-                    c.res(`} else if (${c.param('cond')}) {`); 
-                    if(c.children) c.set(c.children); 
-                } 
+                onCall(c) {
+                    c.res(`} else if (${c.param('cond')}) {`);
+                    if (c.children) c.set(c.children);
+                }
             },
-            { 
-                name: 'else', 
-                children: true, 
+            {
+                name: 'else',
+                children: true,
                 type: 'js',
                 description: 'Renders a block of content if the preceding @if/@elseif expressions are all false.',
                 example: `@else\n  Please log in.\n@end`,
-                onCall(c) { 
-                    c.res(`} else {`); 
-                    if(c.children) c.set(c.children); 
-                } 
+                onCall(c) {
+                    c.res(`} else {`);
+                    if (c.children) c.set(c.children);
+                }
             }
         ],
         onCall(ctx) {
@@ -721,22 +720,22 @@ export default (kire: Kire) => {
         description: 'Iterates over an array or object, similar to a JavaScript for...of loop.',
         example: `@for(user of users)\n  <p>{{ user.name }}</p>\n@end`,
         onCall(ctx) {
-            const expr = ctx.param('expr'); 
+            const expr = ctx.param('expr');
             if (expr.includes(' in ')) {
                 const [lhs, rhs] = expr.split(' in ');
                 ctx.res(`for (const ${lhs} of ${rhs}) {`);
             } else if (expr.includes(' of ')) {
                 const [lhs, rhs] = expr.split(' of ');
-                 ctx.res(`for (const ${lhs} of ${rhs}) {`);
+                ctx.res(`for (const ${lhs} of ${rhs}) {`);
             } else {
                 ctx.res(`for (${expr}) {`);
             }
-            
+
             if (ctx.children) ctx.set(ctx.children);
             ctx.res(`}`);
         }
     });
-    
+
     kire.directive({
         name: 'const',
         params: ['expr:string'],
@@ -744,7 +743,7 @@ export default (kire: Kire) => {
         description: 'Declares a block-scoped constant, similar to JavaScript `const`.',
         example: `@const(myVar = 'hello world')`,
         onCall(ctx) {
-             ctx.res(`const ${ctx.param('expr')};`);
+            ctx.res(`const ${ctx.param('expr')};`);
         }
     });
 
@@ -755,10 +754,10 @@ export default (kire: Kire) => {
         description: 'Declares a block-scoped local variable, similar to JavaScript `let`.',
         example: `@let(counter = 0)`,
         onCall(ctx) {
-             ctx.res(`let ${ctx.param('expr')};`);
+            ctx.res(`let ${ctx.param('expr')};`);
         }
     });
-    
+
     kire.directive({
         name: 'code',
         children: true,
@@ -766,7 +765,13 @@ export default (kire: Kire) => {
         description: 'Executes a block of raw JavaScript code on the server.',
         example: `@code\n  console.log('This runs during template compilation.');\n@end`,
         onCall(ctx) {
-            if (ctx.children) ctx.set(ctx.children);
+            if (ctx.children) {
+                for (const child of ctx.children) {
+                    if (child.type === 'text' && child.content) {
+                        ctx.res(child.content);
+                    }
+                }
+            }
         }
     });
 
@@ -778,69 +783,34 @@ export default (kire: Kire) => {
         description: 'Provides a control flow statement similar to a JavaScript switch block.',
         example: `@switch(value)\n  @case(1) ... @end\n  @default ... @end\n@end`,
         parents: [
-             {
-                 name: 'case',
-                 params: ['val:string'],
-                 children: true,
-                 type: 'js',
-                 description: 'A case clause for a @switch statement.',
-                 example: `@case('A')\n  <p>Value is A</p>\n@end`,
-                 onCall(c) {
-                     c.res(`case ${c.param('val')}: {`);
-                     if(c.children) c.set(c.children);
-                     c.res(`break; }`);
-                 }
-             },
-             {
-                 name: 'default',
-                 children: true,
-                 type: 'js',
-                 description: 'The default clause for a @switch statement.',
-                 example: `@default\n  <p>Value is something else</p>\n@end`,
-                 onCall(c) {
-                     c.res(`default: {`);
-                     if(c.children) c.set(c.children);
-                     c.res(`}`);
-                 }
-             }
+            {
+                name: 'case',
+                params: ['val:string'],
+                children: true,
+                type: 'js',
+                description: 'A case clause for a @switch statement.',
+                example: `@case('A')\n  <p>Value is A</p>\n@end`,
+                onCall(c) {
+                    c.res(`case ${JSON.stringify(c.param('val'))}:`);
+                    if (c.children) c.set(c.children);
+                    c.res(`break;`);
+                }
+            }, {
+                name: 'default',
+                children: true,
+                type: 'js',
+                description: 'The default clause for a @switch statement.',
+                example: `@default\n  <p>Value is something else</p>\n@end`,
+                onCall(c) {
+                    c.res(`default:`);
+                    if (c.children) c.set(c.children);
+                }
+            }
         ],
-        onCall(ctx) {
-             ctx.res(`switch (${ctx.param('expr')}) {`);
-             // Switch structure typically has case/default as parents (related nodes)
-             // Wait, in `parents` array we define SUB-directives.
-             // `case` and `default` ARE nested inside `switch`.
-             // But typically they are direct children in AST? 
-             // OR they are siblings in the chain?
-             // Switch syntax: @switch(x) @case(1)...@end @default...@end @end
-             // No, usually: @switch(x) @case(1)... @break @default ... @end
-             
-             // If we use the `parents` logic (sub-directives), then:
-             // @switch(x) 
-             //   @case(1) ... @end
-             // @end
-             
-             // If `case` is defined as a sub-directive in `parents` of `switch`, 
-             // the parser will treat it as a related node IF it is at the same level?
-             // No, `parents` in parser logic handles "chaining" (if...elseif...else).
-             // Switch cases are CHILDREN of the switch block.
-             // So they should be normal directives or handled via children traversal?
-             
-             // If `case` is a normal directive, it needs to be registered globally?
-             // Or registered only inside `switch`.
-             // But our `kire.directive` recurses `parents`.
-             
-             // If `case` is in `parents` of `switch`, it is registered.
-             // But parser only links it to `related` if it follows the pattern `@switch ... @case`.
-             // Chained style: `@switch(...) ... @end`.
-             // Inside `...`, we have `@case`.
-             // That is NOT a chain. That is nesting.
-             
-             // So `case` should just be processed as a child node.
-             // But `case` needs to be a valid directive.
-             // If we define it in `parents`, it gets registered.
-             
-             if (ctx.children) ctx.set(ctx.children);
-             ctx.res(`}`);
+        async onCall(ctx) {
+            ctx.res(`switch (${ctx.param('expr')}) {`);
+            if (ctx.parents) await ctx.set(ctx.parents);
+            ctx.res(`}`);
         }
     });
 };
@@ -852,6 +822,23 @@ import type { Kire } from '../kire';
 export default (kire: Kire) => {
     // @component('path', {vars}) ... @end
     // Uses slots.
+
+    kire.directive({
+        name: 'slot',
+        params: ['name:string'],
+        children: true,
+        type: 'html',
+        description: 'Defines a named content slot within a component.',
+        example: `@slot('header')\n  <h1>This is the header</h1>\n@end`,
+        onCall(c) {
+            const name = c.param('name');
+            c.res(`$slots[${JSON.stringify(name)}] = await (async ($parentCtx) => {`);
+            c.res(`  const $ctx = $parentCtx.clone();`);
+            if (c.children) c.set(c.children);
+            c.res(`  return $ctx[Symbol.for('~response')];`);
+            c.res(`})($ctx);`);
+        }
+    });
     
     kire.directive({
         name: 'component',
@@ -860,24 +847,6 @@ export default (kire: Kire) => {
         type: 'html',
         description: 'Loads a template as a reusable component, allowing content to be passed into named slots.',
         example: `@component('card', { title: 'My Card' })\n  @slot('header')\n    <h1>Card Header</h1>\n  @end\n  <p>Default content.</p>\n@end`,
-        parents: [
-            {
-                name: 'slot',
-                params: ['name:string'],
-                children: true,
-                type: 'html',
-                description: 'Defines a named content slot within a component.',
-                example: `@slot('header')\n  <h1>This is the header</h1>\n@end`,
-                onCall(c) {
-                    const name = c.param('name');
-                    c.res(`$slots[${name}] = await (async ($parentCtx) => {`);
-                    c.res(`  const $ctx = $parentCtx.clone();`);
-                    if (c.children) c.set(c.children);
-                    c.res(`  return $ctx[Symbol.for('~response')];`);
-                    c.res(`})($ctx);`);
-                }
-            }
-        ],
         onCall(ctx) {
             const pathExpr = ctx.param('path');
             const varsExpr = ctx.param('variables') || '{}';
@@ -885,53 +854,14 @@ export default (kire: Kire) => {
             ctx.res(`await (async () => {`);
             ctx.res(`  const $slots = {};`);
             
-            // Process children (which may contain @slot directives or default content)
-            // Default content goes to $slot or 'default'?
-            // In old component: 
-            // "if (compiledChildren.trim()) { ejb.builder.add('$slots.$slot = ...') }"
-            // And slots are in `parents`? Wait.
-            // In old logic: `parents` were used for `@slot`.
-            // But `@slot` is usually nested INSIDE component block.
-            // `@component(...) @slot(...) ... @end @end`?
-            // Or `@component(...) <p>Default</p> @slot('x')...@end @end`.
-            
-            // If `@slot` is a child directive, we need to capture it.
-            // But normal content should be captured as default slot.
-            
-            // We need to separate @slot children from other children?
-            // Or just execute children. Normal content appends to `$ctx.res` of this IIFE?
-            // No, we want to capture slots into `$slots` object.
-            
-            // Strategy:
-            // 1. Create a context for the component body (the block where slots are defined).
-            // 2. In this context, text output goes to default slot?
-            // 3. `@slot` directives write to `$slots`.
-            
             ctx.res(`  const $bodyCtx = $ctx.clone();`);
-            ctx.res(`  $bodyCtx.slots = $slots;`); // Expose slots map to body context so @slot can write to it?
-            // Actually, @slot needs to write to the LOCAL `$slots` variable we defined above.
-            // Directives run in the scope of `onCall`'s generated code.
-            // So `@slot` generated code will run inside this IIFE.
-            // So `$slots` is available!
-            
-            // But what about default content?
-            // We can capture `$bodyCtx` response as default slot.
-            
-            // We need to render children using `$bodyCtx`.
-            // But `ctx.set(children)` compiles children using the CURRENT compilation context.
-            // It emits code into the current stream.
-            // Code emitted: `$ctx[~response] += ...`.
-            // We want it to be `$bodyCtx[~response] += ...`.
-            
-            // Compiler doesn't support changing the context variable name easily (it uses `$ctx` hardcoded in `with($ctx)`).
-            // But we can shadow `$ctx`!
+            ctx.res(`  $bodyCtx.slots = $slots;`); 
             
             ctx.res(`  await (async ($parentCtx) => {`);
             ctx.res(`    const $ctx = $bodyCtx;`); // Shadow $ctx
             ctx.res(`    with($ctx) {`);
             
             if (ctx.children) ctx.set(ctx.children);
-            // Note: `ctx.set` will emit code using `$ctx`. Since we shadowed it, it uses `$bodyCtx`.
             
             ctx.res(`    }`);
             ctx.res(`  })($ctx);`);
@@ -1028,7 +958,7 @@ export default (kire: Kire) => {
                     for (const key in $ctx.stacks) {
                          const placeholder = "<!-- KIRE:stack(" + key + ") -->";
                          if ($ctx[Symbol.for('~response')].includes(placeholder)) {
-                              const content = $ctx.stacks[key].join('\n');
+                              const content = $ctx.stacks[key].join('\\n');
                               $ctx[Symbol.for('~response')] = $ctx[Symbol.for('~response')].split(placeholder).join(content);
                          }
                     }
@@ -1102,7 +1032,11 @@ export class Parser {
     
     while (this.cursor < this.template.length) {
       const remaining = this.template.slice(this.cursor);
-      // console.log('PARSER:', { cursor: this.cursor, remaining: remaining.slice(0, 20) });
+      //console.log('PARSER:', { 
+      //  cursor: this.cursor, 
+      //  remaining: remaining.slice(0, 30),
+      //  stack: this.stack.map(s => s.name)
+      //});
       
       // Check for interpolation {{ ... }}
       const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
@@ -1129,16 +1063,19 @@ export class Parser {
           continue;
       }
 
-      // Check for directive @name(...)
+      // Check for directive @name(...) or @name without parentheses
       const directiveStartMatch = remaining.match(/^@(\w+)/);
       if (directiveStartMatch) {
         const [fullMatch, name] = directiveStartMatch;
+        
+        //console.log('FOUND DIRECTIVE:', { name, fullMatch, stack: this.stack.map(s => s.name) });
         
         // Check if it has arguments
         let argsStr = undefined;
         let argsEndIndex = fullMatch.length;
         
-        if (remaining.startsWith('(', fullMatch.length)) {
+        // Verifica se tem parênteses APENAS se o próximo caractere for '('
+        if (remaining[fullMatch.length] === '(') {
             // Parse arguments with balanced parentheses
             let depth = 1;
             let i = fullMatch.length + 1;
@@ -1147,7 +1084,7 @@ export class Parser {
             
             while (i < remaining.length && depth > 0) {
                 const char = remaining[i];
-                if ((char === '"' || char === "'") && remaining[i-1] !== '\\') {
+                if ((char === '"' || char === "'") && (i === 0 || remaining[i-1] !== '\\')) {
                     if (inQuote && char === quoteChar) {
                         inQuote = false;
                     } else if (!inQuote) {
@@ -1170,12 +1107,14 @@ export class Parser {
         }
         
         if (name === 'end') {
+            //console.log('HANDLING END DIRECTIVE');
             this.handleEndDirective();
             this.advance(remaining.slice(0, argsEndIndex));
             continue;
         }
 
         const directiveDef = this.kire.getDirective(name!);
+        //console.log('DIRECTIVE DEF:', { name, directiveDef });
         
         // Check for sub-directive (parent logic)
         let isSubDirective = false;
@@ -1183,11 +1122,20 @@ export class Parser {
             const currentParent = this.stack[this.stack.length - 1];
             const parentDef = this.kire.getDirective(currentParent!.name!);
             
+            //console.log('CHECKING SUB DIRECTIVE:', {
+            //  parent: currentParent!.name,
+            //  candidate: name,
+            //  parentDef: parentDef
+            //});
+            
             if (parentDef && parentDef.parents) {
                 const subDef = parentDef.parents.find(p => p.name === name);
+                //console.log('SUB DIRECTIVE RESULT:', { subDef });
                 if (subDef) {
+                    //console.log('FOUND SUB DIRECTIVE! Processing:', name);
                     this.handleSubDirective(name!, argsStr, remaining.slice(0, argsEndIndex), currentParent!, subDef);
                     this.advance(remaining.slice(0, argsEndIndex));
+                    isSubDirective = true;
                     continue;
                 }
             }
@@ -1195,14 +1143,14 @@ export class Parser {
 
         // If not a registered directive and not a sub-directive, treat as text
         if (!directiveDef && !isSubDirective) {
+             //console.log('TREATING AS TEXT:', name);
              this.addNode({
                  type: 'text',
-                 content: fullMatch, // Just the name part
+                 content: fullMatch,
                  start: this.cursor,
                  end: this.cursor + fullMatch.length
              });
              this.advance(fullMatch);
-             // Args will be processed as text in next loop
              continue;
         }
 
@@ -1218,6 +1166,7 @@ export class Parser {
           related: []
         };
 
+        //console.log('ADDING DIRECTIVE NODE:', node);
         this.addNode(node);
         
         if (directiveDef && directiveDef.children) {
@@ -1258,6 +1207,7 @@ export class Parser {
                      continue;
                 }
             }
+            //console.log('PUSHING TO STACK:', name);
             this.stack.push(node);
         }
         
@@ -1308,31 +1258,17 @@ export class Parser {
       }
     }
     
+    //console.log('FINAL RESULT:', JSON.stringify(this.rootChildren, null, 2));
     return this.rootChildren;
   }
 
   private handleEndDirective() {
-      if (this.stack.length === 0) return;
-      const popped = this.stack.pop();
-      
-      // If we popped a 'related' directive (like elseif),
-      // we check if we need to pop its parent (the if) too.
-      // However, the logic is slightly tricky:
-      // 1. stack=[if]. elseif comes.
-      // 2. handleSubDirective adds elseif to if.related AND pushes elseif to stack. stack=[if, elseif].
-      // 3. elseif collects children.
-      // 4. @end comes. Pop elseif. stack=[if].
-      // 5. Since elseif IS a related directive of 'if', 'if' logic is now done too?
-      //    Usually: @if ... @elseif ... @end
-      //    The @end closes the whole block.
-      //    So yes, we should pop 'if' too.
-      
+      //console.log('HANDLE END - Stack before:', this.stack.map(s => s.name));
       if (this.stack.length > 0) {
-          const parent = this.stack[this.stack.length - 1];
-          if (parent && parent.related && parent.related.includes(popped!)) {
-              this.stack.pop();
-          }
+        this.stack.pop();
       }
+      //console.log('HANDLE END - Popped:', popped?.name);
+      //console.log('HANDLE END - Stack after:', this.stack.map(s => s.name));
   }
 
   private handleSubDirective(name: string, argsStr: string | undefined, fullMatch: string, parentNode: Node, subDef: DirectiveDefinition) {
@@ -1348,10 +1284,18 @@ export class Parser {
           related: []
       };
       
+      //console.log('HANDLING SUB DIRECTIVE:', {
+      //  name,
+      //  parent: parentNode.name,
+      //  node,
+      //  parentRelated: parentNode.related
+      //});
+      
       if (!parentNode.related) parentNode.related = [];
       parentNode.related.push(node);
       
       if (subDef.children) {
+          //console.log('PUSHING SUB DIRECTIVE TO STACK:', name);
           this.stack.push(node);
       }
   }
@@ -1360,8 +1304,12 @@ export class Parser {
       if (this.stack.length > 0) {
           const current = this.stack[this.stack.length - 1];
           if (current && !current.children) current.children = [];
-          if(current?.children)current.children.push(node);
+          if(current?.children) {
+            //console.log('ADDING TO CHILDREN of', current.name, ':', node.type, node.name || node.content);
+            current.children.push(node);
+          }
       } else {
+          //console.log('ADDING TO ROOT:', node.type, node.name || node.content);
           this.rootChildren.push(node);
       }
   }

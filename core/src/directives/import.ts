@@ -16,109 +16,87 @@ export default (kire: Kire) => {
 
         example: `@include('partials/card')\n  <p>Card content</p>\n@end`,
 
-        onCall(ctx) {
+                onCall(ctx) {
 
-             const pathExpr = ctx.param('path'); 
+                     const pathExpr = ctx.param('path'); 
 
-             const localsExpr = ctx.param('locals') || '{}';
+                     const localsExpr = ctx.param('locals') || '{}';
 
-             
+                     
 
-                                       ctx.res(`
+                                               ctx.res(`
 
-             
+                                                   await (async () => {
 
-                                           await (async () => {
+                                                       const path = $ctx.resolve(${JSON.stringify(pathExpr)}); 
 
-             
+                                                       const templateFn = await $ctx.load(path);
 
-                                               const path = $ctx.resolve(${JSON.stringify(pathExpr)}); 
+                                                       if (templateFn) {
 
-             
+                                                           // Capture children content if any
 
-                                               const templateFn = await $ctx.load(path);
+                                                           let content = '';
 
-             
+                                                           `);
 
-                                               if (templateFn) {
+                     
 
-             
+                     if (ctx.children && ctx.children.length > 0) {
 
-                                                   // Capture children content if any
+                         ctx.res(`
 
-             
+                                 const $bodyCtx = $ctx.clone();
 
-                                                   let content = '';
+                                 await (async ($parentCtx) => {
 
-             
+                                     const $ctx = $bodyCtx;
 
-                                                   `);
+                                     with($ctx) {
 
-             
-
-                          
-
-             
-
-             
-
-             
-
-             if (ctx.children && ctx.children.length > 0) {
-
-                 ctx.res(`
-
-                         const $bodyCtx = $ctx.clone();
-
-                         await (async ($parentCtx) => {
-
-                             const $ctx = $bodyCtx;
-
-                             with($ctx) {
-
-                 `);
-
-                 
-
-                 ctx.set(ctx.children);
-
-                 
-
-                 ctx.res(`
-
-                             }
-
-                         })($ctx);
-
-                         content = $bodyCtx[Symbol.for('~response')];
-
-                 `);
-
-             }
-
-             
-
-             ctx.res(`
-
-                         const locals = Object.assign({ content }, ${localsExpr}); 
-
-                         const childCtx = $ctx.clone(locals);
+                         `);
 
                          
 
-                         await templateFn(childCtx);
+                         ctx.set(ctx.children);
 
                          
 
-                         $ctx.res(childCtx[Symbol.for('~response')]);
+                         ctx.res(`
+
+                                     }
+
+                                 })($ctx);
+
+                                 content = $bodyCtx[Symbol.for('~response')];
+
+                         `);
 
                      }
 
-                 })();
+                     
 
-             `);
+                     ctx.res(`
 
-        }
+                                 const locals = Object.assign({ content }, ${localsExpr}); 
+
+                                 const childCtx = $ctx.clone(locals);
+
+                                 
+
+                                 await templateFn(childCtx);
+
+                                 
+
+                                 $ctx.res(childCtx[Symbol.for('~response')]);
+
+                             }
+
+                         })();
+
+                     `);
+
+                }
 
     });
 

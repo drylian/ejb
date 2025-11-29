@@ -249,17 +249,10 @@ export class Parser {
 
   private handleEndDirective() {
       //console.log('HANDLE END - Stack before:', this.stack.map(s => s.name));
-      if (this.stack.length === 0) return;
-      const popped = this.stack.pop();
-      //console.log('HANDLE END - Popped:', popped?.name);
-      
       if (this.stack.length > 0) {
-          const parent = this.stack[this.stack.length - 1];
-          if (parent && parent.related && parent.related.includes(popped!)) {
-              //console.log('HANDLE END - Also popping parent:', parent.name);
-              this.stack.pop();
-          }
+        this.stack.pop();
       }
+      //console.log('HANDLE END - Popped:', popped?.name);
       //console.log('HANDLE END - Stack after:', this.stack.map(s => s.name));
   }
 

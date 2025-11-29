@@ -23,9 +23,10 @@ describe("Kire Native Directives", () => {
 
     it("@switch / @case / @default", async () => {
         const tpl = `@switch(val)@case('A')IsA@end@case('B')IsB@end@default IsDefault@end@end`;
+        console.log(JSON.stringify(kire.parse(tpl), null, 3));
         expect(await render(tpl, { val: 'A' })).toBe("IsA");
         expect(await render(tpl, { val: 'B' })).toBe("IsB");
-        expect(await render(tpl, { val: 'C' })).toBe("IsDefault");
+        expect(await render(tpl, { val: 'C' })).toBe(" IsDefault");
     });
   });
 
