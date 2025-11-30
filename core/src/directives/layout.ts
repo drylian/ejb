@@ -16,15 +16,15 @@ export default (kire: Kire) => {
 		onCall(ctx) {
 			const name = ctx.param("name");
 
-			ctx.res(
+			ctx.raw(
 				`$ctx.defines[${JSON.stringify(name)}] = await (async ($parentCtx) => {`,
 			);
-			ctx.res(`  const $ctx = $parentCtx.clone();`);
+			ctx.raw(`  const $ctx = $parentCtx.clone();`);
 
 			if (ctx.children) ctx.set(ctx.children);
 
-			ctx.res(`  return $ctx[Symbol.for('~response')];`);
-			ctx.res(`})($ctx);`);
+			ctx.raw(`  return $ctx[Symbol.for('~response')];`);
+			ctx.raw(`})($ctx);`);
 		},
 	});
 
@@ -37,7 +37,7 @@ export default (kire: Kire) => {
 		onCall(ctx) {
 			const name = ctx.param("name");
 
-			ctx.res(
+			ctx.raw(
 				`$ctx.res("<!-- KIRE:defined(" + ${JSON.stringify(name)} + ") -->");`,
 			);
 
@@ -69,7 +69,7 @@ export default (kire: Kire) => {
 		example: `<html>\n<head>\n  @stack('scripts')\n</head>\n</html>`,
 		onCall(ctx) {
 			const name = ctx.param("name");
-			ctx.res(
+			ctx.raw(
 				`$ctx.res("<!-- KIRE:stack(" + ${JSON.stringify(name)} + ") -->");`,
 			);
 
@@ -97,18 +97,18 @@ export default (kire: Kire) => {
 		example: `@push('scripts')\n  <script src="app.js"></script>\n@end`,
 		onCall(ctx: KireContext) {
 			const name = ctx.param("name");
-			ctx.res(
+			ctx.raw(
 				`if (!$ctx.stacks[${JSON.stringify(name)}]) $ctx.stacks[${JSON.stringify(name)}] = [];`,
 			);
-			ctx.res(
+			ctx.raw(
 				`$ctx.stacks[${JSON.stringify(name)}].push(await (async ($parentCtx) => {`,
 			);
-			ctx.res(`  const $ctx = $parentCtx.clone();`);
+			ctx.raw(`  const $ctx = $parentCtx.clone();`);
 
 			if (ctx.children) ctx.set(ctx.children);
 
-			ctx.res(`  return $ctx[Symbol.for('~response')];`);
-			ctx.res(`})($ctx));`);
+			ctx.raw(`  return $ctx[Symbol.for('~response')];`);
+			ctx.raw(`})($ctx));`);
 		},
 	});
 };

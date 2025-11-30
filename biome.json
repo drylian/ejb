@@ -22,7 +22,11 @@
 				"noAccumulatingSpread":"off"
 			},
 			"suspicious": {
+				"noAssignInExpressions":"off",
 				"noExplicitAny":"off"
+			},
+			"style":{
+				"noNonNullAssertion":"off"
 			},
 			"recommended": true
 		}

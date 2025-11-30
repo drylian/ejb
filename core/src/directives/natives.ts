@@ -19,7 +19,7 @@ export default (kire: Kire) => {
 					"Renders a block of content if the preceding @if/@elseif is false and the current expression is true.",
 				example: `@elseif(user.isAdmin)\n  Admin access granted.\n@end`,
 				onCall(c) {
-					c.res(`} else if (${c.param("cond")}) {`);
+					c.raw(`} else if (${c.param("cond")}) {`);
 					if (c.children) c.set(c.children);
 				},
 			},
@@ -31,7 +31,7 @@ export default (kire: Kire) => {
 				description: "Alias for @elseif.",
 				example: `@elif(user.isAdmin)\n  Admin access granted.\n@end`,
 				onCall(c) {
-					c.res(`} else if (${c.param("cond")}) {`);
+					c.raw(`} else if (${c.param("cond")}) {`);
 					if (c.children) c.set(c.children);
 				},
 			},
@@ -43,16 +43,16 @@ export default (kire: Kire) => {
 					"Renders a block of content if the preceding @if/@elseif expressions are all false.",
 				example: `@else\n  Please log in.\n@end`,
 				onCall(c) {
-					c.res(`} else {`);
+					c.raw(`} else {`);
 					if (c.children) c.set(c.children);
 				},
 			},
 		],
 		onCall(ctx) {
-			ctx.res(`if (${ctx.param("cond")}) {`);
+			ctx.raw(`if (${ctx.param("cond")}) {`);
 			if (ctx.children) ctx.set(ctx.children);
 			if (ctx.parents) ctx.set(ctx.parents);
-			ctx.res("}");
+			ctx.raw("}");
 		},
 	});
 
@@ -68,16 +68,16 @@ export default (kire: Kire) => {
 			const expr = ctx.param("expr");
 			if (expr.includes(" in ")) {
 				const [lhs, rhs] = expr.split(" in ");
-				ctx.res(`for (const ${lhs} in ${rhs}) {`);
+				ctx.raw(`for (const ${lhs} in ${rhs}) {`);
 			} else if (expr.includes(" of ")) {
 				const [lhs, rhs] = expr.split(" of ");
-				ctx.res(`for (const ${lhs} of ${rhs}) {`);
+				ctx.raw(`for (const ${lhs} of ${rhs}) {`);
 			} else {
-				ctx.res(`for (${expr}) {`);
+				ctx.raw(`for (${expr}) {`);
 			}
 
 			if (ctx.children) ctx.set(ctx.children);
-			ctx.res(`}`);
+			ctx.raw(`}`);
 		},
 	});
 
@@ -89,7 +89,7 @@ export default (kire: Kire) => {
 			"Declares a block-scoped constant, similar to JavaScript `const`.",
 		example: `@const(myVar = 'hello world')`,
 		onCall(ctx) {
-			ctx.res(`const ${ctx.param("expr")};`);
+			ctx.raw(`const ${ctx.param("expr")};`);
 		},
 	});
 
@@ -101,7 +101,7 @@ export default (kire: Kire) => {
 			"Declares a block-scoped local variable, similar to JavaScript `let`.",
 		example: `@let(counter = 0)`,
 		onCall(ctx) {
-			ctx.res(`let ${ctx.param("expr")};`);
+			ctx.raw(`let ${ctx.param("expr")};`);
 		},
 	});
 
@@ -115,7 +115,7 @@ export default (kire: Kire) => {
 			if (ctx.children) {
 				for (const child of ctx.children) {
 					if (child.type === "text" && child.content) {
-						ctx.res(child.content);
+						ctx.raw(child.content);
 					}
 				}
 			}
@@ -139,9 +139,9 @@ export default (kire: Kire) => {
 				description: "A case clause for a @switch statement.",
 				example: `@case('A')\n  <p>Value is A</p>\n@end`,
 				onCall(c) {
-					c.res(`case ${JSON.stringify(c.param("val"))}: {`);
+					c.raw(`case ${JSON.stringify(c.param("val"))}: {`);
 					if (c.children) c.set(c.children);
-					c.res(`break; }`);
+					c.raw(`break; }`);
 				},
 			},
 			{
@@ -151,16 +151,16 @@ export default (kire: Kire) => {
 				description: "The default clause for a @switch statement.",
 				example: `@default\n  <p>Value is something else</p>\n@end`,
 				onCall(c) {
-					c.res(`default: {`);
+					c.raw(`default: {`);
 					if (c.children) c.set(c.children);
-					c.res(`}`);
+					c.raw(`}`);
 				},
 			},
 		],
 		async onCall(ctx) {
-			ctx.res(`switch (${ctx.param("expr")}) {`);
+			ctx.raw(`switch (${ctx.param("expr")}) {`);
 			if (ctx.parents) await ctx.set(ctx.parents);
-			ctx.res(`}`);
+			ctx.raw(`}`);
 		},
 	});
 };

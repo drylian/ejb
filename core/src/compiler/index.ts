@@ -116,7 +116,10 @@ export class Compiler {
 			pre: (code: string) => {
 				this.preBuffer.push(code);
 			},
-			res: (code: string) => {
+			res: (content: string) => {
+				this.resBuffer.push(`$ctx.res(\`${content}\`);`);
+			},
+			raw: (code: string) => {
 				this.resBuffer.push(code);
 			},
 			pos: (code: string) => {

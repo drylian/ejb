@@ -13,11 +13,11 @@ export default (kire: Kire) => {
 		example: `@slot('header')\n  <h1>This is the header</h1>\n@end`,
 		onCall(c) {
 			const name = c.param("name");
-			c.res(`$slots[${JSON.stringify(name)}] = await (async ($parentCtx) => {`);
-			c.res(`  const $ctx = $parentCtx.clone();`);
+			c.raw(`$slots[${JSON.stringify(name)}] = await (async ($parentCtx) => {`);
+			c.raw(`  const $ctx = $parentCtx.clone();`);
 			if (c.children) c.set(c.children);
-			c.res(`  return $ctx[Symbol.for('~response')];`);
-			c.res(`})($ctx);`);
+			c.raw(`  return $ctx[Symbol.for('~response')];`);
+			c.raw(`})($ctx);`);
 		},
 	});
 
@@ -33,37 +33,37 @@ export default (kire: Kire) => {
 			const pathExpr = ctx.param("path");
 			const varsExpr = ctx.param("variables") || "{}";
 
-			ctx.res(`await (async () => {`);
-			ctx.res(`  const $slots = {};`);
+			ctx.raw(`await (async () => {`);
+			ctx.raw(`  const $slots = {};`);
 
-			ctx.res(`  const $bodyCtx = $ctx.clone();`);
-			ctx.res(`  $bodyCtx.slots = $slots;`);
+			ctx.raw(`  const $bodyCtx = $ctx.clone();`);
+			ctx.raw(`  $bodyCtx.slots = $slots;`);
 
-			ctx.res(`  await (async ($parentCtx) => {`);
-			ctx.res(`    const $ctx = $bodyCtx;`); // Shadow $ctx
-			ctx.res(`    with($ctx) {`);
+			ctx.raw(`  await (async ($parentCtx) => {`);
+			ctx.raw(`    const $ctx = $bodyCtx;`); // Shadow $ctx
+			ctx.raw(`    with($ctx) {`);
 
 			if (ctx.children) await ctx.set(ctx.children);
 
-			ctx.res(`    }`);
-			ctx.res(`  })($ctx);`);
+			ctx.raw(`    }`);
+			ctx.raw(`  })($ctx);`);
 
-			ctx.res(`  if (!$slots.default) $slots.default = $bodyCtx[Symbol.for('~response')];`);
+			ctx.raw(`  if (!$slots.default) $slots.default = $bodyCtx[Symbol.for('~response')];`);
 
 			// Now load the component template
-			ctx.res(`  const path = $ctx.resolve(${JSON.stringify(pathExpr)});`);
-			ctx.res(`  const templateFn = await $ctx.load(path);`);
-			ctx.res(`  if (templateFn) {`);
-						ctx.res(`  const locals = ${varsExpr};`);
-						ctx.res(`  const componentCtx = $ctx.clone(locals);`);
-						ctx.res(`  componentCtx[${JSON.stringify(kire.varLocals)}] = locals;`); // Expose locals under the configured name
-						ctx.res(`  if(typeof locals === 'object' && locals !== null) locals.slots = $slots;`); // Attach slots to locals for it.slots access
-						ctx.res(`  componentCtx.slots = $slots;`); // Pass slots to component
-						ctx.res(`  await templateFn(componentCtx);`);
-						ctx.res(`  $ctx.res(componentCtx[Symbol.for('~response')]);`);
-			ctx.res(`  }`);
+			ctx.raw(`  const path = $ctx.resolve(${JSON.stringify(pathExpr)});`);
+			ctx.raw(`  const templateFn = await $ctx.load(path);`);
+			ctx.raw(`  if (templateFn) {`);
+						ctx.raw(`  const locals = ${varsExpr};`);
+						ctx.raw(`  const componentCtx = $ctx.clone(locals);`);
+						ctx.raw(`  componentCtx[${JSON.stringify(kire.varLocals)}] = locals;`); // Expose locals under the configured name
+						ctx.raw(`  if(typeof locals === 'object' && locals !== null) locals.slots = $slots;`); // Attach slots to locals for it.slots access
+						ctx.raw(`  componentCtx.slots = $slots;`); // Pass slots to component
+						ctx.raw(`  await templateFn(componentCtx);`);
+						ctx.raw(`  $ctx.res(componentCtx[Symbol.for('~response')]);`);
+			ctx.raw(`  }`);
 
-			ctx.res(`})();`);
+			ctx.raw(`})();`);
 		},
 	});
 };

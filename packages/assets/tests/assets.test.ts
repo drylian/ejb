@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import { Kire } from "kire";
-import { KireAssets, KireFS } from "../src/index";
+import { KireAssets, createKireFS } from "../src/index";
 
 describe("KireAssets", () => {
   it("should remove script and style tags and replace with placeholders", async () => {
@@ -57,6 +57,8 @@ describe("KireAssets", () => {
     const scriptPath = `/_kire/${scriptHash}.js`;
     const stylePath = `/_kire/${styleHash}.css`;
 
+    const kireFS = createKireFS(kire);
+
     // --- Test Express ---
     {
         const mockRes = {
@@ -65,7 +67,7 @@ describe("KireAssets", () => {
         };
         const next = mock(() => {});
         
-        KireFS.express({ path: scriptPath }, mockRes, next);
+        kireFS.express({ path: scriptPath }, mockRes, next);
         expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Type', 'application/javascript');
         expect(mockRes.send).toHaveBeenCalledWith('var x = 1;');
     }
@@ -78,7 +80,7 @@ describe("KireAssets", () => {
             code: mock((c) => mockReply)
          };
          
-         await KireFS.fastify({ url: scriptPath, raw: { url: scriptPath } }, mockReply);
+         await kireFS.fastify({ url: scriptPath, raw: { url: scriptPath } }, mockReply);
          expect(mockReply.header).toHaveBeenCalledWith('Content-Type', 'application/javascript');
          expect(mockReply.send).toHaveBeenCalledWith('var x = 1;');
          
@@ -88,7 +90,7 @@ describe("KireAssets", () => {
              send: mock((b) => b),
              code: mock((c) => notFoundReply)
          };
-         await KireFS.fastify({ url: '/bad.js', raw: { url: '/bad.js' } }, notFoundReply);
+         await kireFS.fastify({ url: '/bad.js', raw: { url: '/bad.js' } }, notFoundReply);
          expect(notFoundReply.code).toHaveBeenCalledWith(404);
     }
 
@@ -101,13 +103,13 @@ describe("KireAssets", () => {
         };
         const next = mock(async () => {});
 
-        await KireFS.hono(mockC, next);
+        await kireFS.hono(mockC, next);
         expect(mockC.header).toHaveBeenCalledWith('Content-Type', 'text/css');
         expect(mockC.body).toHaveBeenCalledWith('.test { color: blue; }');
         
         // Test pass-through
         const mockC2 = { req: { path: '/other' } };
-        await KireFS.hono(mockC2, next);
+        await kireFS.hono(mockC2, next);
         expect(next).toHaveBeenCalled();
     }
     
@@ -118,7 +120,7 @@ describe("KireAssets", () => {
             set: { headers: {} }
         };
         
-        const result = KireFS.elysia(mockContext);
+        const result = kireFS.elysia(mockContext);
         expect(mockContext.set.headers['Content-Type']).toBe('application/javascript');
         expect(result).toBe('var x = 1;');
     }

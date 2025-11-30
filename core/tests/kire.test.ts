@@ -13,7 +13,7 @@ test("Kire - Simple Directive", async () => {
 	kire.directive({
 		name: "hello",
 		onCall(ctx) {
-			ctx.res('$ctx.res("Hello Directive");');
+			ctx.raw('$ctx.res("Hello Directive");');
 		},
 	});
 
@@ -29,7 +29,7 @@ test("Kire - Directive with Param", async () => {
 		params: ["msg:string"],
 		onCall(ctx) {
 			const msg = ctx.param("msg"); // Should be 'Test Message'
-			ctx.res(`$ctx.res(${JSON.stringify(msg)});`); // Embed as a string literal
+			ctx.raw(`$ctx.res(${JSON.stringify(msg)});`); // Embed as a string literal
 		},
 	});
 
@@ -45,8 +45,8 @@ test("Kire - Pre/Pos Buffers", async () => {
 		name: "wrap",
 		onCall(ctx) {
 			ctx.pre('const prefix = "START";');
-			ctx.res("$ctx.res(prefix);");
-			ctx.res('$ctx.res("CONTENT");');
+			ctx.raw("$ctx.res(prefix);");
+			ctx.raw('$ctx.res("CONTENT");');
 			ctx.pos("// End of script");
 		},
 	});
@@ -68,7 +68,7 @@ test("Kire - Nested Directives (If/ElseIf/Else)", async () => {
 				params: ["cond:string"],
 				children: true,
 				onCall(ctx) {
-					ctx.res(`} else if (${ctx.param("cond")}) {`);
+					ctx.raw(`} else if (${ctx.param("cond")}) {`);
 					ctx.set(ctx.children ?? []);
 				},
 			},
@@ -76,17 +76,17 @@ test("Kire - Nested Directives (If/ElseIf/Else)", async () => {
 				name: "else",
 				children: true,
 				onCall(ctx) {
-					ctx.res(`} else {`);
+					ctx.raw(`} else {`);
 					if (ctx.children) ctx.set(ctx.children);
 				},
 			},
 		],
 		onCall(ctx) {
 			const cond = ctx.param("cond");
-			ctx.res(`if (${cond}) {`);
+			ctx.raw(`if (${cond}) {`);
 			if (ctx.children) ctx.set(ctx.children);
 			if (ctx.parents) ctx.set(ctx.parents);
-			ctx.res("}");
+			ctx.raw("}");
 		},
 	});
 

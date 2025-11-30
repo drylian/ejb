@@ -1,5 +1,14 @@
 import type { Kire } from "./kire";
 
+export interface KireCache<T = any> {
+	get(key: string): T | undefined;
+	set(key: string, value: T): void;
+	has(key: string): boolean;
+	delete(key: string): boolean;
+	clear(): void;
+	entries(): IterableIterator<[string, T]>;
+}
+
 export interface KireConfig {
 	globals?: Record<string, any>;
 	// Add other config options as needed
@@ -36,7 +45,8 @@ export interface KireContext {
 	render(content: string): Promise<string>; // Returns compiled function string
 	func(code: string): string; // Wraps code in a function definition
 	pre(code: string): void;
-	res(code: string): void;
+	res(content: string): void;
+	raw(code: string): void;
 	pos(code: string): void;
 	error(message: string): void;
 	resolve(path: string): string;

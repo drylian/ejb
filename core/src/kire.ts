@@ -5,6 +5,7 @@ import type {
 	DirectiveDefinition,
 	ICompilerConstructor,
 	IParserConstructor,
+	KireCache,
 	KireContext,
 	KireElementHandler,
 	KireElementOptions,
@@ -34,6 +35,29 @@ export class Kire {
 	public compilerConstructor: ICompilerConstructor;
 	public varLocals: string;
 	public exposeLocals: boolean;
+
+	private _cacheStore: Map<string, Map<string, any>> = new Map();
+
+	public get $cache() {
+		return {
+			clear: () => this._cacheStore.clear(),
+		};
+	}
+
+	public cached<T = any>(namespace: string): KireCache<T> {
+		if (!this._cacheStore.has(namespace)) {
+			this._cacheStore.set(namespace, new Map());
+		}
+		const store = this._cacheStore.get(namespace)!;
+		return {
+			get: (key: string) => store.get(key),
+			set: (key: string, value: T) => store.set(key, value),
+			has: (key: string) => store.has(key),
+			delete: (key: string) => store.delete(key),
+			clear: () => store.clear(),
+			entries: () => store.entries(),
+		};
+	}
 
 	constructor(options: KireOptions = {}) {
 		this.root = options.root ?? "./";
@@ -297,6 +321,9 @@ export class Kire {
 		rctx.res = (str: any) => {
 			rctx[RESPONSE_SYMBOL] += str;
 		};
+
+		// Runtime alias to get response
+		rctx.$res = () => rctx[RESPONSE_SYMBOL];
 
 		// Helper to resolve paths inside directives
 		rctx.resolve = (path: string) => {

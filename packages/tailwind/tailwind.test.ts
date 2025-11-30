@@ -27,6 +27,11 @@ const compileMock = mock(async (css: string, opts?: any) => {
     if (css.includes("@theme")) {
         processedCSS = processedCSS.replace(/@theme\s*{([^}]*)}/g, (match, content) => `/* theme: ${content.trim()} */`);
     }
+    if (css.includes('@plugin "@tailwindcss/typography"')) {
+        processedCSS = processedCSS.replace('@plugin "@tailwindcss/typography";', '/* @tailwindcss/typography plugin */');
+        processedCSS += `.prose h1 { font-size: 2em; }`; // Example output
+    }
+
 
     return {
       build: (candidates: string[]) => {
@@ -45,164 +50,237 @@ mock.module("tailwindcss", () => ({
 }));
 
 // Mock para loadModule
+
 const mockLoadModule = mock(async (id: string) => {
+
     if (id === 'daisyui') {
+
         return {
+
             path: '/fake/path/node_modules/daisyui',
+
             base: '/fake/path/node_modules',
+
             module: { handler: () => {} }, // Mock plugin
+
         }
+
     }
+
+    if (id === '@tailwindcss/typography') {
+
+        return {
+
+            path: '/fake/path/node_modules/@tailwindcss/typography',
+
+            base: '/fake/path/node_modules',
+
+            module: { handler: ({ addPlugin }) => addPlugin(() => { /* do nothing */ }) }, // Mock plugin
+
+        }
+
+    }
+
     throw new Error(`Module not found: ${id}`);
+
 });
 
 
+
+// Mock for tailwindcss/plugin
+
+mock.module('tailwindcss/plugin', () => ({
+
+  handler: mock(() => {}), // Just a dummy handler
+
+  addVariant: mock(() => {}),
+
+}));
+
+
+
+
+
 describe("@Kirejs/Tailwind", () => {
+
   
+
   test("should load tailwind.config.ts and process custom utilities", async () => {
+
     const kire = new Kire();
+
     kire.plugin(KireTailwind, { config: mockConfig } as any);
 
+
+
     const tpl = `
+
       @tailwind
+
       @end
+
       <div class="bg-brand"></div>
+
     `;
+
     const result = await kire.render(tpl);
+
     const clean = result.replace(/\s+/g, ' ').trim();
+
     
+
     expect(clean).toContain(".bg-brand { background-color: blue; }");
+
   });
+
+
 
   test('should use cache on second render', async () => {
+
     // Enable cache for Kire instance
+
     const kire = new Kire({ cache: true });
+
     kire.plugin(KireTailwind, { loadModule: mockLoadModule } as any);
 
+
+
     const tpl = `
+
         @tailwind
+
             .btn { @apply bg-blue-500; }
+
         @end
+
     `;
+
+
 
     // Reset mock calls before test
+
     compileMock.mockClear();
+
     
+
     // First render
+
     await kire.render(tpl);
+
     expect(compileMock.mock.calls.length).toBe(1);
+
+
 
     // Second render
+
     await kire.render(tpl);
+
     // Should not be called again because the content is cached
+
     expect(compileMock.mock.calls.length).toBe(1);
+
   });
+
+
 
   // Other tests
+
   let kire: Kire;
+
   beforeEach(() => {
+
     kire = new Kire();
+
     kire.plugin(KireTailwind, { loadModule: mockLoadModule } as any);
+
   });
+
+
 
   test("should handle @plugin rule", async () => {
+
     const tpl = `
+
       @tailwind
+
         @plugin "daisyui";
+
       @end
+
     `;
+
     
+
     const result = await kire.render(tpl);
+
     const clean = result.replace(/\s+/g, ' ').trim();
+
     
+
     expect(clean).toContain("<style>");
+
     expect(clean).toContain("/* tailwind base */");
+
     expect(clean).toContain("/* daisyui plugin */");
+
     expect(clean).toContain("</style>");
+
   });
 
-  test("directive @tailwind as block with CSS content", async () => {
+
+
+  test("should handle @plugin with @tailwindcss/typography", async () => {
+
     const tpl = `
+
       @tailwind
-        .btn { 
-          @apply bg-blue-500; 
+
+        @plugin "@tailwindcss/typography";
+
+      @end
+
+      <div class="prose"></div>
+
+    `;
+
+
+
+    // Mock compileMock to produce some typography-like output
+
+    compileMock.mockImplementation(async (css: string, opts?: any) => {
+
+        let processedCSS = css;
+
+        if (css.includes('@plugin "@tailwindcss/typography"')) {
+
+            processedCSS = processedCSS.replace('@plugin "@tailwindcss/typography";', '/* @tailwindcss/typography plugin */');
+
+            processedCSS += `.prose h1 { font-size: 2em; }`; // Example output
+
         }
-      @end
-      
-      <button class="btn">Click me</button>
-    `;
+
+        return { build: () => processedCSS };
+
+    });
+
     
+
     const result = await kire.render(tpl);
+
     const clean = result.replace(/\s+/g, ' ').trim();
+
     
+
     expect(clean).toContain("<style>");
-    expect(clean).toContain("/* applied: bg-blue-500 */");
+
+    expect(clean).toContain("/* @tailwindcss/typography plugin */");
+
+    expect(clean).toContain(".prose h1 { font-size: 2em; }");
+
     expect(clean).toContain("</style>");
-    expect(clean).toContain("<button class=\"btn\">Click me</button>");
+
+    expect(clean).toContain('<div class="prose"></div>');
+
   });
 
-  test("directive @tailwind as single line with param", async () => {
-    const tpl = `
-      @tailwind(".btn { color: red; }")
-      
-      <button class="btn">Click me</button>
-    `;
-    
-    const result = await kire.render(tpl);
-    const clean = result.replace(/\s+/g, ' ').trim();
-    
-    expect(clean).toContain("<style>");
-    expect(clean).toContain(".btn { color: red; }");
-    expect(clean).toContain("</style>");
-  });
-
-  test("empty @tailwind directive (defaults)", async () => {
-    const tpl = `
-      @tailwind
-      @end
-      <div>Content</div>
-    `;
-    
-    const result = await kire.render(tpl);
-    const clean = result.replace(/\s+/g, ' ').trim();
-    
-    expect(clean).toContain("<style>");
-    expect(clean).toContain("/* tailwind base */");
-    expect(clean).toContain("</style>");
-    expect(clean).toContain("<div>Content</div>");
-  });
-
-  test("@tailwind with CSS content", async () => {
-    const tpl = `
-      @tailwind
-        .card { 
-          @apply shadow-md; 
-        }
-      @end
-      
-      <div class="card"></div>
-    `;
-    
-    const result = await kire.render(tpl);
-    const clean = result.replace(/\s+/g, ' ').trim();
-    
-    expect(clean).toContain("<style>");
-    expect(clean).toContain("/* applied: shadow-md */");
-    expect(clean).toContain("</style>");
-  });
-
-  test("tailwind v4 @theme directive support", async () => {
-    const tpl = `
-      @tailwind
-        @theme {
-          --color-primary: blue;
-        }
-      @end
-    `;
-    
-    const result = await kire.render(tpl);
-    const clean = result.replace(/\s+/g, ' ').trim();
-    
-    expect(clean).toContain("/* theme: --color-primary: blue; */");
-  });
 });

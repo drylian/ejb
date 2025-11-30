@@ -7,7 +7,6 @@
     <title>{{ title || 'Kire Documentation' }}</title>
     @assets()
     @tailwind
-      @import "tailwindcss";
       @plugin "daisyui";
       @plugin "@tailwindcss/typography";
     @end
@@ -28,18 +27,7 @@
             
             <!-- Page content -->
             <main class="p-6 md:p-10 prose max-w-none">
-                @if(defined('content'))
-                    <!-- Content passed via define (not common in kire currently unless explicit) -->
-                    <!-- Usually in Kire layouts, we assume the caller rendered something? -->
-                    <!-- Kire layout system usually works via @include or @slot if component -->
-                    <!-- But here we are likely using @markdown generator which injects content -->
-                    {{ content }}
-                @elseif(slots && slots.default)
-                     {{ slots.default }}
-                @else
-                     <!-- If direct usage, maybe we want to define a content block -->
-                     @defined('content')
-                @end
+                @defined('content')
             </main>
         </div> 
         <div class="drawer-side">

@@ -41,5 +41,8 @@
 	"scripts": {
 		"build": "bun run build.ts",
 		"test": "bun test"
+	},
+	"dependencies": {
+		"marked": "^17.0.1"
 	}
 }

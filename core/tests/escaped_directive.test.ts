@@ -19,7 +19,7 @@ describe("Escaped Directives", () => {
 	test("should render valid directive normally", async () => {
 		kire.directive({
 			name: "foo",
-			onCall: (ctx) => ctx.res('$ctx.res("bar")'),
+			onCall: (ctx) => ctx.raw('$ctx.res("bar")'),
 		});
 		const tpl = "@foo";
 		const res = await kire.render(tpl);

@@ -41,7 +41,7 @@ test("Kire - HTML Base Template", async () => {
 				params: ["reference?:string"],
 				onCall(ctx) {
 					const reference = ctx.param("reference") ?? "";
-					ctx.res();
+					ctx.raw("");
 				},
 			},
 		],
@@ -54,7 +54,7 @@ test("Kire - HTML Base Template", async () => {
 
 			if (ctx.children) ctx.set(ctx.children);
 
-			ctx.res(`
+			ctx.raw(`
                     ${ctx.children ? `})();` : ""}
                     $ctx.res = originalRes;
                     return inner;
@@ -99,9 +99,9 @@ test("Kire - HTML Base Template", async () => {
 			const expr = ctx.param("expr"); // "item in user.items"
 			const [itemVar, , listVar] = expr.split(" ");
 
-			ctx.res(`for (const ${itemVar} of ${listVar}) {`);
+			ctx.raw(`for (const ${itemVar} of ${listVar}) {`);
 			if (ctx.children) ctx.set(ctx.children);
-			ctx.res(`}`);
+			ctx.raw(`}`);
 		},
 	});
 
@@ -114,16 +114,16 @@ test("Kire - HTML Base Template", async () => {
 				name: "else",
 				children: true,
 				onCall(c) {
-					c.res("} else {");
+					c.raw("} else {");
 					if (c.children) c.set(c.children);
 				},
 			},
 		],
 		onCall(ctx) {
-			ctx.res(`if (${ctx.param("cond")}) {`);
+			ctx.raw(`if (${ctx.param("cond")}) {`);
 			if (ctx.children) ctx.set(ctx.children);
 			if (ctx.parents) ctx.set(ctx.parents);
-			ctx.res("}");
+			ctx.raw("}");
 		},
 	});
 

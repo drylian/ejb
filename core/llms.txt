@@ -3,843 +3,973 @@
 // --- From: core/src/types.ts ---
 import type { Kire } from "./kire";
 
+export interface KireCache<T = any> {
+	get(key: string): T | undefined;
+	set(key: string, value: T): void;
+	has(key: string): boolean;
+	delete(key: string): boolean;
+	clear(): void;
+}
+
 export interface KireConfig {
-  globals?: Record<string, any>;
-  // Add other config options as needed
+	globals?: Record<string, any>;
+	// Add other config options as needed
 }
 
 export interface IParser {
-  parse(): Node[];
+	parse(): Node[];
 }
 export type IParserConstructor = new (template: string, kire: Kire) => IParser;
 
 export interface ICompiler {
-  compile(nodes: Node[]): Promise<string>;
+	compile(nodes: Node[]): Promise<string>;
 }
 export type ICompilerConstructor = new (kire: Kire) => ICompiler;
 
-
 export interface KireOptions {
-  root?: string;
-  cache?: boolean;
-  resolver?: (filename: string) => Promise<string>;
-  alias?: Record<string, string>;
-  extension?: string;
-  directives?: boolean;
-  plugins?: (KirePlugin | [KirePlugin, any])[];
-  engine?: {
-    parser?: IParserConstructor;
-    compiler?: ICompilerConstructor;
-  }
+	root?: string;
+	cache?: boolean;
+	resolver?: (filename: string) => Promise<string>;
+	alias?: Record<string, string>;
+	extension?: string;
+	directives?: boolean;
+	plugins?: (KirePlugin | [KirePlugin, any])[];
+	engine?: {
+		parser?: IParserConstructor;
+		compiler?: ICompilerConstructor;
+	};
+	varLocals?: string;
+	exposeLocals?: boolean;
 }
 
 export interface KireContext {
-  param(name: string | number): any;
-  render(content: string): Promise<string>; // Returns compiled function string
-  func(code: string): string; // Wraps code in a function definition
-  pre(code: string): void;
-  res(code: string): void;
-  pos(code: string): void;
-  error(message: string): void;
-  resolve(path: string): string;
+	param(name: string | number): any;
+	render(content: string): Promise<string>; // Returns compiled function string
+	func(code: string): string; // Wraps code in a function definition
+	pre(code: string): void;
+	res(content: string): void;
+	raw(code: string): void;
+	pos(code: string): void;
+	error(message: string): void;
+	resolve(path: string): string;
 
-  // For nested directives
-  children?: Node[];
-  parents?: Node[]; // The instances of sub-directives (e.g., elseif blocks)
-  set(nodes: Node[]): Promise<void>;
+	// For nested directives
+	children?: Node[];
+	parents?: Node[]; // The instances of sub-directives (e.g., elseif blocks)
+	set(nodes: Node[]): Promise<void>;
 
-  // Context management (compile-time, generates code)
-  clone(locals?: Record<string, any>): KireContext; // Returns code string for cloning
-  clear(): KireContext; // Returns code string for clearing
+	// Context management (compile-time, generates code)
+	clone(locals?: Record<string, any>): KireContext; // Returns code string for cloning
+	clear(): KireContext; // Returns code string for clearing
 }
 
 export interface KireElementContext {
-  content: string; // The global HTML content (mutable/readable state representation)
-  element: {
-    tagName: string;
-    attributes: Record<string, string>;
-    inner: string;
-    outer: string;
-  };
-  // Method to update the global content
-  update(newContent: string): void;
-  replace(replacement: string): void;
-  replaceContent(replacement: string): void;
+	content: string; // The global HTML content (mutable/readable state representation)
+	element: {
+		tagName: string;
+		attributes: Record<string, string>;
+		inner: string;
+		outer: string;
+	};
+	// Method to update the global content
+	update(newContent: string): void;
+	replace(replacement: string): void;
+	replaceContent(replacement: string): void;
 }
 
-export interface KireElementHandler {
-  (ctx: KireElementContext): Promise<void> | void;
-}
+export type KireElementHandler = (
+	ctx: KireElementContext,
+) => Promise<void> | void;
 
 export interface KireElementOptions {
-  void?: boolean;
+	void?: boolean;
 }
 
 export interface KireHooks {
-    onBewareDirectives?: ((compiler: ICompiler) => void | string) | ((compiler: ICompiler) => void | string)[];
-    onAfterDirectives?: ((ctx: KireContext) => void | Promise<void>) | ((ctx: KireContext) => void | Promise<void>)[];
-    onBewareElements?: ((ctx: KireContext, html: string) => void | string | Promise<string | void>) | ((ctx: KireContext, html: string) => void | string | Promise<string | void>)[];
-    onAfterElements?: ((ctx: KireContext, html: string) => void | string | Promise<string | void>) | ((ctx: KireContext, html: string) => void | string | Promise<string | void>)[];
+	onBewareDirectives?:
+		| ((compiler: ICompiler) => undefined | string)
+		| ((compiler: ICompiler) => undefined | string)[];
+	onAfterDirectives?:
+		| ((ctx: KireContext) => void | Promise<void>)
+		| ((ctx: KireContext) => void | Promise<void>)[];
+	onBewareElements?:
+		| ((
+				ctx: KireContext,
+				html: string,
+		  ) => undefined | string | Promise<string | undefined>)
+		| ((
+				ctx: KireContext,
+				html: string,
+		  ) => undefined | string | Promise<string | undefined>)[];
+	onAfterElements?:
+		| ((
+				ctx: KireContext,
+				html: string,
+		  ) => undefined | string | Promise<string | undefined>)
+		| ((
+				ctx: KireContext,
+				html: string,
+		  ) => undefined | string | Promise<string | undefined>)[];
 }
 
 export interface DirectiveDefinition {
-  name: string;
-  params?: string[]; // e.g. ['filepath:string']
-  children?: boolean; // Does this directive accept a block ending with @end?
-  childrenRaw?: boolean; // Should the children be treated as raw text?
-  parents?: DirectiveDefinition[]; // Sub-directives like elseif/else
-  onCall: (ctx: KireContext) => void | Promise<void>;
-  description?: string;
-  example?: string;
-  type?: 'css' | 'js' | 'html';
+	name: string;
+	params?: string[]; // e.g. ['filepath:string']
+	children?: boolean; // Does this directive accept a block ending with @end?
+	childrenRaw?: boolean; // Should the children be treated as raw text?
+	parents?: DirectiveDefinition[]; // Sub-directives like elseif/else
+	onCall: (ctx: KireContext) => void | Promise<void>;
+	description?: string;
+	example?: string;
+	type?: "css" | "js" | "html";
 }
 
 export interface KireSchematic {
-  package: string;
-  repository?: string | { type: string; url: string };
-  version?: string;
-  directives?: DirectiveDefinition[];
-  globals?: Record<string, any>
+	package: string;
+	repository?: string | { type: string; url: string };
+	version?: string;
+	directives?: DirectiveDefinition[];
+	globals?: Record<string, any>;
 }
 
-export interface KirePlugin<Options extends (object | undefined) = {}> {
-  name: string;
-  sort?: number;
-  options: Options;
-  load(kire: Kire, opts?: Options): void;
+export interface KirePlugin<Options extends object | undefined = {}> {
+	name: string;
+	sort?: number;
+	options: Options;
+	load(kire: Kire, opts?: Options): void;
 }
 
 // AST Types
-export type NodeType = 'text' | 'variable' | 'directive';
+export type NodeType = "text" | "variable" | "directive";
 
 export interface Node {
-  type: NodeType;
-  content?: string;
-  name?: string; // For directives
-  args?: any[]; // For directives
-  start?: number;
-  end?: number;
-  children?: Node[]; // Inner content
-  related?: Node[]; // For 'parents' (elseif, etc)
+	type: NodeType;
+	content?: string;
+	name?: string; // For directives
+	args?: any[]; // For directives
+	start?: number;
+	end?: number;
+	children?: Node[]; // Inner content
+	related?: Node[]; // For 'parents' (elseif, etc)
 }
 
 
 // --- From: core/src/kire.ts ---
-import { Parser } from './parser';
-import { Compiler, RESPONSE_SYMBOL, STRUCTURE_SYMBOL } from './compiler';
-import type { DirectiveDefinition, KirePlugin, KireContext, KireElementHandler, KireSchematic, KireOptions, IParserConstructor, ICompilerConstructor, KireElementOptions, KireHooks } from './types';
-import { join } from './utils/path';
-import { KireDirectives } from './directives';
+import { Compiler, RESPONSE_SYMBOL, STRUCTURE_SYMBOL } from "./compiler";
+import { KireDirectives } from "./directives";
+import { Parser } from "./parser";
+import type {
+	DirectiveDefinition,
+	ICompilerConstructor,
+	IParserConstructor,
+	KireCache,
+	KireContext,
+	KireElementHandler,
+	KireElementOptions,
+	KireHooks,
+	KireOptions,
+	KirePlugin,
+	KireSchematic,
+} from "./types";
+import { join } from "./utils/path";
 
 export class Kire {
-  public directives: Map<string, DirectiveDefinition> = new Map();
-  public elements: Map<string, { handler: KireElementHandler, options?: KireElementOptions }> = new Map();
-  public globalContext: Map<string, any> = new Map();
-  public hooks: KireHooks = {};
-  
-  public root: string;
-  public cache: boolean;
-  public resolverFn: (filename: string) => Promise<string>;
-  public alias: Record<string, string>;
-  public extension: string;
-  public cacheFiles: Map<string, Function> = new Map();
-  public parserConstructor: IParserConstructor;
-  public compilerConstructor: ICompilerConstructor;
+	public directives: Map<string, DirectiveDefinition> = new Map();
+	public elements: Map<
+		string,
+		{ handler: KireElementHandler; options?: KireElementOptions }
+	> = new Map();
+	public globalContext: Map<string, any> = new Map();
+	public hooks: KireHooks = {};
 
-  constructor(options: KireOptions = {}) {
-    this.root = options.root ?? './';
-    this.cache = options.cache ?? true;
-    this.alias = options.alias ?? { '~/': this.root };
-    this.extension = options.extension ?? 'kire';
-    
-    this.resolverFn = options.resolver ?? (async (filename) => {
-         throw new Error(`No resolver defined for path: ${filename}`);
-    });
+	public root: string;
+	public cache: boolean;
+	public resolverFn: (filename: string) => Promise<string>;
+	public alias: Record<string, string>;
+	public extension: string;
+	public cacheFiles: Map<string, Function> = new Map();
+	public parserConstructor: IParserConstructor;
+	public compilerConstructor: ICompilerConstructor;
+	public varLocals: string;
+	public exposeLocals: boolean;
 
-    this.parserConstructor = options.engine?.parser ?? Parser;
-    this.compilerConstructor = options.engine?.compiler ?? Compiler;
-    
-    // Collect plugins to load
-    const pluginsToLoad: Array<{p: KirePlugin<any>, o?: any}> = [];
+	private _cacheStore: Map<string, Map<string, any>> = new Map();
 
-    // Register default directives
-    if(typeof options.directives == "undefined"  || options.directives == true) {
-        pluginsToLoad.push({ p: KireDirectives });
-    }
+	public get $cache() {
+		return {
+			clear: () => this._cacheStore.clear(),
+		};
+	}
 
-    // User provided plugins
-    if (options.plugins) {
-        for (const p of options.plugins) {
-            if (Array.isArray(p)) {
-                pluginsToLoad.push({ p: p[0], o: p[1] });
-            } else {
-                pluginsToLoad.push({ p });
-            }
-        }
-    }
+	public cached<T = any>(namespace: string): KireCache<T> {
+		if (!this._cacheStore.has(namespace)) {
+			this._cacheStore.set(namespace, new Map());
+		}
+		const store = this._cacheStore.get(namespace)!;
+		return {
+			get: (key: string) => store.get(key),
+			set: (key: string, value: T) => store.set(key, value),
+			has: (key: string) => store.has(key),
+			delete: (key: string) => store.delete(key),
+			clear: () => store.clear(),
+		};
+	}
 
-    // Sort plugins (default sort 100)
-    pluginsToLoad.sort((a, b) => (a.p.sort ?? 100) - (b.p.sort ?? 100));
+	constructor(options: KireOptions = {}) {
+		this.root = options.root ?? "./";
+		this.cache = options.cache ?? true;
+		this.alias = options.alias ?? { "~/": this.root };
+		this.extension = options.extension ?? "kire";
+		this.varLocals = options.varLocals ?? "it";
+		this.exposeLocals = options.exposeLocals ?? true;
 
-    // Load plugins
-    for (const item of pluginsToLoad) {
-        this.plugin(item.p, item.o);
-    }
-  }
+		this.resolverFn =
+			options.resolver ??
+			(async (filename) => {
+				throw new Error(`No resolver defined for path: ${filename}`);
+			});
 
-  public plugin<KirePlugged extends KirePlugin<any>>(plugin: KirePlugged, opts?: KirePlugged['options']) {
-    if (typeof plugin === 'function') {
-        // Support functional plugins if any legacy ones exist, though interface says otherwise
-        (plugin as any)(this, opts);
-    } else if (plugin.load) {
-        plugin.load(this, opts);
-    }
-    return this;
-  }
+		this.parserConstructor = options.engine?.parser ?? Parser;
+		this.compilerConstructor = options.engine?.compiler ?? Compiler;
 
-  public pkgSchema(name: string, repository?: string | { type: string; url: string }, version?: string): KireSchematic {
-    const globals: Record<string, any> = {};
-    this.globalContext.forEach((value, key) => {
-        globals[key] = value;
-    });
+		// Collect plugins to load
+		const pluginsToLoad: Array<{ p: KirePlugin<any>; o?: any }> = [];
 
-    return {
-        package:name,
-        repository,
-        version,
-        directives: Array.from(this.directives.values()),
-        globals: globals
-    };
-  }
+		// Register default directives
+		if (
+			typeof options.directives === "undefined" ||
+			options.directives === true
+		) {
+			pluginsToLoad.push({ p: KireDirectives });
+		}
 
-  public element(name: string, handler: KireElementHandler, options?: KireElementOptions) {
-      this.elements.set(name, { handler, options });
-      return this;
-  }
+		// User provided plugins
+		if (options.plugins) {
+			for (const p of options.plugins) {
+				if (Array.isArray(p)) {
+					pluginsToLoad.push({ p: p[0], o: p[1] });
+				} else {
+					pluginsToLoad.push({ p });
+				}
+			}
+		}
 
-  public directive(def: DirectiveDefinition) {
-    this.directives.set(def.name, def);
-    if (def.parents) {
-        for (const parent of def.parents) {
-            this.directive(parent);
-        }
-    }
-    return this;
-  }
+		// Sort plugins (default sort 100)
+		pluginsToLoad.sort((a, b) => (a.p.sort ?? 100) - (b.p.sort ?? 100));
 
-  public getDirective(name: string) {
-    return this.directives.get(name);
-  }
+		// Load plugins
+		for (const item of pluginsToLoad) {
+			this.plugin(item.p, item.o);
+		}
+	}
 
-  public $ctx(key: string, value: any) {
-    this.globalContext.set(key, value);
-    return this;
-  }
+	public plugin<KirePlugged extends KirePlugin<any>>(
+		plugin: KirePlugged,
+		opts?: KirePlugged["options"],
+	) {
+		if (typeof plugin === "function") {
+			// Support functional plugins if any legacy ones exist, though interface says otherwise
+			(plugin as any)(this, opts);
+		} else if (plugin.load) {
+			plugin.load(this, opts);
+		}
+		return this;
+	}
 
-  public parse(template: string) {
-    const parser = new this.parserConstructor(template, this);
-    return parser.parse();
-  }
+	public pkgSchema(
+		name: string,
+		repository?: string | { type: string; url: string },
+		version?: string,
+	): KireSchematic {
+		const globals: Record<string, any> = {};
+		this.globalContext.forEach((value, key) => {
+			globals[key] = value;
+		});
 
-  public async compile(template: string): Promise<string> {
-    const parser = new this.parserConstructor(template, this);
-    const nodes = parser.parse();
-    const compiler = new this.compilerConstructor(this);
-    return compiler.compile(nodes);
-  }
-  
-  public resolvePath(filepath: string, currentFile?: string): string {
-    if (!filepath) return filepath;
+		return {
+			package: name,
+			repository,
+			version,
+			directives: Array.from(this.directives.values()),
+			globals: globals,
+		};
+	}
 
-    // If it's a URL, return it directly
-    if (filepath.startsWith('http://') || filepath.startsWith('https://')) {
-        return filepath;
-    }
+	public element(
+		name: string,
+		handler: KireElementHandler,
+		options?: KireElementOptions,
+	) {
+		this.elements.set(name, { handler, options });
+		return this;
+	}
 
-    // Normalize
-    let resolved = filepath.replace(/\\/g, "/").replace(/(?<!:)\/+/g, "/");
-    const root = this.root.replace(/\\/g, "/").replace(/\/$/, "");
+	public directive(def: DirectiveDefinition) {
+		this.directives.set(def.name, def);
+		if (def.parents) {
+			for (const parent of def.parents) {
+				this.directive(parent);
+			}
+		}
+		return this;
+	}
 
-    // Check absolute
-    const isWindowsAbsolute = /^[a-zA-Z]:\//.test(resolved);
+	public getDirective(name: string) {
+		return this.directives.get(name);
+	}
 
-    // Aliases
-    const aliases = Object.entries(this.alias);
-    // Sort aliases by length desc
-    aliases.sort((a, b) => b[0].length - a[0].length);
+	public $ctx(key: string, value: any) {
+		this.globalContext.set(key, value);
+		return this;
+	}
 
-    let matchedAlias = false;
-    for (const [alias, replacement] of aliases) {
-        const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        if (new RegExp(`^${escapedAlias}`).test(filepath)) {
-            resolved = join(replacement, filepath.slice(alias.length));
-            matchedAlias = true;
-            break;
-        }
-    }
+	public parse(template: string) {
+		const parser = new this.parserConstructor(template, this);
+		return parser.parse();
+	}
 
-    if (matchedAlias) {
-        // if alias matched, it might still need normalization or extension
-    } else {
-        const isResolvedAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(resolved);
-        if (!isResolvedAbsolute && !isWindowsAbsolute) {
-            const base = currentFile
-                ? currentFile.replace(/\\/g, "/").replace(/\/[^/]*$/, "")
-                : root;
-            resolved = join(base, resolved);
-        }
-    }
+	public async compile(template: string): Promise<string> {
+		const parser = new this.parserConstructor(template, this);
+		const nodes = parser.parse();
+		const compiler = new this.compilerConstructor(this);
+		return compiler.compile(nodes);
+	}
 
-    // Add extension if needed, but not to URLs
-    if (this.extension && !/\.[^/.]+$/.test(resolved) && !(resolved.startsWith('http://') || resolved.startsWith('https://'))) {
-        const ext = this.extension.charAt(0) === "." ? this.extension : `.${this.extension}`;
-        resolved += ext;
-    }
+	public resolvePath(filepath: string, currentFile?: string): string {
+		if (!filepath) return filepath;
 
-    return resolved.replace(/\/+/g, "/");
-  }
+		// If it's a URL, return it directly
+		if (filepath.startsWith("http://") || filepath.startsWith("https://")) {
+			return filepath;
+		}
 
-  // Helper to compile and create a function
-  public async createFunction(template: string, filename?: string): Promise<Function> {
-      let content = template;
-      let usedFilename = filename;
+		// Normalize
+		let resolved = filepath.replace(/\\/g, "/").replace(/(?<!:)\/+/g, "/");
+		const root = this.root.replace(/\\/g, "/").replace(/\/$/, "");
 
-      // Check if template is a path (heuristic)
-      const isTemplatePath = (str: string) => {
-          // If it has newlines or template syntax, it's definitely content
-          if (str.includes('\n') || str.includes('{{') || str.includes('@')) return false;
-          
-          // If it looks like a path or simple filename
-          return str.includes('/') || str.includes('\\') || str.endsWith(`.${this.extension}`) || /^[a-zA-Z0-9_-]+$/.test(str);
-      };
+		// Check absolute
+		const isWindowsAbsolute = /^[a-zA-Z]:\//.test(resolved);
 
-      if (isTemplatePath(template)) {
-          const resolvedPath = this.resolvePath(template);
-          if (this.cache && this.cacheFiles.has(resolvedPath)) {
-              return this.cacheFiles.get(resolvedPath) as Function;
-          }
-          try {
-            content = await this.resolverFn(resolvedPath);
-            usedFilename = resolvedPath;
-          } catch (e: any) {
-             // If resolver fails, assume it's a literal string
-             if (!e.message.includes('No resolver')) {
-                 throw e;
-             }
-          }
-      }
+		// Aliases
+		const aliases = Object.entries(this.alias);
+		// Sort aliases by length desc
+		aliases.sort((a, b) => b[0].length - a[0].length);
 
-      const code = await this.compile(content);
-      try {
-          const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-          const fn = new AsyncFunction('$ctx', code);
-          
-          if (usedFilename && this.cache) {
-              this.cacheFiles.set(usedFilename, fn);
-          }
-          return fn;
-      } catch (e) {
-          console.error("Error creating function from code:", code);
-          throw e;
-      }
-  }
+		let matchedAlias = false;
+		for (const [alias, replacement] of aliases) {
+			const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+			if (new RegExp(`^${escapedAlias}`).test(filepath)) {
+				resolved = join(replacement, filepath.slice(alias.length));
+				matchedAlias = true;
+				break;
+			}
+		}
 
-  public async render(template: string, locals: Record<string, any> = {}): Promise<string> {
-      const fn = await this.createFunction(template);
-      
-      // Runtime context merging globals and locals
-      const rctx: any = {};
-      for (const [k, v] of this.globalContext) {
-          rctx[k] = v;
-      }
-      Object.assign(rctx, locals);
-      
-      // Initialize the response and structure symbols on the runtime context
-      rctx[RESPONSE_SYMBOL] = '';
-      rctx[STRUCTURE_SYMBOL] = [];
-      
-      // Runtime helper to append to response
-      rctx.res = (str: any) => {
-          rctx[RESPONSE_SYMBOL] += str;
-      };
+		if (matchedAlias) {
+			// if alias matched, it might still need normalization or extension
+		} else {
+			const isResolvedAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(resolved);
+			if (!isResolvedAbsolute && !isWindowsAbsolute) {
+				const base = currentFile
+					? currentFile.replace(/\\/g, "/").replace(/\/[^/]*$/, "")
+					: root;
+				resolved = join(base, resolved);
+			}
+		}
 
-      // Helper to resolve paths inside directives
-      rctx.resolve = (path: string) => {
-          return this.resolvePath(path); 
-      };
-      
-      // Helper to load templates at runtime (for @include)
-      rctx.load = async (path: string) => {
-          return this.createFunction(path);
-      };
+		// Add extension if needed, but not to URLs
+		if (
+			this.extension &&
+			!/\.[^/.]+$/.test(resolved) &&
+			!(resolved.startsWith("http://") || resolved.startsWith("https://"))
+		) {
+			const ext =
+				this.extension.charAt(0) === "."
+					? this.extension
+					: `.${this.extension}`;
+			resolved += ext;
+		}
 
-      // Method to create a new context based on current one (for isolation)
-      rctx.clone = (locals: Record<string, any> = {}): KireContext => {
-          const newCtx = Object.create(rctx); // Inherit prototype
-          Object.assign(newCtx, locals); // Assign locals
-          // Initialize for new context
-          newCtx[RESPONSE_SYMBOL] = '';
-          newCtx[STRUCTURE_SYMBOL] = [];
-          return newCtx;
-      };
+		return resolved.replace(/\/+/g, "/");
+	}
 
-      // Method to clear response/structure for current context
-      rctx.clear = (): void => {
-          rctx[RESPONSE_SYMBOL] = '';
-          rctx[STRUCTURE_SYMBOL] = [];
-      };
+	// Helper to compile and create a function
+	public async createFunction(
+		template: string,
+		filename?: string,
+	): Promise<Function> {
+		let content = template;
+		let usedFilename = filename;
 
-      // Helper to add to context (used by imports logic)
-      rctx.add = async (childFn: Function) => {
-         if (typeof childFn === 'function') {
-             // Use clone to create child context, locals are usually passed in @include
-             // If childFn (e.g. from createFunction) needs locals, it's passed during its execution.
-             // Here, childCtx is for its OWN response and structure.
-             const childCtx = rctx.clone();
-             
-             // Execute the child function with the child context
-             const resultCtx = await childFn(childCtx);
-             
-             // Add the result context to the parent's structure
-             rctx[STRUCTURE_SYMBOL].push(resultCtx);
-             
-             // Append the child's response to the parent's response
-             rctx[RESPONSE_SYMBOL] += resultCtx[RESPONSE_SYMBOL];
-         } else {
-             rctx[RESPONSE_SYMBOL] += childFn;
-         }
-      };
+		// Check if template is a path (heuristic)
+		const isTemplatePath = (str: string) => {
+			// If it has newlines or template syntax, it's definitely content
+			if (str.includes("\n") || str.includes("{{") || str.includes("@"))
+				return false;
 
-      // Execute the compiled function
-      if (this.hooks.onAfterDirectives) {
-          if (Array.isArray(this.hooks.onAfterDirectives)) {
-              for (const hook of this.hooks.onAfterDirectives) {
-                  await hook(rctx);
-              }
-          } else {
-              await this.hooks.onAfterDirectives(rctx);
-          }
-      }
-      
-      const finalCtx = await fn(rctx);
-      
-      // Post-process elements
-      let resultHtml = finalCtx[RESPONSE_SYMBOL];
-      
-      // Hook: onBewareElements
-      if (this.hooks.onBewareElements) {
-          if (Array.isArray(this.hooks.onBewareElements)) {
-              for (const hook of this.hooks.onBewareElements) {
-                  const res = await hook(rctx, resultHtml);
-                  if (typeof res === 'string') resultHtml = res;
-              }
-          } else {
-              const res = await this.hooks.onBewareElements(rctx, resultHtml);
-              if (typeof res === 'string') resultHtml = res;
-          }
-      }
-      
-      if (this.elements.size > 0) {
-          for (const [tagName, { handler, options }] of this.elements) {
-              // Check if void tag
-              const isVoid = options?.void || /^(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i.test(tagName);
-              
-              const regex = isVoid 
-                  ? new RegExp(`<${tagName}([^>]*)>`, 'gi')
-                  : new RegExp(`<${tagName}([^>]*)>([\\s\\S]*?)<\\/${tagName}>`, 'gi');
-              
-              const matches = [];
-              let match;
-              while ((match = regex.exec(resultHtml)) !== null) {
-                  matches.push({
-                      full: match[0],
-                      attrs: match[1],
-                      inner: isVoid ? '' : match[2],
-                      index: match.index
-                  });
-              }
-              
-              for (const m of matches) {
-                  if (!resultHtml.includes(m.full)) {
-                      continue;
-                  }
+			// If it looks like a path or simple filename
+			return (
+				str.includes("/") ||
+				str.includes("\\") ||
+				str.endsWith(`.${this.extension}`) ||
+				/^[a-zA-Z0-9_-]+$/.test(str)
+			);
+		};
 
-                  const attributes: Record<string, string> = {};
-                  const attrRegex = /(\w+)="([^"]*)"/g;
-                  let attrMatch;
-                  while ((attrMatch = attrRegex.exec(m.attrs!)) !== null) {
-                      attributes[attrMatch[1]!] = attrMatch[2]!;
-                  }
+		if (isTemplatePath(template)) {
+			const resolvedPath = this.resolvePath(template);
+			if (this.cache && this.cacheFiles.has(resolvedPath)) {
+				return this.cacheFiles.get(resolvedPath) as Function;
+			}
+			try {
+				content = await this.resolverFn(resolvedPath);
+				usedFilename = resolvedPath;
+			} catch (e: any) {
+				// If resolver fails, assume it's a literal string
+				if (!e.message.includes("No resolver")) {
+					throw e;
+				}
+			}
+		}
 
-                  const elCtx: any = rctx.clone();
-                  elCtx.content = resultHtml; 
-                  elCtx.element = {
-                      tagName,
-                      attributes,
-                      inner: m.inner,
-                      outer: m.full
-                  };
-                  elCtx.update = (newContent: string) => {
-                      resultHtml = newContent;
-                      elCtx.content = newContent;
-                  };
-                  elCtx.replace = (replacement: string) => {
-                      resultHtml = resultHtml.replace(m.full, replacement);
-                      elCtx.content = resultHtml;
-                  };
-                  elCtx.replaceContent = (replacement: string) => {
-                      if (!isVoid) {
-                           const newOuter = m.full.replace(m.inner!, replacement);
-                           resultHtml = resultHtml.replace(m.full, newOuter);
-                           elCtx.content = resultHtml;
-                      }
-                  };
-                  
-                  await handler(elCtx);
-                  
-                  if (elCtx.content !== resultHtml) {
-                      resultHtml = elCtx.content;
-                  }
-              }
-          }
-      }
-      
-      // Hook: onAfterElements
-      if (this.hooks.onAfterElements) {
-          if (Array.isArray(this.hooks.onAfterElements)) {
-              for (const hook of this.hooks.onAfterElements) {
-                  const res = await hook(rctx, resultHtml);
-                  if (typeof res === 'string') resultHtml = res;
-              }
-          } else {
-              const res = await this.hooks.onAfterElements(rctx, resultHtml);
-              if (typeof res === 'string') resultHtml = res;
-          }
-      }
-      
-      return resultHtml;
-  }
+		if (content === null || content === undefined) {
+			return null as any;
+		}
+
+		const code = await this.compile(content);
+		try {
+			const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+			const fn = new AsyncFunction("$ctx", code);
+
+			if (usedFilename && this.cache) {
+				this.cacheFiles.set(usedFilename, fn);
+			}
+			return fn;
+		} catch (e) {
+			console.error("Error creating function from code:", code);
+			throw e;
+		}
+	}
+
+	public async render(
+		template: string,
+		locals: Record<string, any> = {},
+	): Promise<string> {
+		const fn = await this.createFunction(template);
+
+		// Runtime context merging globals and locals
+		const rctx: any = {};
+		for (const [k, v] of this.globalContext) {
+			rctx[k] = v;
+		}
+		Object.assign(rctx, locals);
+
+		// Expose locals under the configured varLocals name if exposeLocals is true
+		if (this.exposeLocals) {
+			rctx[this.varLocals] = locals;
+		}
+
+		// Initialize the response and structure symbols on the runtime context
+		rctx[RESPONSE_SYMBOL] = "";
+		rctx[STRUCTURE_SYMBOL] = [];
+
+		// Runtime helper to append to response
+		rctx.res = (str: any) => {
+			rctx[RESPONSE_SYMBOL] += str;
+		};
+
+		// Runtime alias to get response
+		rctx.$res = () => rctx[RESPONSE_SYMBOL];
+
+		// Helper to resolve paths inside directives
+		rctx.resolve = (path: string) => {
+			return this.resolvePath(path);
+		};
+
+		// Helper to load templates at runtime (for @include)
+		rctx.load = async (path: string) => {
+			return this.createFunction(path);
+		};
+
+		// Method to create a new context based on current one (for isolation)
+		rctx.clone = (locals: Record<string, any> = {}): KireContext => {
+			const newCtx = Object.create(rctx); // Inherit prototype
+			Object.assign(newCtx, locals); // Assign locals
+			// Initialize for new context
+			newCtx[RESPONSE_SYMBOL] = "";
+			newCtx[STRUCTURE_SYMBOL] = [];
+			return newCtx;
+		};
+
+		// Method to clear response/structure for current context
+		rctx.clear = (): void => {
+			rctx[RESPONSE_SYMBOL] = "";
+			rctx[STRUCTURE_SYMBOL] = [];
+		};
+
+		// Helper to add to context (used by imports logic)
+		rctx.add = async (childFn: Function) => {
+			if (typeof childFn === "function") {
+				// Use clone to create child context, locals are usually passed in @include
+				// If childFn (e.g. from createFunction) needs locals, it's passed during its execution.
+				// Here, childCtx is for its OWN response and structure.
+				const childCtx = rctx.clone();
+
+				// Execute the child function with the child context
+				const resultCtx = await childFn(childCtx);
+
+				// Add the result context to the parent's structure
+				rctx[STRUCTURE_SYMBOL].push(resultCtx);
+
+				// Append the child's response to the parent's response
+				rctx[RESPONSE_SYMBOL] += resultCtx[RESPONSE_SYMBOL];
+			} else {
+				rctx[RESPONSE_SYMBOL] += childFn;
+			}
+		};
+
+		// Execute the compiled function
+		if (this.hooks.onAfterDirectives) {
+			if (Array.isArray(this.hooks.onAfterDirectives)) {
+				for (const hook of this.hooks.onAfterDirectives) {
+					await hook(rctx);
+				}
+			} else {
+				await this.hooks.onAfterDirectives(rctx);
+			}
+		}
+
+		const finalCtx = await fn(rctx);
+
+		// Post-process elements
+		let resultHtml = finalCtx[RESPONSE_SYMBOL];
+
+		// Hook: onBewareElements
+		if (this.hooks.onBewareElements) {
+			if (Array.isArray(this.hooks.onBewareElements)) {
+				for (const hook of this.hooks.onBewareElements) {
+					const res = await hook(rctx, resultHtml);
+					if (typeof res === "string") resultHtml = res;
+				}
+			} else {
+				const res = await this.hooks.onBewareElements(rctx, resultHtml);
+				if (typeof res === "string") resultHtml = res;
+			}
+		}
+
+		if (this.elements.size > 0) {
+			for (const [tagName, { handler, options }] of this.elements) {
+				// Check if void tag
+				const isVoid =
+					options?.void ||
+					/^(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i.test(
+						tagName,
+					);
+
+				const regex = isVoid
+					? new RegExp(`<${tagName}([^>]*)>`, "gi")
+					: new RegExp(`<${tagName}([^>]*)>([\\s\\S]*?)<\\/${tagName}>`, "gi");
+
+				const matches = [];
+				let match;
+				while ((match = regex.exec(resultHtml)) !== null) {
+					matches.push({
+						full: match[0],
+						attrs: match[1],
+						inner: isVoid ? "" : match[2],
+						index: match.index,
+					});
+				}
+
+				for (const m of matches) {
+					if (!resultHtml.includes(m.full)) {
+						continue;
+					}
+
+					const attributes: Record<string, string> = {};
+					const attrRegex = /(\w+)="([^"]*)"/g;
+					let attrMatch;
+					while ((attrMatch = attrRegex.exec(m.attrs!)) !== null) {
+						attributes[attrMatch[1]!] = attrMatch[2]!;
+					}
+
+					const elCtx: any = rctx.clone();
+					elCtx.content = resultHtml;
+					elCtx.element = {
+						tagName,
+						attributes,
+						inner: m.inner,
+						outer: m.full,
+					};
+					elCtx.update = (newContent: string) => {
+						resultHtml = newContent;
+						elCtx.content = newContent;
+					};
+					elCtx.replace = (replacement: string) => {
+						resultHtml = resultHtml.replace(m.full, replacement);
+						elCtx.content = resultHtml;
+					};
+					elCtx.replaceContent = (replacement: string) => {
+						if (!isVoid) {
+							const newOuter = m.full.replace(m.inner!, replacement);
+							resultHtml = resultHtml.replace(m.full, newOuter);
+							elCtx.content = resultHtml;
+						}
+					};
+
+					await handler(elCtx);
+
+					if (elCtx.content !== resultHtml) {
+						resultHtml = elCtx.content;
+					}
+				}
+			}
+		}
+
+		// Hook: onAfterElements
+		if (this.hooks.onAfterElements) {
+			if (Array.isArray(this.hooks.onAfterElements)) {
+				for (const hook of this.hooks.onAfterElements) {
+					const res = await hook(rctx, resultHtml);
+					if (typeof res === "string") resultHtml = res;
+				}
+			} else {
+				const res = await this.hooks.onAfterElements(rctx, resultHtml);
+				if (typeof res === "string") resultHtml = res;
+			}
+		}
+
+		return resultHtml;
+	}
 }
 
 
 // --- From: core/src/index.ts ---
-export * from './kire';
-export * from './types';
-export * from './parser';
-export * from './compiler';
+export * from "./compiler";
+export * from "./kire";
+export * from "./parser";
+export * from "./types";
+
 
 // --- From: core/src/directives/import.ts ---
-import type { Kire } from '../kire';
+import type { Kire } from "../kire";
 
 export default (kire: Kire) => {
-    kire.directive({
-        name: 'include',
-        params: ['path:string', 'locals:object'],
-        children: true,
-        type: 'html',
-        description: 'Includes and renders a template from a given path, optionally passing local variables. Can also wrap content passed as "content" variable.',
-        example: `@include('partials/card')\n  <p>Card content</p>\n@end`,
-        onCall(ctx) {
-            const pathExpr = ctx.param('path');
-            const localsExpr = ctx.param('locals') || '{}';
-            
-            ctx.res(`await (async () => {
+	kire.directive({
+		name: "include",
+		params: ["path:string", "locals:object"],
+		children: false,
+		type: "html",
+		description:
+			"Includes and renders a template from a given path, optionally passing local variables.",
+		example: `@include('partials/card')`,
+		onCall(ctx) {
+			const pathExpr = ctx.param("path");
+			const localsExpr = ctx.param("locals") || "{}";
+
+			ctx.raw(`await (async () => {
     const path = $ctx.resolve(${JSON.stringify(pathExpr)});
     const templateFn = await $ctx.load(path);
     
     if (templateFn) {
-        let content = '';`);
-            
-            if (ctx.children && ctx.children.length > 0) {
-                ctx.res(`const $bodyCtx = $ctx.clone();
-        await (async ($parentCtx) => {
-            const $ctx = $bodyCtx;
-            with($ctx) {`);
-                ctx.set(ctx.children);
-                ctx.res(`}
-        })($ctx);
-        content = $bodyCtx[Symbol.for('~response')];`);
-            }
-
-            ctx.res(`const locals = Object.assign({ content }, ${localsExpr});
+        const locals = ${localsExpr};
         const childCtx = $ctx.clone(locals);
+        childCtx[${JSON.stringify(kire.varLocals)}] = locals;
         await templateFn(childCtx);
         $ctx.res(childCtx[Symbol.for('~response')]);
     }
 })();`);
-        }
-    });
+		},
+	});
 };
 
 // --- From: core/src/directives/natives.ts ---
-import type { Kire } from '../kire';
+import type { Kire } from "../kire";
 
 export default (kire: Kire) => {
-    kire.directive({
-        name: 'if',
-        params: ['cond:string'],
-        children: true,
-        type: 'js',
-        description: 'Conditionally renders a block of content if the expression is true.',
-        example: `@if(user.isLoggedIn)\n  Welcome, {{ user.name }}!\n@end`,
-        parents: [
-            {
-                name: 'elseif',
-                params: ['cond:string'],
-                children: true,
-                type: 'js',
-                description: 'Renders a block of content if the preceding @if/@elseif is false and the current expression is true.',
-                example: `@elseif(user.isAdmin)\n  Admin access granted.\n@end`,
-                onCall(c) {
-                    c.res(`} else if (${c.param('cond')}) {`);
-                    if (c.children) c.set(c.children);
-                }
-            },
-            {
-                name: 'elif', // alias for elseif
-                params: ['cond:string'],
-                children: true,
-                type: 'js',
-                description: 'Alias for @elseif.',
-                example: `@elif(user.isAdmin)\n  Admin access granted.\n@end`,
-                onCall(c) {
-                    c.res(`} else if (${c.param('cond')}) {`);
-                    if (c.children) c.set(c.children);
-                }
-            },
-            {
-                name: 'else',
-                children: true,
-                type: 'js',
-                description: 'Renders a block of content if the preceding @if/@elseif expressions are all false.',
-                example: `@else\n  Please log in.\n@end`,
-                onCall(c) {
-                    c.res(`} else {`);
-                    if (c.children) c.set(c.children);
-                }
-            }
-        ],
-        onCall(ctx) {
-            ctx.res(`if (${ctx.param('cond')}) {`);
-            if (ctx.children) ctx.set(ctx.children);
-            if (ctx.parents) ctx.set(ctx.parents);
-            ctx.res('}');
-        }
-    });
+	kire.directive({
+		name: "if",
+		params: ["cond:string"],
+		children: true,
+		type: "js",
+		description:
+			"Conditionally renders a block of content if the expression is true.",
+		example: `@if(user.isLoggedIn)\n  Welcome, {{ user.name }}!\n@end`,
+		parents: [
+			{
+				name: "elseif",
+				params: ["cond:string"],
+				children: true,
+				type: "js",
+				description:
+					"Renders a block of content if the preceding @if/@elseif is false and the current expression is true.",
+				example: `@elseif(user.isAdmin)\n  Admin access granted.\n@end`,
+				onCall(c) {
+					c.raw(`} else if (${c.param("cond")}) {`);
+					if (c.children) c.set(c.children);
+				},
+			},
+			{
+				name: "elif", // alias for elseif
+				params: ["cond:string"],
+				children: true,
+				type: "js",
+				description: "Alias for @elseif.",
+				example: `@elif(user.isAdmin)\n  Admin access granted.\n@end`,
+				onCall(c) {
+					c.raw(`} else if (${c.param("cond")}) {`);
+					if (c.children) c.set(c.children);
+				},
+			},
+			{
+				name: "else",
+				children: true,
+				type: "js",
+				description:
+					"Renders a block of content if the preceding @if/@elseif expressions are all false.",
+				example: `@else\n  Please log in.\n@end`,
+				onCall(c) {
+					c.raw(`} else {`);
+					if (c.children) c.set(c.children);
+				},
+			},
+		],
+		onCall(ctx) {
+			ctx.raw(`if (${ctx.param("cond")}) {`);
+			if (ctx.children) ctx.set(ctx.children);
+			if (ctx.parents) ctx.set(ctx.parents);
+			ctx.raw("}");
+		},
+	});
 
-    kire.directive({
-        name: 'for',
-        params: ['expr:string'],
-        children: true,
-        type: 'js',
-        description: 'Iterates over an array or object, similar to a JavaScript for...of loop.',
-        example: `@for(user of users)\n  <p>{{ user.name }}</p>\n@end`,
-        onCall(ctx) {
-            const expr = ctx.param('expr');
-            if (expr.includes(' in ')) {
-                const [lhs, rhs] = expr.split(' in ');
-                ctx.res(`for (const ${lhs} in ${rhs}) {`);
-            } else if (expr.includes(' of ')) {
-                const [lhs, rhs] = expr.split(' of ');
-                ctx.res(`for (const ${lhs} of ${rhs}) {`);
-            } else {
-                ctx.res(`for (${expr}) {`);
-            }
+	kire.directive({
+		name: "for",
+		params: ["expr:string"],
+		children: true,
+		type: "js",
+		description:
+			"Iterates over an array or object, similar to a JavaScript for...of loop.",
+		example: `@for(user of users)\n  <p>{{ user.name }}</p>\n@end`,
+		onCall(ctx) {
+			const expr = ctx.param("expr");
+			if (expr.includes(" in ")) {
+				const [lhs, rhs] = expr.split(" in ");
+				ctx.raw(`for (const ${lhs} in ${rhs}) {`);
+			} else if (expr.includes(" of ")) {
+				const [lhs, rhs] = expr.split(" of ");
+				ctx.raw(`for (const ${lhs} of ${rhs}) {`);
+			} else {
+				ctx.raw(`for (${expr}) {`);
+			}
 
-            if (ctx.children) ctx.set(ctx.children);
-            ctx.res(`}`);
-        }
-    });
+			if (ctx.children) ctx.set(ctx.children);
+			ctx.raw(`}`);
+		},
+	});
 
-    kire.directive({
-        name: 'const',
-        params: ['expr:string'],
-        type: 'js',
-        description: 'Declares a block-scoped constant, similar to JavaScript `const`.',
-        example: `@const(myVar = 'hello world')`,
-        onCall(ctx) {
-            ctx.res(`const ${ctx.param('expr')};`);
-        }
-    });
+	kire.directive({
+		name: "const",
+		params: ["expr:string"],
+		type: "js",
+		description:
+			"Declares a block-scoped constant, similar to JavaScript `const`.",
+		example: `@const(myVar = 'hello world')`,
+		onCall(ctx) {
+			ctx.raw(`const ${ctx.param("expr")};`);
+		},
+	});
 
-    kire.directive({
-        name: 'let',
-        params: ['expr:string'],
-        type: 'js',
-        description: 'Declares a block-scoped local variable, similar to JavaScript `let`.',
-        example: `@let(counter = 0)`,
-        onCall(ctx) {
-            ctx.res(`let ${ctx.param('expr')};`);
-        }
-    });
+	kire.directive({
+		name: "let",
+		params: ["expr:string"],
+		type: "js",
+		description:
+			"Declares a block-scoped local variable, similar to JavaScript `let`.",
+		example: `@let(counter = 0)`,
+		onCall(ctx) {
+			ctx.raw(`let ${ctx.param("expr")};`);
+		},
+	});
 
-    kire.directive({
-        name: 'code',
-        children: true,
-        type: 'js',
-        description: 'Executes a block of raw JavaScript code on the server.',
-        example: `@code\n  console.log('This runs during template compilation.');\n@end`,
-        onCall(ctx) {
-            if (ctx.children) {
-                for (const child of ctx.children) {
-                    if (child.type === 'text' && child.content) {
-                        ctx.res(child.content);
-                    }
-                }
-            }
-        }
-    });
+	kire.directive({
+		name: "code",
+		children: true,
+		type: "js",
+		description: "Executes a block of raw JavaScript code on the server.",
+		example: `@code\n  console.log('This runs during template compilation.');\n@end`,
+		onCall(ctx) {
+			if (ctx.children) {
+				for (const child of ctx.children) {
+					if (child.type === "text" && child.content) {
+						ctx.raw(child.content);
+					}
+				}
+			}
+		},
+	});
 
-    kire.directive({
-        name: 'switch',
-        params: ['expr:string'],
-        children: true,
-        type: 'js',
-        description: 'Provides a control flow statement similar to a JavaScript switch block.',
-        example: `@switch(value)\n  @case(1) ... @end\n  @default ... @end\n@end`,
-        parents: [
-            {
-                name: 'case',
-                params: ['val:string'],
-                children: true,
-                type: 'js',
-                description: 'A case clause for a @switch statement.',
-                example: `@case('A')\n  <p>Value is A</p>\n@end`,
-                onCall(c) {
-                    c.res(`case ${JSON.stringify(c.param('val'))}: {`);
-                    if (c.children) c.set(c.children);
-                    c.res(`break; }`);
-                }
-            }, {
-                name: 'default',
-                children: true,
-                type: 'js',
-                description: 'The default clause for a @switch statement.',
-                example: `@default\n  <p>Value is something else</p>\n@end`,
-                onCall(c) {
-                    c.res(`default: {`);
-                    if (c.children) c.set(c.children);
-                    c.res(`}`);
-                }
-            }
-        ],
-        async onCall(ctx) {
-            ctx.res(`switch (${ctx.param('expr')}) {`);
-            if (ctx.parents) await ctx.set(ctx.parents);
-            ctx.res(`}`);
-        }
-    });
+	kire.directive({
+		name: "switch",
+		params: ["expr:string"],
+		children: true,
+		type: "js",
+		description:
+			"Provides a control flow statement similar to a JavaScript switch block.",
+		example: `@switch(value)\n  @case(1) ... @end\n  @default ... @end\n@end`,
+		parents: [
+			{
+				name: "case",
+				params: ["val:string"],
+				children: true,
+				type: "js",
+				description: "A case clause for a @switch statement.",
+				example: `@case('A')\n  <p>Value is A</p>\n@end`,
+				onCall(c) {
+					c.raw(`case ${JSON.stringify(c.param("val"))}: {`);
+					if (c.children) c.set(c.children);
+					c.raw(`break; }`);
+				},
+			},
+			{
+				name: "default",
+				children: true,
+				type: "js",
+				description: "The default clause for a @switch statement.",
+				example: `@default\n  <p>Value is something else</p>\n@end`,
+				onCall(c) {
+					c.raw(`default: {`);
+					if (c.children) c.set(c.children);
+					c.raw(`}`);
+				},
+			},
+		],
+		async onCall(ctx) {
+			ctx.raw(`switch (${ctx.param("expr")}) {`);
+			if (ctx.parents) await ctx.set(ctx.parents);
+			ctx.raw(`}`);
+		},
+	});
 };
+
 
 // --- From: core/src/directives/component.ts ---
-import type { Kire } from '../kire';
+import type { Kire } from "../kire";
 
 export default (kire: Kire) => {
-    // @component('path', {vars}) ... @end
-    // Uses slots.
+	// @component('path', {vars}) ... @end
+	// Uses slots.
 
-    kire.directive({
-        name: 'slot',
-        params: ['name:string'],
-        children: true,
-        type: 'html',
-        description: 'Defines a named content slot within a component.',
-        example: `@slot('header')\n  <h1>This is the header</h1>\n@end`,
-        onCall(c) {
-            const name = c.param('name');
-            c.res(`$slots[${JSON.stringify(name)}] = await (async ($parentCtx) => {`);
-            c.res(`  const $ctx = $parentCtx.clone();`);
-            if (c.children) c.set(c.children);
-            c.res(`  return $ctx[Symbol.for('~response')];`);
-            c.res(`})($ctx);`);
-        }
-    });
-    
-    kire.directive({
-        name: 'component',
-        params: ['path:string', 'variables:object'],
-        children: true,
-        type: 'html',
-        description: 'Loads a template as a reusable component, allowing content to be passed into named slots.',
-        example: `@component('card', { title: 'My Card' })\n  @slot('header')\n    <h1>Card Header</h1>\n  @end\n  <p>Default content.</p>\n@end`,
-        onCall(ctx) {
-            const pathExpr = ctx.param('path');
-            const varsExpr = ctx.param('variables') || '{}';
-            
-            ctx.res(`await (async () => {`);
-            ctx.res(`  const $slots = {};`);
-            
-            ctx.res(`  const $bodyCtx = $ctx.clone();`);
-            ctx.res(`  $bodyCtx.slots = $slots;`); 
-            
-            ctx.res(`  await (async ($parentCtx) => {`);
-            ctx.res(`    const $ctx = $bodyCtx;`); // Shadow $ctx
-            ctx.res(`    with($ctx) {`);
-            
-            if (ctx.children) ctx.set(ctx.children);
-            
-            ctx.res(`    }`);
-            ctx.res(`  })($ctx);`);
-            
-            ctx.res(`  $slots.default = $bodyCtx[Symbol.for('~response')];`);
-            
-            // Now load the component template
-            ctx.res(`  const path = $ctx.resolve(${JSON.stringify(pathExpr)});`);
-            ctx.res(`  const templateFn = await $ctx.load(path);`);
-            ctx.res(`  if (templateFn) {`);
-            ctx.res(`    const locals = ${varsExpr};`);
-            ctx.res(`    const componentCtx = $ctx.clone(locals);`);
-            ctx.res(`    componentCtx.slots = $slots;`); // Pass slots to component
-            ctx.res(`    await templateFn(componentCtx);`);
-            ctx.res(`    $ctx.res(componentCtx[Symbol.for('~response')]);`);
-            ctx.res(`  }`);
-            
-            ctx.res(`})();`);
-        }
-    });
+	kire.directive({
+		name: "slot",
+		params: ["name:string"],
+		children: true,
+		type: "html",
+		description: "Defines a named content slot within a component.",
+		example: `@slot('header')\n  <h1>This is the header</h1>\n@end`,
+		onCall(c) {
+			const name = c.param("name");
+			c.raw(`$slots[${JSON.stringify(name)}] = await (async ($parentCtx) => {`);
+			c.raw(`  const $ctx = $parentCtx.clone();`);
+			if (c.children) c.set(c.children);
+			c.raw(`  return $ctx[Symbol.for('~response')];`);
+			c.raw(`})($ctx);`);
+		},
+	});
+
+	kire.directive({
+		name: "component",
+		params: ["path:string", "variables:object"],
+		children: true,
+		type: "html",
+		description:
+			"Loads a template as a reusable component, allowing content to be passed into named slots.",
+		example: `@component('card', { title: 'My Card' })\n  @slot('header')\n    <h1>Card Header</h1>\n  @end\n  <p>Default content.</p>\n@end`,
+		async onCall(ctx) {
+			const pathExpr = ctx.param("path");
+			const varsExpr = ctx.param("variables") || "{}";
+
+			ctx.raw(`await (async () => {`);
+			ctx.raw(`  const $slots = {};`);
+
+			ctx.raw(`  const $bodyCtx = $ctx.clone();`);
+			ctx.raw(`  $bodyCtx.slots = $slots;`);
+
+			ctx.raw(`  await (async ($parentCtx) => {`);
+			ctx.raw(`    const $ctx = $bodyCtx;`); // Shadow $ctx
+			ctx.raw(`    with($ctx) {`);
+
+			if (ctx.children) await ctx.set(ctx.children);
+
+			ctx.raw(`    }`);
+			ctx.raw(`  })($ctx);`);
+
+			ctx.raw(`  if (!$slots.default) $slots.default = $bodyCtx[Symbol.for('~response')];`);
+
+			// Now load the component template
+			ctx.raw(`  const path = $ctx.resolve(${JSON.stringify(pathExpr)});`);
+			ctx.raw(`  const templateFn = await $ctx.load(path);`);
+			ctx.raw(`  if (templateFn) {`);
+						ctx.raw(`  const locals = ${varsExpr};`);
+						ctx.raw(`  const componentCtx = $ctx.clone(locals);`);
+						ctx.raw(`  componentCtx[${JSON.stringify(kire.varLocals)}] = locals;`); // Expose locals under the configured name
+						ctx.raw(`  if(typeof locals === 'object' && locals !== null) locals.slots = $slots;`); // Attach slots to locals for it.slots access
+						ctx.raw(`  componentCtx.slots = $slots;`); // Pass slots to component
+						ctx.raw(`  await templateFn(componentCtx);`);
+						ctx.raw(`  $ctx.res(componentCtx[Symbol.for('~response')]);`);
+			ctx.raw(`  }`);
+
+			ctx.raw(`})();`);
+		},
+	});
 };
+
 
 
 // --- From: core/src/directives/layout.ts ---
-import type { Kire } from '../kire';
-import type { KireContext } from '../types';
+import type { Kire } from "../kire";
+import type { KireContext } from "../types";
 
 export default (kire: Kire) => {
-    // Initialize global defines object
-    kire.$ctx('defines', {});
+	// Initialize global defines object
+	kire.$ctx("defines", {});
 
-    kire.directive({
-        name: 'define',
-        params: ['name:string'],
-        children: true,
-        type: 'html',
-        description: 'Defines a named, reusable section of content that can be rendered elsewhere.',
-        example: `@define('header')\n  <h1>My Website</h1>\n@end`,
-        onCall(ctx) {
-            const name = ctx.param('name');
-            
-            ctx.res(`$ctx.defines[${JSON.stringify(name)}] = await (async ($parentCtx) => {`);
-            ctx.res(`  const $ctx = $parentCtx.clone();`);
-            
-            if (ctx.children) ctx.set(ctx.children);
-            
-            ctx.res(`  return $ctx[Symbol.for('~response')];`);
-            ctx.res(`})($ctx);`);
-        }
-    });
+	kire.directive({
+		name: "define",
+		params: ["name:string"],
+		children: true,
+		type: "html",
+		description:
+			"Defines a named, reusable section of content that can be rendered elsewhere.",
+		example: `@define('header')\n  <h1>My Website</h1>\n@end`,
+		onCall(ctx) {
+			const name = ctx.param("name");
 
-    kire.directive({
-        name: 'defined',
-        params: ['name:string'],
-        type: 'html',
-        description: 'Renders a content section previously created with @define.',
-        example: `@defined('header')`,
-        onCall(ctx) {
-            const name = ctx.param('name');
-            
-            ctx.res(`$ctx.res("<!-- KIRE:defined(" + ${JSON.stringify(name)} + ") -->");`);
-            
-            ctx.pos(`
+			ctx.raw(
+				`$ctx.defines[${JSON.stringify(name)}] = await (async ($parentCtx) => {`,
+			);
+			ctx.raw(`  const $ctx = $parentCtx.clone();`);
+
+			if (ctx.children) ctx.set(ctx.children);
+
+			ctx.raw(`  return $ctx[Symbol.for('~response')];`);
+			ctx.raw(`})($ctx);`);
+		},
+	});
+
+	kire.directive({
+		name: "defined",
+		params: ["name:string"],
+		type: "html",
+		description: "Renders a content section previously created with @define.",
+		example: `@defined('header')`,
+		onCall(ctx) {
+			const name = ctx.param("name");
+
+			ctx.raw(
+				`$ctx.res("<!-- KIRE:defined(" + ${JSON.stringify(name)} + ") -->");`,
+			);
+
+			ctx.pos(`
                 // Post-process defined placeholders
                 if ($ctx.defines) {
                     for (const key in $ctx.defines) {
@@ -852,23 +982,26 @@ export default (kire: Kire) => {
                     $ctx[Symbol.for('~response')] = $ctx[Symbol.for('~response')].replace(/<!-- KIRE:defined\\(.*?\\) -->/g, '');
                 }
             `);
-        }
-    });
+		},
+	});
 
-    // Initialize global stacks object
-    kire.$ctx('stacks', {});
+	// Initialize global stacks object
+	kire.$ctx("stacks", {});
 
-    kire.directive({
-        name: 'stack',
-        params: ['name:string'],
-        type: 'html',
-        description: 'Creates a placeholder where content pushed to a named stack will be rendered.',
-        example: `<html>\n<head>\n  @stack('scripts')\n</head>\n</html>`,
-        onCall(ctx) {
-             const name = ctx.param('name');
-             ctx.res(`$ctx.res("<!-- KIRE:stack(" + ${JSON.stringify(name)} + ") -->");`);
+	kire.directive({
+		name: "stack",
+		params: ["name:string"],
+		type: "html",
+		description:
+			"Creates a placeholder where content pushed to a named stack will be rendered.",
+		example: `<html>\n<head>\n  @stack('scripts')\n</head>\n</html>`,
+		onCall(ctx) {
+			const name = ctx.param("name");
+			ctx.raw(
+				`$ctx.res("<!-- KIRE:stack(" + ${JSON.stringify(name)} + ") -->");`,
+			);
 
-             ctx.pos(`
+			ctx.pos(`
                 if ($ctx.stacks) {
                     for (const key in $ctx.stacks) {
                          const placeholder = "<!-- KIRE:stack(" + key + ") -->";
@@ -880,553 +1013,597 @@ export default (kire: Kire) => {
                     $ctx[Symbol.for('~response')] = $ctx[Symbol.for('~response')].replace(/<!-- KIRE:stack\\(.*?\\) -->/g, '');
                 }
              `);
-        }
-    });
+		},
+	});
 
-    kire.directive({
-        name: 'push',
-        params: ['name:string'],
-        children: true,
-        type: 'html',
-        description: 'Pushes a block of content onto a named stack.',
-        example: `@push('scripts')\n  <script src="app.js"></script>\n@end`,
-        onCall(ctx: KireContext) {
-            const name = ctx.param('name');
-            ctx.res(`if (!$ctx.stacks[${JSON.stringify(name)}]) $ctx.stacks[${JSON.stringify(name)}] = [];`);
-            ctx.res(`$ctx.stacks[${JSON.stringify(name)}].push(await (async ($parentCtx) => {`);
-            ctx.res(`  const $ctx = $parentCtx.clone();`);
-            
-            if (ctx.children) ctx.set(ctx.children);
-            
-            ctx.res(`  return $ctx[Symbol.for('~response')];`);
-            ctx.res(`})($ctx));`);
-        }
-    });
+	kire.directive({
+		name: "push",
+		params: ["name:string"],
+		children: true,
+		type: "html",
+		description: "Pushes a block of content onto a named stack.",
+		example: `@push('scripts')\n  <script src="app.js"></script>\n@end`,
+		onCall(ctx: KireContext) {
+			const name = ctx.param("name");
+			ctx.raw(
+				`if (!$ctx.stacks[${JSON.stringify(name)}]) $ctx.stacks[${JSON.stringify(name)}] = [];`,
+			);
+			ctx.raw(
+				`$ctx.stacks[${JSON.stringify(name)}].push(await (async ($parentCtx) => {`,
+			);
+			ctx.raw(`  const $ctx = $parentCtx.clone();`);
+
+			if (ctx.children) ctx.set(ctx.children);
+
+			ctx.raw(`  return $ctx[Symbol.for('~response')];`);
+			ctx.raw(`})($ctx));`);
+		},
+	});
 };
 
 
 // --- From: core/src/directives/index.ts ---
-import type { KirePlugin } from '../types';
-
-import defineDirectives from './layout';
-import nativeDirectives from './natives';
-import importDirectives from './import';
-import componentDirectives from './component';
+import type { KirePlugin } from "../types";
+import componentDirectives from "./component";
+import importDirectives from "./import";
+import defineDirectives from "./layout";
+import nativeDirectives from "./natives";
 
 export const KireDirectives: KirePlugin = {
-    name: 'kire',
-    sort: 100,
-    options:{},
-    load(kire) {
-        defineDirectives(kire);
-        nativeDirectives(kire);
-        importDirectives(kire);
-        componentDirectives(kire);
-    }
+	name: "kire",
+	sort: 100,
+	options: {},
+	load(kire) {
+		defineDirectives(kire);
+		nativeDirectives(kire);
+		importDirectives(kire);
+		componentDirectives(kire);
+	},
 };
 
 
-
 // --- From: core/src/parser/index.ts ---
-import type { Node, DirectiveDefinition } from '../types';
-import type { Kire } from '../kire';
+import type { Kire } from "../kire";
+import type { DirectiveDefinition, Node } from "../types";
 
 export class Parser {
-  private cursor = 0;
-  private line = 1;
-  private column = 1;
-  private stack: Node[] = [];
-  private rootChildren: Node[] = [];
+	private cursor = 0;
+	private stack: Node[] = [];
+	private rootChildren: Node[] = [];
 
-  constructor(private template: string, private kire: Kire) {}
+	constructor(
+		private template: string,
+		private kire: Kire,
+	) {}
 
-  public parse(): Node[] {
-    this.cursor = 0;
-    this.stack = [];
-    this.rootChildren = [];
-    
-    while (this.cursor < this.template.length) {
-      const remaining = this.template.slice(this.cursor);
-      //console.log('PARSER:', { 
-      //  cursor: this.cursor, 
-      //  remaining: remaining.slice(0, 30),
-      //  stack: this.stack.map(s => s.name)
-      //});
-      
-      // Check for interpolation {{ ... }}
-              const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
-              if (interpolationMatch) {
-                        this.addNode({
-                      type: 'variable',
-                      content: interpolationMatch[1]!.trim(),          start: this.cursor,
-          end: this.cursor + interpolationMatch[0].length
-        });
-        this.advance(interpolationMatch[0]);
-        continue;
-      }
+	public parse(): Node[] {
+		this.cursor = 0;
+		this.stack = [];
+		this.rootChildren = [];
 
-      // Check for escaped directive @@
-      if (remaining.startsWith('@@')) {
-          this.addNode({
-              type: 'text',
-              content: '@',
-              start: this.cursor,
-              end: this.cursor + 2
-          });
-          this.advance('@@');
-          continue;
-      }
+		while (this.cursor < this.template.length) {
+			const remaining = this.template.slice(this.cursor);
+			//console.log('PARSER:', {
+			//  cursor: this.cursor,
+			//  remaining: remaining.slice(0, 30),
+			//  stack: this.stack.map(s => s.name)
+			//});
 
-      // Check for directive @name(...) or @name without parentheses
-      const directiveStartMatch = remaining.match(/^@(\w+)/);
-      if (directiveStartMatch) {
-        const [fullMatch, name] = directiveStartMatch;
-        
-        //console.log('FOUND DIRECTIVE:', { name, fullMatch, stack: this.stack.map(s => s.name) });
-        
-        // Check if it has arguments
-        let argsStr = undefined;
-        let argsEndIndex = fullMatch.length;
-        
-        // Verifica se tem parênteses APENAS se o próximo caractere for '('
-        if (remaining[fullMatch.length] === '(') {
-            // Parse arguments with balanced parentheses
-            let depth = 1;
-            let i = fullMatch.length + 1;
-            let inQuote = false;
-            let quoteChar = '';
-            
-            while (i < remaining.length && depth > 0) {
-                const char = remaining[i];
-                if ((char === '"' || char === "'") && (i === 0 || remaining[i-1] !== '\\')) {
-                    if (inQuote && char === quoteChar) {
-                        inQuote = false;
-                    } else if (!inQuote) {
-                        inQuote = true;
-                        quoteChar = char;
-                    }
-                }
-                
-                if (!inQuote) {
-                    if (char === '(') depth++;
-                    else if (char === ')') depth--;
-                }
-                i++;
-            }
-            
-            if (depth === 0) {
-                argsStr = remaining.slice(fullMatch.length + 1, i - 1);
-                argsEndIndex = i;
-            }
-        }
-        
-        if (name === 'end') {
-            //console.log('HANDLING END DIRECTIVE');
-            this.handleEndDirective();
-            this.advance(remaining.slice(0, argsEndIndex));
-            continue;
-        }
+			// Check for interpolation {{ ... }}
+			const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
+			if (interpolationMatch) {
+				this.addNode({
+					type: "variable",
+					content: interpolationMatch[1]?.trim(),
+					start: this.cursor,
+					end: this.cursor + interpolationMatch[0].length,
+				});
+				this.advance(interpolationMatch[0]);
+				continue;
+			}
 
-        const directiveDef = this.kire.getDirective(name!);
-        //console.log('DIRECTIVE DEF:', { name, directiveDef });
-        
-        // Check for sub-directive (parent logic)
-        let isSubDirective = false;
-        if (this.stack.length > 0) {
-            const currentParent = this.stack[this.stack.length - 1];
-            const parentDef = this.kire.getDirective(currentParent!.name!);
-            
-            //console.log('CHECKING SUB DIRECTIVE:', {
-            //  parent: currentParent!.name,
-            //  candidate: name,
-            //  parentDef: parentDef
-            //});
-            
-            if (parentDef && parentDef.parents) {
-                const subDef = parentDef.parents.find(p => p.name === name);
-                //console.log('SUB DIRECTIVE RESULT:', { subDef });
-                if (subDef) {
-                    //console.log('FOUND SUB DIRECTIVE! Processing:', name);
-                    this.handleSubDirective(name!, argsStr, remaining.slice(0, argsEndIndex), currentParent!, subDef);
-                    this.advance(remaining.slice(0, argsEndIndex));
-                    isSubDirective = true;
-                    continue;
-                }
-            }
-        }
+			// Check for escaped directive @@
+			if (remaining.startsWith("@@")) {
+				this.addNode({
+					type: "text",
+					content: "@",
+					start: this.cursor,
+					end: this.cursor + 2,
+				});
+				this.advance("@@");
+				continue;
+			}
 
-        // If not a registered directive and not a sub-directive, treat as text
-        if (!directiveDef && !isSubDirective) {
-             //console.log('TREATING AS TEXT:', name);
-             this.addNode({
-                 type: 'text',
-                 content: fullMatch,
-                 start: this.cursor,
-                 end: this.cursor + fullMatch.length
-             });
-             this.advance(fullMatch);
-             continue;
-        }
+			// Check for directive @name(...) or @name without parentheses
+			const directiveStartMatch = remaining.match(/^@(\w+)/);
+			if (directiveStartMatch) {
+				const [fullMatch, name] = directiveStartMatch;
 
-        const args = argsStr ? this.parseArgs(argsStr) : [];
-        
-        const node: Node = {
-          type: 'directive',
-          name: name,
-          args: args,
-          start: this.cursor,
-          end: this.cursor + argsEndIndex,
-          children: [],
-          related: []
-        };
+				//console.log('FOUND DIRECTIVE:', { name, fullMatch, stack: this.stack.map(s => s.name) });
 
-        //console.log('ADDING DIRECTIVE NODE:', node);
-        this.addNode(node);
-        
-        if (directiveDef && directiveDef.children) {
-            if (directiveDef.childrenRaw) {
-                this.stack.push(node);
-                
-                const contentStart = this.cursor + argsEndIndex;
-                const remainingTemplate = this.template.slice(contentStart);
-                
-                // Find closing @end with word boundary check
-                const endMatch = remainingTemplate.match(/@end(?![a-zA-Z0-9_])/);
-                
-                if (endMatch) {
-                    const content = remainingTemplate.slice(0, endMatch.index);
-                    
-                    // Add text node
-                    this.addNode({
-                        type: 'text',
-                        content: content,
-                        start: contentStart,
-                        end: contentStart + content.length
-                    });
-                    
-                    this.stack.pop(); // Close immediately
-                    this.advance(remaining.slice(0, argsEndIndex) + content + endMatch[0]);
-                    continue;
-                } else {
-                     // No end tag found, consume rest
-                     const content = remainingTemplate;
-                     this.addNode({
-                         type: 'text',
-                         content: content,
-                         start: contentStart,
-                         end: this.template.length
-                     });
-                     this.stack.pop();
-                     this.advance(remaining.slice(0, argsEndIndex) + content);
-                     continue;
-                }
-            }
-            //console.log('PUSHING TO STACK:', name);
-            this.stack.push(node);
-        }
-        
-        this.advance(remaining.slice(0, argsEndIndex));
-        continue;
-      }
+				// Check if it has arguments
+				let argsStr:string;
+				let argsEndIndex = fullMatch.length;
 
-      // Text
-      const nextInterpolation = remaining.indexOf('{{');
-      const nextDirective = remaining.indexOf('@');
-      
-      let nextIndex = -1;
-      if (nextInterpolation !== -1 && nextDirective !== -1) {
-        nextIndex = Math.min(nextInterpolation, nextDirective);
-      } else if (nextInterpolation !== -1) {
-        nextIndex = nextInterpolation;
-      } else if (nextDirective !== -1) {
-        nextIndex = nextDirective;
-      }
+				// Verifica se tem parênteses APENAS se o próximo caractere for '('
+				if (remaining[fullMatch.length] === "(") {
+					// Parse arguments with balanced parentheses
+					let depth = 1;
+					let i = fullMatch.length + 1;
+					let inQuote = false;
+					let quoteChar = "";
 
-      if (nextIndex === -1) {
-        this.addNode({
-          type: 'text',
-          content: remaining,
-          start: this.cursor,
-          end: this.template.length
-        });
-        this.advance(remaining);
-      } else {
-        if (nextIndex === 0) {
-             this.addNode({
-                 type: 'text',
-                 content: remaining[0],
-                 start: this.cursor,
-                 end: this.cursor + 1
-             });
-             this.advance(remaining[0]!);
-        } else {
-             const text = remaining.slice(0, nextIndex);
-             this.addNode({
-               type: 'text',
-               content: text,
-               start: this.cursor,
-               end: this.cursor + text.length
-             });
-             this.advance(text);
-        }
-      }
-    }
-    
-    //console.log('FINAL RESULT:', JSON.stringify(this.rootChildren, null, 2));
-    return this.rootChildren;
-  }
+					while (i < remaining.length && depth > 0) {
+						const char = remaining[i];
+						if (
+							(char === '"' || char === "'") &&
+							(i === 0 || remaining[i - 1] !== "\\")
+						) {
+							if (inQuote && char === quoteChar) {
+								inQuote = false;
+							} else if (!inQuote) {
+								inQuote = true;
+								quoteChar = char;
+							}
+						}
 
-  private handleEndDirective() {
-      //console.log('HANDLE END - Stack before:', this.stack.map(s => s.name));
-      if (this.stack.length > 0) {
-        this.stack.pop();
-      }
-      //console.log('HANDLE END - Popped:', popped?.name);
-      //console.log('HANDLE END - Stack after:', this.stack.map(s => s.name));
-  }
+						if (!inQuote) {
+							if (char === "(") depth++;
+							else if (char === ")") depth--;
+						}
+						i++;
+					}
 
-  private handleSubDirective(name: string, argsStr: string | undefined, fullMatch: string, parentNode: Node, subDef: DirectiveDefinition) {
-      const args = argsStr ? this.parseArgs(argsStr) : [];
-      
-      const node: Node = {
-          type: 'directive',
-          name: name,
-          args: args,
-          start: this.cursor,
-          end: this.cursor + fullMatch.length,
-          children: [],
-          related: []
-      };
-      
-      //console.log('HANDLING SUB DIRECTIVE:', {
-      //  name,
-      //  parent: parentNode.name,
-      //  node,
-      //  parentRelated: parentNode.related
-      //});
-      
-      if (!parentNode.related) parentNode.related = [];
-      parentNode.related.push(node);
-      
-      if (subDef.children) {
-          //console.log('PUSHING SUB DIRECTIVE TO STACK:', name);
-          this.stack.push(node);
-      }
-  }
+					if (depth === 0) {
+						argsStr = remaining.slice(fullMatch.length + 1, i - 1);
+						argsEndIndex = i;
+					}
+				}
 
-  private addNode(node: Node) {
-      if (this.stack.length > 0) {
-          const current = this.stack[this.stack.length - 1];
-          if (current && !current.children) current.children = [];
-          if(current?.children) {
-            //console.log('ADDING TO CHILDREN of', current.name, ':', node.type, node.name || node.content);
-            current.children.push(node);
-          }
-      } else {
-          //console.log('ADDING TO ROOT:', node.type, node.name || node.content);
-          this.rootChildren.push(node);
-      }
-  }
+				if (name === "end") {
+					//console.log('HANDLING END DIRECTIVE');
+					this.handleEndDirective();
+					this.advance(remaining.slice(0, argsEndIndex));
+					continue;
+				}
 
-  private advance(str: string) {
-    const lines = str.split('\n');
-    if (lines.length > 1) {
-      this.line += lines.length - 1;
-      this.column = lines[lines.length - 1]!.length + 1;
-    } else {
-      this.column += str.length;
-    }
-    this.cursor += str.length;
-  }
+				const directiveDef = this.kire.getDirective(name as string);
+				//console.log('DIRECTIVE DEF:', { name, directiveDef });
 
-  private parseArgs(argsStr: string): any[] {
-     const args: any[] = [];
-     let current = '';
-     let inQuote = false;
-     let quoteChar = '';
-     let braceDepth = 0;
-     let bracketDepth = 0;
-     let parenDepth = 0;
-     
-     for (let i = 0; i < argsStr.length; i++) {
-       const char = argsStr[i];
-       
-       // Handle quotes
-       if ((char === '"' || char === "'") && (i === 0 || argsStr[i-1] !== '\\')) {
-         if (inQuote && char === quoteChar) {
-           inQuote = false;
-         } else if (!inQuote) {
-           inQuote = true;
-           quoteChar = char;
-         }
-       }
-       
-       if (!inQuote) {
-           if (char === '{') braceDepth++;
-           else if (char === '}') braceDepth--;
-           else if (char === '[') bracketDepth++;
-           else if (char === ']') bracketDepth--;
-           else if (char === '(') parenDepth++;
-           else if (char === ')') parenDepth--;
-       }
-       
-       if (char === ',' && !inQuote && braceDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
-         args.push(current.trim());
-         current = '';
-       } else {
-         current += char;
-       }
-     }
-     if (current) args.push(current.trim());
-     
-     return args.map(arg => {
-         if ((arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'" ) && arg.endsWith("'"))) {
-             return arg.slice(1, -1);
-         }
-         if (arg === 'true') return true;
-         if (arg === 'false') return false;
-         if (!isNaN(Number(arg))) return Number(arg);
-         return arg;
-     });
-  }
+				// Check for sub-directive (parent logic)
+				let isSubDirective = false;
+				if (this.stack.length > 0) {
+					const currentParent = this.stack[this.stack.length - 1];
+					const parentDef = this.kire.getDirective(
+						currentParent?.name as string,
+					);
+
+					//console.log('CHECKING SUB DIRECTIVE:', {
+					//  parent: currentParent!.name,
+					//  candidate: name,
+					//  parentDef: parentDef
+					//});
+
+					if (parentDef?.parents) {
+						const subDef = parentDef.parents.find((p) => p.name === name);
+						//console.log('SUB DIRECTIVE RESULT:', { subDef });
+						if (subDef) {
+							//console.log('FOUND SUB DIRECTIVE! Processing:', name);
+							this.handleSubDirective(
+								name!,
+								argsStr,
+								remaining.slice(0, argsEndIndex),
+								currentParent!,
+								subDef,
+							);
+							this.advance(remaining.slice(0, argsEndIndex));
+							isSubDirective = true;
+							continue;
+						}
+					}
+				}
+
+				// If not a registered directive and not a sub-directive, treat as text
+				if (!directiveDef && !isSubDirective) {
+					//console.log('TREATING AS TEXT:', name);
+					this.addNode({
+						type: "text",
+						content: fullMatch,
+						start: this.cursor,
+						end: this.cursor + fullMatch.length,
+					});
+					this.advance(fullMatch);
+					continue;
+				}
+
+				const args = argsStr ? this.parseArgs(argsStr) : [];
+
+				const node: Node = {
+					type: "directive",
+					name: name,
+					args: args,
+					start: this.cursor,
+					end: this.cursor + argsEndIndex,
+					children: [],
+					related: [],
+				};
+
+				//console.log('ADDING DIRECTIVE NODE:', node);
+				this.addNode(node);
+
+				if (directiveDef?.children) {
+					if (directiveDef.childrenRaw) {
+						this.stack.push(node);
+
+						const contentStart = this.cursor + argsEndIndex;
+						const remainingTemplate = this.template.slice(contentStart);
+
+						// Find closing @end with word boundary check
+						const endMatch = remainingTemplate.match(/@end(?![a-zA-Z0-9_])/);
+
+						if (endMatch) {
+							const content = remainingTemplate.slice(0, endMatch.index);
+
+							// Add text node
+							this.addNode({
+								type: "text",
+								content: content,
+								start: contentStart,
+								end: contentStart + content.length,
+							});
+
+							this.stack.pop(); // Close immediately
+							this.advance(
+								remaining.slice(0, argsEndIndex) + content + endMatch[0],
+							);
+							continue;
+						} else {
+							// No end tag found, consume rest
+							const content = remainingTemplate;
+							this.addNode({
+								type: "text",
+								content: content,
+								start: contentStart,
+								end: this.template.length,
+							});
+							this.stack.pop();
+							this.advance(remaining.slice(0, argsEndIndex) + content);
+							continue;
+						}
+					}
+					//console.log('PUSHING TO STACK:', name);
+					this.stack.push(node);
+				}
+
+				this.advance(remaining.slice(0, argsEndIndex));
+				continue;
+			}
+
+			// Text
+			const nextInterpolation = remaining.indexOf("{{");
+			const nextDirective = remaining.indexOf("@");
+
+			let nextIndex = -1;
+			if (nextInterpolation !== -1 && nextDirective !== -1) {
+				nextIndex = Math.min(nextInterpolation, nextDirective);
+			} else if (nextInterpolation !== -1) {
+				nextIndex = nextInterpolation;
+			} else if (nextDirective !== -1) {
+				nextIndex = nextDirective;
+			}
+
+			if (nextIndex === -1) {
+				this.addNode({
+					type: "text",
+					content: remaining,
+					start: this.cursor,
+					end: this.template.length,
+				});
+				this.advance(remaining);
+			} else {
+				if (nextIndex === 0) {
+					this.addNode({
+						type: "text",
+						content: remaining[0],
+						start: this.cursor,
+						end: this.cursor + 1,
+					});
+					this.advance(remaining[0]!);
+				} else {
+					const text = remaining.slice(0, nextIndex);
+					this.addNode({
+						type: "text",
+						content: text,
+						start: this.cursor,
+						end: this.cursor + text.length,
+					});
+					this.advance(text);
+				}
+			}
+		}
+
+		//console.log('FINAL RESULT:', JSON.stringify(this.rootChildren, null, 2));
+		return this.rootChildren;
+	}
+
+	private handleEndDirective() {
+		//console.log('HANDLE END - Stack before:', this.stack.map(s => s.name));
+		if (this.stack.length > 0) {
+			this.stack.pop();
+		}
+		//console.log('HANDLE END - Popped:', popped?.name);
+		//console.log('HANDLE END - Stack after:', this.stack.map(s => s.name));
+	}
+
+	private handleSubDirective(
+		name: string,
+		argsStr: string | undefined,
+		fullMatch: string,
+		parentNode: Node,
+		subDef: DirectiveDefinition,
+	) {
+		const args = argsStr ? this.parseArgs(argsStr) : [];
+
+		const node: Node = {
+			type: "directive",
+			name: name,
+			args: args,
+			start: this.cursor,
+			end: this.cursor + fullMatch.length,
+			children: [],
+			related: [],
+		};
+
+		//console.log('HANDLING SUB DIRECTIVE:', {
+		//  name,
+		//  parent: parentNode.name,
+		//  node,
+		//  parentRelated: parentNode.related
+		//});
+
+		if (!parentNode.related) parentNode.related = [];
+		parentNode.related.push(node);
+
+		if (subDef.children) {
+			//console.log('PUSHING SUB DIRECTIVE TO STACK:', name);
+			this.stack.push(node);
+		}
+	}
+
+	private addNode(node: Node) {
+		if (this.stack.length > 0) {
+			const current = this.stack[this.stack.length - 1];
+			if (current && !current.children) current.children = [];
+			if (current?.children) {
+				//console.log('ADDING TO CHILDREN of', current.name, ':', node.type, node.name || node.content);
+				current.children.push(node);
+			}
+		} else {
+			//console.log('ADDING TO ROOT:', node.type, node.name || node.content);
+			this.rootChildren.push(node);
+		}
+	}
+
+	private advance(str: string) {
+		const lines = str.split("\n");
+		if (lines.length > 1) {
+			this.line += lines.length - 1;
+			this.column = lines[lines.length - 1]?.length + 1;
+		} else {
+			this.column += str.length;
+		}
+		this.cursor += str.length;
+	}
+
+	private parseArgs(argsStr: string): any[] {
+		const args: any[] = [];
+		let current = "";
+		let inQuote = false;
+		let quoteChar = "";
+		let braceDepth = 0;
+		let bracketDepth = 0;
+		let parenDepth = 0;
+
+		for (let i = 0; i < argsStr.length; i++) {
+			const char = argsStr[i];
+
+			// Handle quotes
+			if (
+				(char === '"' || char === "'") &&
+				(i === 0 || argsStr[i - 1] !== "\\")
+			) {
+				if (inQuote && char === quoteChar) {
+					inQuote = false;
+				} else if (!inQuote) {
+					inQuote = true;
+					quoteChar = char;
+				}
+			}
+
+			if (!inQuote) {
+				if (char === "{") braceDepth++;
+				else if (char === "}") braceDepth--;
+				else if (char === "[") bracketDepth++;
+				else if (char === "]") bracketDepth--;
+				else if (char === "(") parenDepth++;
+				else if (char === ")") parenDepth--;
+			}
+
+			if (
+				char === "," &&
+				!inQuote &&
+				braceDepth === 0 &&
+				bracketDepth === 0 &&
+				parenDepth === 0
+			) {
+				args.push(current.trim());
+				current = "";
+			} else {
+				current += char;
+			}
+		}
+		if (current) args.push(current.trim());
+
+		return args.map((arg) => {
+			if (
+				(arg.startsWith('"') && arg.endsWith('"')) ||
+				(arg.startsWith("'") && arg.endsWith("'"))
+			) {
+				return arg.slice(1, -1);
+			}
+			if (arg === "true") return true;
+			if (arg === "false") return false;
+			if (!Number.isNaN(Number(arg))) return Number(arg);
+			return arg;
+		});
+	}
 }
+
 
 // --- From: core/src/compiler/index.ts ---
-import type { Node, KireContext } from '../types';
-import { Kire } from '../kire';
+import type { Kire } from "../kire";
+import type { KireContext, Node } from "../types";
 
 // Define the symbols for internal use
-export const RESPONSE_SYMBOL = Symbol.for('~response');
-export const STRUCTURE_SYMBOL = Symbol.for('~structure');
+export const RESPONSE_SYMBOL = Symbol.for("~response");
+export const STRUCTURE_SYMBOL = Symbol.for("~structure");
 
 export class Compiler {
-  private preBuffer: string[] = [];
-  private resBuffer: string[] = [];
-  private posBuffer: string[] = [];
-  
-  constructor(private kire: Kire) {}
+	private preBuffer: string[] = [];
+	private resBuffer: string[] = [];
+	private posBuffer: string[] = [];
 
-  public async compile(nodes: Node[]): Promise<string> {
-    this.preBuffer = [];
-    this.resBuffer = [];
-    this.posBuffer = [];
+	constructor(private kire: Kire) {}
 
-    this.resBuffer.push(`with($ctx) {`);
+	public async compile(nodes: Node[]): Promise<string> {
+		this.preBuffer = [];
+		this.resBuffer = [];
+		this.posBuffer = [];
 
-    // Hook: onBewareDirectives
-    if (this.kire.hooks?.onBewareDirectives) {
-        if (Array.isArray(this.kire.hooks.onBewareDirectives)) {
-            for (const hook of this.kire.hooks.onBewareDirectives) {
-                const injected = hook(this);
-                if (typeof injected === 'string') {
-                    this.resBuffer.push(injected);
-                }
-            }
-        } else {
-            const injected = this.kire.hooks.onBewareDirectives(this);
-            if (typeof injected === 'string') {
-                this.resBuffer.push(injected);
-            }
-        }
-    }
+		this.resBuffer.push(`with($ctx) {`);
 
-    // Compile the root nodes
-    await this.compileNodes(nodes);
+		// Hook: onBewareDirectives
+		if (this.kire.hooks?.onBewareDirectives) {
+			if (Array.isArray(this.kire.hooks.onBewareDirectives)) {
+				for (const hook of this.kire.hooks.onBewareDirectives) {
+					const injected = hook(this);
+					if (typeof injected === "string") {
+						this.resBuffer.push(injected);
+					}
+				}
+			} else {
+				const injected = this.kire.hooks.onBewareDirectives(this);
+				if (typeof injected === "string") {
+					this.resBuffer.push(injected);
+				}
+			}
+		}
 
-    this.resBuffer.push(`}`); // Close with($ctx)
+		// Compile the root nodes
+		await this.compileNodes(nodes);
 
-    const pre = this.preBuffer.join('\n');
-    const res = this.resBuffer.join('\n');
-    const pos = this.posBuffer.join('\n');
-    
-    // Return statement must be last
-    const ret = `return $ctx;`;
+		this.resBuffer.push(`}`); // Close with($ctx)
 
-    return `${pre}\n${res}\n${pos}\n${ret}`;
-  }
+		const pre = this.preBuffer.join("\n");
+		const res = this.resBuffer.join("\n");
+		const pos = this.posBuffer.join("\n");
 
-  private async compileNodes(nodes: Node[]) {
-    for (const node of nodes) {
-      if (node.type === 'text') {
-        if (node.content) {
-            this.resBuffer.push(`$ctx[Symbol.for('~response')] += ${JSON.stringify(node.content)};`);
-        }
-      } else if (node.type === 'variable') {
-        if (node.content) {
-            // Simple interpolation
-            this.resBuffer.push(`$ctx[Symbol.for('~response')] += (${node.content});`);
-        }
-      } else if (node.type === 'directive') {
-        await this.processDirective(node);
-      }
-    }
-  }
+		// Return statement must be last
+		const ret = `return $ctx;`;
 
-  private async processDirective(node: Node) {
-    const name = node.name;
-    if (!name) return;
+		return `${pre}\n${res}\n${pos}\n${ret}`;
+	}
 
-    // Check if directive exists in Kire instance
-    const directive = this.kire.getDirective(name);
-    
-    if (!directive) {
-        // Handle unknown directive
-        console.warn(`Directive @${name} not found.`);
-        return;
-    }
+	private async compileNodes(nodes: Node[]) {
+		for (const node of nodes) {
+			if (node.type === "text") {
+				if (node.content) {
+					this.resBuffer.push(
+						`$ctx[Symbol.for('~response')] += ${JSON.stringify(node.content)};`,
+					);
+				}
+			} else if (node.type === "variable") {
+				if (node.content) {
+					// Simple interpolation
+					this.resBuffer.push(
+						`$ctx[Symbol.for('~response')] += (${node.content});`,
+					);
+				}
+			} else if (node.type === "directive") {
+				await this.processDirective(node);
+			}
+		}
+	}
 
-    const ctx: KireContext = {
-      param: (key: string | number) => {
-          if (typeof key === 'number') {
-              return node.args?.[key];
-          }
-          if (directive.params && node.args) {
-              const index = directive.params.findIndex(p => p.split(':')[0] === key);
-              if (index !== -1) return node.args[index];
-          }
-          return undefined;
-      },
-      children: node.children,
-      parents: node.related, // 'parents' in user logic map to 'related' nodes from parser
-      set: async (nodes: Node[]) => {
-          if (!nodes) return;
-          await this.compileNodes(nodes);
-      },
-      render: async (content: string) => {
-        return this.kire.compile(content);
-      },
-      resolve: (path: string) => {
-          return this.kire.resolvePath(path);
-      },
-      func: (code: string) => {
-         return `async function($ctx) { ${code} }`;
-      },
-      pre: (code: string) => {
-        this.preBuffer.push(code);
-      },
-      res: (code: string) => {
-        this.resBuffer.push(code);
-      },
-      pos: (code: string) => {
-        this.posBuffer.push(code);
-      },
-      error: (msg: string) => {
-        throw new Error(`Error in directive @${name}: ${msg}`);
-      },
-      clone: (locals: Record<string, any> = {}) => {
-          this.resBuffer.push(`$ctx.clone(${JSON.stringify(locals)});`);
-          return ctx;
-      },
-      clear: () => {
-          this.resBuffer.push(`$ctx.clear();`);
-          return ctx;
-      }
-    };
+	private async processDirective(node: Node) {
+		const name = node.name;
+		if (!name) return;
 
-    await directive.onCall(ctx);
-  }
+		// Check if directive exists in Kire instance
+		const directive = this.kire.getDirective(name);
+
+		if (!directive) {
+			// Handle unknown directive
+			console.warn(`Directive @${name} not found.`);
+			return;
+		}
+
+		const ctx: KireContext = {
+			param: (key: string | number) => {
+				if (typeof key === "number") {
+					return node.args?.[key];
+				}
+				if (directive.params && node.args) {
+					const index = directive.params.findIndex(
+						(p) => p.split(":")[0] === key,
+					);
+					if (index !== -1) return node.args[index];
+				}
+				return undefined;
+			},
+			children: node.children,
+			parents: node.related, // 'parents' in user logic map to 'related' nodes from parser
+			set: async (nodes: Node[]) => {
+				if (!nodes) return;
+				await this.compileNodes(nodes);
+			},
+			render: async (content: string) => {
+				return this.kire.compile(content);
+			},
+			resolve: (path: string) => {
+				return this.kire.resolvePath(path);
+			},
+			func: (code: string) => {
+				return `async function($ctx) { ${code} }`;
+			},
+			pre: (code: string) => {
+				this.preBuffer.push(code);
+			},
+			res: (content: string) => {
+				this.resBuffer.push(`$ctx.res(\`${content}\`);`);
+			},
+			raw: (code: string) => {
+				this.resBuffer.push(code);
+			},
+			pos: (code: string) => {
+				this.posBuffer.push(code);
+			},
+			error: (msg: string) => {
+				throw new Error(`Error in directive @${name}: ${msg}`);
+			},
+			clone: (locals: Record<string, any> = {}) => {
+				this.resBuffer.push(`$ctx.clone(${JSON.stringify(locals)});`);
+				return ctx;
+			},
+			clear: () => {
+				this.resBuffer.push(`$ctx.clear();`);
+				return ctx;
+			},
+		};
+
+		await directive.onCall(ctx);
+	}
 }
-
 
 
 // --- From: core/src/utils/path.ts ---

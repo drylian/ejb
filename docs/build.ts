@@ -12,13 +12,11 @@ const kire = new Kire({
   root: resolve(process.cwd(), "src"),
   plugins: [
     //KireAnalytical,
-    [KireSsg, { assetsPrefix: "assets" }],
     KireMarkdown,
     KireIconify,
-    [KireTailwind, {
-      // Tailwind config overrides if needed, usually autodetected from css @import or passed here
-    }],
-    [KireAssets, { prefix: "assets" }]
+    [KireTailwind, {}],
+    [KireAssets, { prefix: "assets" }],
+        [KireSsg, { assetsPrefix: "assets" }],
   ],
   resolver: async (path) => {
       try {

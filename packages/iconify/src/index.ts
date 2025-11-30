@@ -73,19 +73,19 @@ export const KireIconify: KirePlugin<IconifyOptions> = {
 				const nameExpr = ctx.param("name");
 				const classExpr = ctx.param("className") || '""';
 
-				ctx.res(`await (async () => {`);
-				ctx.res(`  const svg = await $ctx.fetchIcon(${nameExpr});`);
-				ctx.res(`  const cls = ${classExpr};`);
-				ctx.res(`  if (cls && svg.startsWith('<svg')) {`);
-				ctx.res(`     // Inject class into svg tag`);
-				ctx.res(
+				ctx.raw(`await (async () => {`);
+				ctx.raw(`  const svg = await $ctx.fetchIcon(${JSON.stringify(nameExpr)});`);
+				ctx.raw(`  const cls = ${classExpr};`);
+				ctx.raw(`  if (cls && svg.startsWith('<svg')) {`);
+				ctx.raw(`     // Inject class into svg tag`);
+				ctx.raw(
 					`     const withClass = svg.replace('<svg', '<svg class="' + cls + '"');`,
 				);
-				ctx.res(`     $ctx.res(withClass);`);
-				ctx.res(`  } else {`);
-				ctx.res(`     $ctx.res(svg);`);
-				ctx.res(`  }`);
-				ctx.res(`})();`);
+				ctx.raw(`     $ctx.res(withClass);`);
+				ctx.raw(`  } else {`);
+				ctx.raw(`     $ctx.res(svg);`);
+				ctx.raw(`  }`);
+				ctx.raw(`})();`);
 			},
 		});
 

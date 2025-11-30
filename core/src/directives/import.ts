@@ -13,7 +13,7 @@ export default (kire: Kire) => {
 			const pathExpr = ctx.param("path");
 			const localsExpr = ctx.param("locals") || "{}";
 
-			ctx.res(`await (async () => {
+			ctx.raw(`await (async () => {
     const path = $ctx.resolve(${JSON.stringify(pathExpr)});
     const templateFn = await $ctx.load(path);
     
