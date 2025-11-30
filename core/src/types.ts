@@ -27,6 +27,8 @@ export interface KireOptions {
 		parser?: IParserConstructor;
 		compiler?: ICompilerConstructor;
 	};
+	varLocals?: string;
+	exposeLocals?: boolean;
 }
 
 export interface KireContext {

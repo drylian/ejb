@@ -32,12 +32,16 @@ export class Kire {
 	public cacheFiles: Map<string, Function> = new Map();
 	public parserConstructor: IParserConstructor;
 	public compilerConstructor: ICompilerConstructor;
+	public varLocals: string;
+	public exposeLocals: boolean;
 
 	constructor(options: KireOptions = {}) {
 		this.root = options.root ?? "./";
 		this.cache = options.cache ?? true;
 		this.alias = options.alias ?? { "~/": this.root };
 		this.extension = options.extension ?? "kire";
+		this.varLocals = options.varLocals ?? "it";
+		this.exposeLocals = options.exposeLocals ?? true;
 
 		this.resolverFn =
 			options.resolver ??
@@ -248,6 +252,10 @@ export class Kire {
 			}
 		}
 
+		if (content === null || content === undefined) {
+			return null as any;
+		}
+
 		const code = await this.compile(content);
 		try {
 			const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
@@ -275,6 +283,11 @@ export class Kire {
 			rctx[k] = v;
 		}
 		Object.assign(rctx, locals);
+
+		// Expose locals under the configured varLocals name if exposeLocals is true
+		if (this.exposeLocals) {
+			rctx[this.varLocals] = locals;
+		}
 
 		// Initialize the response and structure symbols on the runtime context
 		rctx[RESPONSE_SYMBOL] = "";

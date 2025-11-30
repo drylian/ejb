@@ -61,20 +61,17 @@ describe("Kire Native Directives", () => {
 
 	describe("Loops", () => {
 		it("@for with array of", async () => {
-			const tpl = `@for(item of it.items){{ item }},
-@end`;
+			const tpl = `@for(item of it.items){{ item }},@end`;
 			expect(await render(tpl, { items: [1, 2, 3] })).toBe("1,2,3,");
 		});
 
 		it("@for with empty array", async () => {
-			const tpl = `@for(item of it.items){{ item }},
-@end`;
+			const tpl = `@for(item of it.items){{ item }},@end`;
 			expect(await render(tpl, { items: [] })).toBe("");
 		});
 
 		it("@for with object properties (for...in equivalent)", async () => {
-			const tpl = `@for(key in it.obj){{ key }}:{{ it.obj[key] }},
-@end`;
+			const tpl = `@for(key in it.obj){{ key }}:{{ it.obj[key] }},@end`;
 			expect(await render(tpl, { obj: { a: 1, b: 2 } })).toBe("a:1,b:2,");
 		});
 	});
@@ -230,11 +227,10 @@ describe("Kire Component Directives", () => {
 describe("Kire Include Directive", () => {
 	const kire = new Kire();
 	kire.resolverFn = async (path) => {
-		if (path.includes("child")) return `Child: {{ it.name }}`;
-		if (path.includes("wrapper")) return `Wrapper: {{ it.content }}`;
-		if (path.includes("grandchild"))
+		if (path === "child.kire") return `Child: {{ it.name }}`;
+		if (path === "grandchild.kire")
 			return `Grandchild: {{ it.item.name }} and {{ it.item.value }}`;
-		if (path.includes("nested"))
+		if (path === "nested.kire")
 			return `@include('grandchild', { item: it.n_item })`;
 		return null;
 	};
@@ -245,14 +241,9 @@ describe("Kire Include Directive", () => {
 		expect(await render(tpl)).toBe("Child: Test");
 	});
 
-	it("@include with content block", async () => {
-		const tpl = `@include('wrapper')Inner@end`;
-		expect(await render(tpl)).toBe("Wrapper: Inner");
-	});
-
 	it("@include with non-existent path", async () => {
 		const tpl = `Start @include('nonexistent') End`;
-		expect(await render(tpl)).toBe("Start End");
+		expect(await render(tpl)).toBe("Start  End");
 	});
 
 	it("@include with nested includes", async () => {

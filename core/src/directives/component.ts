@@ -29,7 +29,7 @@ export default (kire: Kire) => {
 		description:
 			"Loads a template as a reusable component, allowing content to be passed into named slots.",
 		example: `@component('card', { title: 'My Card' })\n  @slot('header')\n    <h1>Card Header</h1>\n  @end\n  <p>Default content.</p>\n@end`,
-		onCall(ctx) {
+		async onCall(ctx) {
 			const pathExpr = ctx.param("path");
 			const varsExpr = ctx.param("variables") || "{}";
 
@@ -43,25 +43,28 @@ export default (kire: Kire) => {
 			ctx.res(`    const $ctx = $bodyCtx;`); // Shadow $ctx
 			ctx.res(`    with($ctx) {`);
 
-			if (ctx.children) ctx.set(ctx.children);
+			if (ctx.children) await ctx.set(ctx.children);
 
 			ctx.res(`    }`);
 			ctx.res(`  })($ctx);`);
 
-			ctx.res(`  $slots.default = $bodyCtx[Symbol.for('~response')];`);
+			ctx.res(`  if (!$slots.default) $slots.default = $bodyCtx[Symbol.for('~response')];`);
 
 			// Now load the component template
 			ctx.res(`  const path = $ctx.resolve(${JSON.stringify(pathExpr)});`);
 			ctx.res(`  const templateFn = await $ctx.load(path);`);
 			ctx.res(`  if (templateFn) {`);
-			ctx.res(`    const locals = ${varsExpr};`);
-			ctx.res(`    const componentCtx = $ctx.clone(locals);`);
-			ctx.res(`    componentCtx.slots = $slots;`); // Pass slots to component
-			ctx.res(`    await templateFn(componentCtx);`);
-			ctx.res(`    $ctx.res(componentCtx[Symbol.for('~response')]);`);
+						ctx.res(`  const locals = ${varsExpr};`);
+						ctx.res(`  const componentCtx = $ctx.clone(locals);`);
+						ctx.res(`  componentCtx[${JSON.stringify(kire.varLocals)}] = locals;`); // Expose locals under the configured name
+						ctx.res(`  if(typeof locals === 'object' && locals !== null) locals.slots = $slots;`); // Attach slots to locals for it.slots access
+						ctx.res(`  componentCtx.slots = $slots;`); // Pass slots to component
+						ctx.res(`  await templateFn(componentCtx);`);
+						ctx.res(`  $ctx.res(componentCtx[Symbol.for('~response')]);`);
 			ctx.res(`  }`);
 
 			ctx.res(`})();`);
 		},
 	});
 };
+

@@ -52,5 +52,5 @@ test("Kire - Include", async () => {
 
 	const tpl2 = `@include('/some/path.kire')`;
 	// Expect this to fail or return empty, not throw uncaught.
-	await expect(await kire.render(tpl2)).resolves.toBe("");
+	expect(await kire.render(tpl2)).toBe("");
 });
