@@ -14,7 +14,6 @@ export const KireMarkdown: KirePlugin<MarkdownOptions> = {
 	options: {},
 	load(kire: Kire, _opts) {
 		const cache = kire.cached<string>("@kirejs/markdown");
-
 		// Expose parser for other plugins (like SSG)
 		kire.parseMarkdown = async (content: string) => {
 			return marked.parse(content) as

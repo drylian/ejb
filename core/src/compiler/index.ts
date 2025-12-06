@@ -117,7 +117,11 @@ export class Compiler {
 				this.preBuffer.push(code);
 			},
 			res: (content: string) => {
-				this.resBuffer.push(`$ctx.res(\`${content}\`);`);
+				const escaped = content
+					.replace(/\\/g, "\\\\")
+					.replace(/`/g, "\\`")
+					.replace(/\$\{/g, "\\${");
+				this.resBuffer.push(`$ctx.res(\`${escaped}\`);`);
 			},
 			raw: (code: string) => {
 				this.resBuffer.push(code);

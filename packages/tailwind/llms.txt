@@ -4,14 +4,13 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { KirePlugin } from "kire";
 import { compile } from "tailwindcss";
 
 export type TailwindCompileOptions = Parameters<typeof compile>[1];
 
 const require = createRequire(import.meta.url);
-const CachedCss = new Map<string, string>();
 
 /**
  * Loads CSS stylesheets for Tailwind processing
@@ -40,20 +39,72 @@ async function loadStylesheet(id: string, base: string) {
 }
 
 /**
+ * Helper to extract the default export from a module
+ */
+function getModuleExport(module: any) {
+	if (module && typeof module === "object" && "default" in module) {
+		return module.default;
+	}
+	return module;
+}
+
+/**
  * Loads JavaScript modules for Tailwind configuration
  */
 async function loadModule(id: string, base: string) {
+	const baseRequire = createRequire(resolve(base, "index.js"));
 	try {
-		const resolvedPath = require.resolve(id, { paths: [base] });
-		const module = await import(resolvedPath);
+		// Try direct require first (CJS) - this preserves context better for peer deps
+		// in some package managers (like Bun/PNPM) compared to resolving path first.
+		const mod = baseRequire(id);
 		return {
-			path: resolvedPath,
-			base: dirname(resolvedPath),
-			module: module.default || module, // Handle both ES and CJS modules
+			path: baseRequire.resolve(id),
+			base,
+			module: getModuleExport(mod),
 		};
-	} catch (e) {
-		console.error(`Failed to load module "${id}" from "${base}"`, e);
-		throw e;
+	} catch (e: any) {
+		// If it's an ESM module, require() will fail. Use import() instead.
+		if (e.code === "ERR_REQUIRE_ESM") {
+			const resolvedPath = baseRequire.resolve(id);
+			const module = await import(resolvedPath);
+			return {
+				path: resolvedPath,
+				base: dirname(resolvedPath),
+				module: getModuleExport(module),
+			};
+		}
+
+		// Fallback: Manual resolution via package.json
+		// This helps when require(id) fails for other reasons or custom entry point logic is needed
+		try {
+			// Try to resolve package.json to find the correct entry point
+			try {
+				const pkgJsonPath = require.resolve(`${id}/package.json`, {
+					paths: [base],
+				});
+				const pkgJson = JSON.parse(await readFile(pkgJsonPath, "utf-8"));
+				const main = pkgJson.main || pkgJson.module || "index.js";
+				const entryPath = join(dirname(pkgJsonPath), main);
+				const module = await import(entryPath);
+				return {
+					path: entryPath,
+					base: dirname(entryPath),
+					module: getModuleExport(module),
+				};
+			} catch {
+				// Final fallback to standard resolution if package.json resolution fails
+				const resolvedPath = require.resolve(id, { paths: [base] });
+				const module = await import(resolvedPath);
+				return {
+					path: resolvedPath,
+					base: dirname(resolvedPath),
+					module: getModuleExport(module),
+				};
+			}
+		} catch (loadError) {
+			console.error(`Failed to load module "${id}" from "${base}"`, loadError);
+			throw loadError;
+		}
 	}
 }
 
@@ -68,6 +119,8 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 			loadModule,
 			from: undefined,
 		};
+
+		const cache = kire.cached<string>("@kirejs/tailwind");
 
 		/**
 		 * @tailwind directive for processing CSS with Tailwind
@@ -94,20 +147,20 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 					// Generate cache ID if caching is enabled
 					if (kire.cache) {
 						const hash = createHash("sha256").update(code).digest("hex");
-						ctx.res(`$ctx.res('<tailwind id="${hash}">');`);
+						ctx.raw(`$ctx.res('<tailwind id="${hash}">');`);
 					} else {
-						ctx.res('$ctx.res("<tailwind>");');
+						ctx.raw('$ctx.res("<tailwind>");');
 					}
 
-					ctx.res(`$ctx.res(${JSON.stringify(code)});`);
-					ctx.res('$ctx.res("</tailwind>");');
+					ctx.raw(`$ctx.res(${JSON.stringify(code)});`);
+					ctx.raw('$ctx.res("</tailwind>");');
 				} catch (error) {
 					console.warn("Tailwind directive error:", error);
 					// Fallback behavior
 					const code = ctx.param("code") || "";
-					ctx.res('$ctx.res("<tailwind>");');
-					ctx.res(`$ctx.res(${JSON.stringify(code)});`);
-					ctx.res('$ctx.res("</tailwind>");');
+					ctx.raw('$ctx.res("<tailwind>");');
+					ctx.raw(`$ctx.res(${JSON.stringify(code)});`);
+					ctx.raw('$ctx.res("</tailwind>");');
 				}
 			},
 		});
@@ -120,8 +173,8 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 				const id = ctx.element.attributes.id;
 
 				// Use cached CSS if available and caching is enabled
-				if (kire.cache && id && CachedCss.has(id)) {
-					const cachedCss = CachedCss.get(id) ?? "";
+				if (kire.cache && id && cache.has(id)) {
+					const cachedCss = cache.get(id) ?? "";
 					const newHtml = ctx.content.replace(
 						ctx.element.outer,
 						`<style>${cachedCss}</style>`,
@@ -143,7 +196,7 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 				const classRegex = /\bclass(?:Name)?\s*=\s*(["'])(.*?)\1/g;
 				let match: RegExpExecArray;
 
-				while ((match = classRegex.exec(ctx.content)) !== null) {
+				while ((match = classRegex.exec(ctx.content)!) !== null) {
 					const cls = match[2]?.split(/\s+/);
 					cls?.forEach((c) => {
 						if (c) candidates.add(c);
@@ -158,7 +211,7 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 
 				// Cache the result if caching is enabled
 				if (kire.cache && id) {
-					CachedCss.set(id, processedCSS);
+					cache.set(id, processedCSS);
 				}
 
 				const newHtml = ctx.content.replace(

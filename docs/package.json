@@ -11,5 +11,12 @@
     "daisyui": "^5.0.0",
     "marked": "^17.0.1",
     "tailwindcss": "^4.0.0"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
   }
 }

@@ -4,9 +4,9 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { dirname, join, relative, resolve } from "node:path";
-import { assetsCache } from "@kirejs/assets";
 import { glob } from "glob";
 import type { Kire, KirePlugin } from "kire";
+import type { KireAsset } from "@kirejs/assets";
 
 declare module "kire" {
 	interface Kire {
@@ -98,7 +98,7 @@ export const KireSsg: KirePlugin<SsgOptions> & {
 
 					// Find markdown files
 					// Glob is relative to root?
-					const mdFiles = await glob(globPattern, { cwd: rootDir });
+					const mdFiles = await glob(globPattern!, { cwd: rootDir });
 
 					for (const mdFile of mdFiles) {
 						// mdFile can be Path object or string depending on glob version/options.
@@ -163,20 +163,26 @@ export const KireSsg: KirePlugin<SsgOptions> & {
 		}
 
 		// Write assets
-		if (assetsCache.size > 0) {
-			const assetsDir = join(outDir, assetsPrefix);
-			await mkdir(assetsDir, { recursive: true });
-
-			for (const [hash, asset] of assetsCache) {
-				const filename = `${hash}.${asset.type}`;
-				await writeFile(join(assetsDir, filename), asset.content);
-				console.log(`✓ Asset: ${assetsPrefix}/${filename}`);
-			}
-		}
-
-		console.log("Build complete.");
-	},
-
+		        // Write assets
+		        const assetsCache = kireInstance.cached<KireAsset>("@kirejs/assets");
+		        // Check if we have assets by trying to iterate or checking size logic?
+		        // Map has size, but KireCache wrapper doesn't expose size.
+		        // But we can iterate.
+		        const entries = Array.from(assetsCache.entries());
+		
+		        if (entries.length > 0) {
+		            const assetsDir = join(outDir, assetsPrefix);
+		            await mkdir(assetsDir, { recursive: true });
+		
+		            for (const [hash, asset] of entries) {
+		                const filename = `${hash}.${asset.type === "css" ? "css" : asset.type === "mjs" ? "mjs" : "js"}`;
+		                await writeFile(join(assetsDir, filename), asset.content);
+		                console.log(`✓ Asset: ${assetsPrefix}/${filename}`);
+		            }
+		        }
+		
+		        console.log("Build complete.");
+		    },
 	async dev(opts = {}) {
 		if (!kireInstance) throw new Error("KireSsg plugin not registered.");
 
@@ -191,15 +197,16 @@ export const KireSsg: KirePlugin<SsgOptions> & {
 				const prefixPath = `/${assetsPrefix}/`;
 				if (url.startsWith(prefixPath)) {
 					console.log(`[DEV] Attempting to serve asset: ${url}`);
-					const match = url.match(/\/([a-f0-9]{8})\.(js|css)$/);
+					const match = url.match(/\/([a-f0-9]{8})\.(js|css|mjs)$/);
 					if (match) {
 						const hash = match[1];
-						const ext = match[2] as "js" | "css";
-						const asset = assetsCache.get(hash);
+						const ext = match[2] as "js" | "css" | "mjs";
+						const assetsCache = kireInstance!.cached<KireAsset>("@kirejs/assets");
+						const asset = assetsCache.get(hash!);
 						if (asset && asset.type === ext) {
 							res.setHeader(
 								"Content-Type",
-								ext === "js" ? "application/javascript" : "text/css",
+								ext === "css" ? "text/css" : "application/javascript",
 							);
 							res.end(asset.content);
 							console.log(`[DEV] Served asset: ${url}`);
@@ -225,7 +232,7 @@ export const KireSsg: KirePlugin<SsgOptions> & {
 					`pages/${baseFilename}/index`,
 				];
 
-				let html: string | null = null;
+				let html: string | null | undefined = null;
 				let servedCandidate = "";
 
 				for (const candidate of candidates) {

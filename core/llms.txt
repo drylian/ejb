@@ -9,6 +9,7 @@ export interface KireCache<T = any> {
 	has(key: string): boolean;
 	delete(key: string): boolean;
 	clear(): void;
+	entries(): IterableIterator<[string, T]>;
 }
 
 export interface KireConfig {
@@ -212,6 +213,7 @@ export class Kire {
 			has: (key: string) => store.has(key),
 			delete: (key: string) => store.delete(key),
 			clear: () => store.clear(),
+			entries: () => store.entries(),
 		};
 	}
 
@@ -1460,6 +1462,63 @@ export class Parser {
 }
 
 
+// --- From: core/src/utils/path.ts ---
+/**
+ * Joins path segments and normalizes the resulting path
+ */
+export function join(...segments: string[]): string {
+	if (!segments.length) return ".";
+
+	const windowsAbsoluteRegex = /^[a-zA-Z]:[\\/]/;
+	const isWindowsAbsolute = segments.some((s) => windowsAbsoluteRegex.test(s));
+	const driveLetter = isWindowsAbsolute
+		? segments
+				.find((s) => windowsAbsoluteRegex.test(s))
+				?.charAt(0)
+				.toUpperCase()
+		: null;
+
+	// Normalize all segments at once
+	const normalized = segments
+		.join("/")
+		.replace(/\\/g, "/")
+		.replace(/\/+/g, "/");
+	const isAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(normalized);
+
+	const parts = normalized.split("/");
+	const result: string[] = [];
+	let i = 0;
+
+	while (i < parts.length) {
+		const part = parts[i++];
+		if (!part || part === ".") continue;
+
+		if (part === "..") {
+			if (result.length && result[result.length - 1] !== "..") {
+				result.pop();
+			} else {
+				result.push(part);
+			}
+		} else {
+			result.push(part);
+		}
+	}
+
+	let path = result.join("/");
+
+	if (isWindowsAbsolute && driveLetter) {
+		path = path.replace(/^[a-zA-Z]:/, "").replace(/^\//, "");
+		path = `${driveLetter}:\\${path.replace(/\//g, "\\")}`.replace(
+			/\\+/g,
+			"\\",
+		);
+		return path || ".";
+	}
+
+	return isAbsolute ? `/${path.replace(/^\//, "")}` : path || ".";
+}
+
+
 // --- From: core/src/compiler/index.ts ---
 import type { Kire } from "../kire";
 import type { KireContext, Node } from "../types";
@@ -1580,7 +1639,11 @@ export class Compiler {
 				this.preBuffer.push(code);
 			},
 			res: (content: string) => {
-				this.resBuffer.push(`$ctx.res(\`${content}\`);`);
+				const escaped = content
+					.replace(/\\/g, "\\\\")
+					.replace(/`/g, "\\`")
+					.replace(/\$\{/g, "\\${");
+				this.resBuffer.push(`$ctx.res(\`${escaped}\`);`);
 			},
 			raw: (code: string) => {
 				this.resBuffer.push(code);
@@ -1603,63 +1666,6 @@ export class Compiler {
 
 		await directive.onCall(ctx);
 	}
-}
-
-
-// --- From: core/src/utils/path.ts ---
-/**
- * Joins path segments and normalizes the resulting path
- */
-export function join(...segments: string[]): string {
-	if (!segments.length) return ".";
-
-	const windowsAbsoluteRegex = /^[a-zA-Z]:[\\/]/;
-	const isWindowsAbsolute = segments.some((s) => windowsAbsoluteRegex.test(s));
-	const driveLetter = isWindowsAbsolute
-		? segments
-				.find((s) => windowsAbsoluteRegex.test(s))
-				?.charAt(0)
-				.toUpperCase()
-		: null;
-
-	// Normalize all segments at once
-	const normalized = segments
-		.join("/")
-		.replace(/\\/g, "/")
-		.replace(/\/+/g, "/");
-	const isAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(normalized);
-
-	const parts = normalized.split("/");
-	const result: string[] = [];
-	let i = 0;
-
-	while (i < parts.length) {
-		const part = parts[i++];
-		if (!part || part === ".") continue;
-
-		if (part === "..") {
-			if (result.length && result[result.length - 1] !== "..") {
-				result.pop();
-			} else {
-				result.push(part);
-			}
-		} else {
-			result.push(part);
-		}
-	}
-
-	let path = result.join("/");
-
-	if (isWindowsAbsolute && driveLetter) {
-		path = path.replace(/^[a-zA-Z]:/, "").replace(/^\//, "");
-		path = `${driveLetter}:\\${path.replace(/\//g, "\\")}`.replace(
-			/\\+/g,
-			"\\",
-		);
-		return path || ".";
-	}
-
-	return isAbsolute ? `/${path.replace(/^\//, "")}` : path || ".";
 }
 
 
