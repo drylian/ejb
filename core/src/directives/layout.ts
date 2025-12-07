@@ -4,7 +4,6 @@ import type { KireContext } from "../types";
 export default (kire: Kire) => {
 	// Initialize global defines object
 	kire.$ctx("defines", {});
-
 	kire.directive({
 		name: "define",
 		params: ["name:string"],

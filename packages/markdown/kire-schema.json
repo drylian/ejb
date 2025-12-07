@@ -1,0 +1,29 @@
+{
+    "package": "@kirejs/markdown",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/drylian/kire.git"
+    },
+    "version": "0.1.0",
+    "directives": [
+        {
+            "name": "markdown",
+            "params": [
+                "source:string"
+            ],
+            "description": "Renders Markdown content from a string or file path.",
+            "example": "@markdown('path/to/file.md')"
+        },
+        {
+            "name": "mdslots",
+            "params": [
+                "pattern:string",
+                "name:string"
+            ],
+            "description": "Loads Markdown files matching a glob pattern into a context variable and marks them for SSG generation.",
+            "example": "@mdslots('posts/*.md', 'posts')"
+        }
+    ],
+    "elements": [],
+    "globals": {}
+}

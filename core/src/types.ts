@@ -83,6 +83,14 @@ export interface KireElementOptions {
 	void?: boolean;
 }
 
+export interface ElementDefinition {
+	name: string | RegExp;
+	description?: string;
+	example?: string;
+	void?: boolean;
+	onCall: KireElementHandler;
+}
+
 export interface KireHooks {
 	onBewareDirectives?:
 		| ((compiler: ICompiler) => undefined | string)
@@ -127,6 +135,7 @@ export interface KireSchematic {
 	repository?: string | { type: string; url: string };
 	version?: string;
 	directives?: DirectiveDefinition[];
+	elements?: ElementDefinition[];
 	globals?: Record<string, any>;
 }
 

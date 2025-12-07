@@ -1,0 +1,46 @@
+@define('content')
+    <div class="space-y-12">
+        <div class="text-center">
+            <h1 class="text-4xl font-bold mb-4">Ecosystem Packages</h1>
+            <p class="text-lg opacity-75">Explore the official packages and directives available in the Kire ecosystem.</p>
+        </div>
+
+        @for(item of $ctx.items)
+            @log($ctx.items)
+            <div class="card bg-base-100 shadow-xl border border-base-300" id="{{ item.package }}">
+                <div class="card-body">
+                    <div class="flex items-center gap-4 mb-4">
+                        <h2 class="card-title text-2xl font-bold">
+                            {{ item.package }}
+                            <span class="badge badge-primary badge-outline">{{ item.version }}</span>
+                        </h2>
+                        <!-- REPO LINK COMMENTED OUT -->
+                        <!-- 
+                        @if(item.repository && item.repository.url)
+                            <a href="{{ item.repository.url.replace('git+', '') }}" target="_blank" class="btn btn-ghost btn-circle btn-sm">
+                                <iconify icon="mdi:github" class="text-xl" />
+                            </a>
+                        @end
+                        -->
+                    </div>
+                    
+                    <!-- DIRECTIVES COMMENTED OUT -->
+                    <!--
+                    @if(item.directives && item.directives.length > 0)
+                       ...
+                    @end
+                    -->
+
+                    <!-- ELEMENTS COMMENTED OUT -->
+                    <!--
+                    @if(item.elements && item.elements.length > 0)
+                       ...
+                    @end
+                    -->
+                </div>
+            </div>
+        @end
+    </div>
+@end
+
+@include('layouts/_main.kire', { title: 'Packages | Kire' })

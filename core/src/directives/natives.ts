@@ -68,10 +68,10 @@ export default (kire: Kire) => {
 			const expr = ctx.param("expr");
 			if (expr.includes(" in ")) {
 				const [lhs, rhs] = expr.split(" in ");
-				ctx.raw(`for (const ${lhs} in ${rhs}) {`);
+				ctx.raw(`for (const ${lhs.trim()} in ${rhs.trim()}) {`);
 			} else if (expr.includes(" of ")) {
 				const [lhs, rhs] = expr.split(" of ");
-				ctx.raw(`for (const ${lhs} of ${rhs}) {`);
+				ctx.raw(`for (const ${lhs.trim()} of ${rhs.trim()}) {`);
 			} else {
 				ctx.raw(`for (${expr}) {`);
 			}

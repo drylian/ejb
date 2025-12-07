@@ -28,16 +28,10 @@ describe("KireMarkdown", () => {
 	it("should render markdown from file", async () => {
 		const kire = new Kire({
 			plugins: [KireMarkdown],
-			root: process.cwd(), // Ensure root is current dir for resolution
+			root: process.cwd(),
 		});
-		// Must parse the argument as string literal manually if parser strips quotes
-		// The directive implementation uses JSON.stringify(source), so passing string literal works if parser passes it correctly.
-		// If parser strips quotes, we pass filename without quotes?
-		// @markdown('temp_test.md') -> param is "temp_test.md"
-		// JSON.stringify("temp_test.md") -> "temp_test.md" (quoted string)
-		// Code: const src = "temp_test.md";
-		// src ends with .md -> true.
-		// Works.
+		// Mock readDirFn just in case, though not used here
+		kire.readDirFn = async () => []; 
 
 		const tpl = `@markdown('${TEMP_MD}')`;
 		const result = await kire.render(tpl);
@@ -45,31 +39,42 @@ describe("KireMarkdown", () => {
 		expect(result).toContain("<p>This is a file test.</p>");
 	});
 
-	it("should render SSG marker for glob pattern", async () => {
+	it("should render wildcard content (glob pattern)", async () => {
 		const kire = new Kire({ plugins: [KireMarkdown] });
+		
+		// Mock readDirFn
+		kire.readDirFn = async (pattern) => {
+			if (pattern === "content/*.md") return ["file1.md", "file2.md"];
+			return [];
+		};
+		
+		// Mock renderMarkdown to avoid file reading
+		kire.$ctx("renderMarkdown", async (src: string) => {
+			if (src === "file1.md") return "<h1>File 1</h1>";
+			if (src === "file2.md") return "<h1>File 2</h1>";
+			return "";
+		});
+
 		const tpl = `@markdown('content/*.md')`;
 		const result = await kire.render(tpl);
-		// Directive logic: if (source.includes("*")) output marker.
-		// param is "content/*.md".
-		// includes * -> true.
-		// Output: <!-- KIRE_MARKDOWN_GEN:content/*.md -->
-		expect(result).toContain("<!-- KIRE_MARKDOWN_GEN:content/*.md -->");
+		
+		expect(result).toContain("<h1>File 1</h1>");
+		expect(result).toContain("<h1>File 2</h1>");
 	});
 
 	it("should expose kire.parseMarkdown helper", async () => {
 		const kire = new Kire({ plugins: [KireMarkdown] });
 		expect(kire.parseMarkdown).toBeDefined();
-		const html = await kire.parseMarkdown("**Bold**");
-		expect(html).toContain("<strong>Bold</strong>");
+		if (kire.parseMarkdown) {
+			const html = await kire.parseMarkdown("**Bold**");
+			expect(html).toContain("<strong>Bold</strong>");
+		}
 	});
 
 	it("should handle missing file gracefully (fallback to string)", async () => {
 		const kire = new Kire({ plugins: [KireMarkdown] });
 		const tpl = `@markdown('missing_file.md')`;
 		const result = await kire.render(tpl);
-		// Logic: catch(e) { content = src; }
-		// content = "missing_file.md"
-		// render "missing_file.md" as markdown -> "<p>missing_file.md</p>"
 		expect(result).toContain("<p>missing_file.md</p>");
 	});
 });

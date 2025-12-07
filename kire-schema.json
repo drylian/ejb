@@ -197,10 +197,10 @@
             "path:string",
             "locals:object"
          ],
-         "children": true,
+         "children": false,
          "type": "html",
-         "description": "Includes and renders a template from a given path, optionally passing local variables. Can also wrap content passed as \"content\" variable.",
-         "example": "@include('partials/card')\n  <p>Card content</p>\n@end"
+         "description": "Includes and renders a template from a given path, optionally passing local variables.",
+         "example": "@include('partials/card')"
       },
       {
          "name": "slot",
@@ -224,6 +224,7 @@
          "example": "@component('card', { title: 'My Card' })\n  @slot('header')\n    <h1>Card Header</h1>\n  @end\n  <p>Default content.</p>\n@end"
       }
    ],
+   "elements": [],
    "globals": {
       "defines": {},
       "stacks": {}

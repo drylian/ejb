@@ -69,6 +69,8 @@ export const KireIconify: KirePlugin<IconifyOptions> = {
 		kire.directive({
 			name: "icon",
 			params: ["name:string", "className:string"],
+			description: "Renders an Iconify icon SVG inline.",
+			example: "@icon('mdi:home', 'text-blue-500')",
 			onCall(ctx) {
 				const nameExpr = ctx.param("name");
 				const classExpr = ctx.param("className") || '""';
@@ -90,9 +92,12 @@ export const KireIconify: KirePlugin<IconifyOptions> = {
 		});
 
 		// 2. <iconify i="mdi:home" class="text-red-500" />
-		kire.element(
-			"iconify",
-			async (ctx) => {
+		kire.element({
+			name: "iconify",
+			description: "Renders an Iconify icon based on the 'icon' or 'i' attribute.",
+			example: '<iconify icon="mdi:home" class="text-blue-500" />',
+			void: true,
+			async onCall(ctx) {
 				const iconName =
 					ctx.element.attributes.i || ctx.element.attributes.icon;
 				if (!iconName) {
@@ -122,8 +127,7 @@ export const KireIconify: KirePlugin<IconifyOptions> = {
 					ctx.replace(svg);
 				}
 			},
-			{ void: true },
-		);
+		});
 	},
 };
 

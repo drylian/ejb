@@ -1,0 +1,28 @@
+{
+    "package": "@kirejs/iconify",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/drylian/kire.git"
+    },
+    "version": "0.1.0",
+    "directives": [
+        {
+            "name": "icon",
+            "params": [
+                "name:string",
+                "className:string"
+            ],
+            "description": "Renders an Iconify icon SVG inline.",
+            "example": "@icon('mdi:home', 'text-blue-500')"
+        }
+    ],
+    "elements": [
+        {
+            "name": "iconify",
+            "description": "Renders an Iconify icon based on the 'icon' or 'i' attribute.",
+            "example": "<iconify icon=\"mdi:home\" class=\"text-blue-500\" />",
+            "void": true
+        }
+    ],
+    "globals": {}
+}

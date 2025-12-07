@@ -38,68 +38,81 @@ export const KireAssets: KirePlugin<KireAssetsOptions> = {
 		// Important: Register these BEFORE the injection tag handler so they run first
 
 		// Handle <style>
-		kire.element("style", (ctx) => {
-			const content = ctx.element.inner;
-			if (!content.trim()) return;
+		kire.element({
+			name: "style",
+			description: "Captures inline styles to be injected via @assets.",
+			example: "<style>body { color: red; }</style>",
+			onCall(ctx) {
+				const content = ctx.element.inner;
+				if (!content.trim()) return;
 
-			// Generate hash
-			const hash = createHash("md5")
-				.update(content)
-				.digest("hex")
-				.slice(0, 8);
+				// Generate hash
+				const hash = createHash("md5")
+					.update(content)
+					.digest("hex")
+					.slice(0, 8);
 
-			// Store in global cache
-			if (!cache.has(hash)) {
-				cache.set(hash, { hash, content, type: "css" });
-			}
+				// Store in global cache
+				if (!cache.has(hash)) {
+					cache.set(hash, { hash, content, type: "css" });
+				}
 
-			// Add to request context
-			// We need to access the shared request context.
-			// ctx is a clone, but if _assets was initialized on the parent context as an object,
-			// the reference is shared.
-			if (ctx._assets) {
-				ctx._assets.styles.push(hash);
-				// Remove the original tag
-				ctx.replace("");
-			}
+				// Add to request context
+				// We need to access the shared request context.
+				// ctx is a clone, but if _assets was initialized on the parent context as an object,
+				// the reference is shared.
+				if (ctx._assets) {
+					ctx._assets.styles.push(hash);
+					// Remove the original tag
+					ctx.replace("");
+				}
+			},
 		});
 
 		// Handle <script>
-		kire.element("script", (ctx) => {
-			// Check if it's an inline script (no src attribute)
-			if (ctx.element.attributes.src) return;
+		kire.element({
+			name: "script",
+			description: "Captures inline scripts to be injected via @assets.",
+			example: "<script>console.log('hello');</script>",
+			onCall(ctx) {
+				// Check if it's an inline script (no src attribute)
+				if (ctx.element.attributes.src) return;
 
-			const content = ctx.element.inner;
-			if (!content.trim()) return;
+				const content = ctx.element.inner;
+				if (!content.trim()) return;
 
-			const hash = createHash("md5")
-				.update(content)
-				.digest("hex")
-				.slice(0, 8);
+				const hash = createHash("md5")
+					.update(content)
+					.digest("hex")
+					.slice(0, 8);
 
-			let type: "js" | "mjs" = "js";
-			if (
-				ctx.element.attributes.type === "module" ||
-				content.includes("import ") ||
-				content.includes("export ") ||
-				content.includes("import.")
-			) {
-				type = "mjs";
-			}
+				let type: "js" | "mjs" = "js";
+				if (
+					ctx.element.attributes.type === "module" ||
+					content.includes("import ") ||
+					content.includes("export ") ||
+					content.includes("import.")
+				) {
+					type = "mjs";
+				}
 
-			if (!cache.has(hash)) {
-				cache.set(hash, { hash, content, type });
-			}
+				if (!cache.has(hash)) {
+					cache.set(hash, { hash, content, type });
+				}
 
-			if (ctx._assets) {
-				ctx._assets.scripts.push(hash);
-				ctx.replace("");
-			}
+				if (ctx._assets) {
+					ctx._assets.scripts.push(hash);
+					ctx.replace("");
+				}
+			},
 		});
 
 		// 2. Register directive @assets()
 		kire.directive({
 			name: "assets",
+			description:
+				"Injects the assets placeholder where scripts and styles will be output.",
+			example: "@assets()",
 			onCall(ctx) {
 				// Initialize the assets collection for this request
 				ctx.pre(`$ctx._assets = { scripts: [], styles: [] };`);
@@ -109,34 +122,39 @@ export const KireAssets: KirePlugin<KireAssetsOptions> = {
 		});
 
 		// 3. Register handler for the injection point
-		kire.element(injectionTag, (ctx) => {
-			if (!ctx._assets) {
-				ctx.replace("");
-				return;
-			}
-
-			let output = "";
-			const baseUrl = domain ? `${domain}/${prefix}` : `/${prefix}`;
-
-			// Generate links for styles
-			// Use Set to avoid duplicates if any
-			const uniqueStyles = [...new Set(ctx._assets.styles)];
-			for (const hash of uniqueStyles) {
-				output += `<link rel="stylesheet" href="${baseUrl}/${hash}.css" />\n`;
-			}
-
-			// Generate scripts
-			const uniqueScripts = [...new Set(ctx._assets.scripts)];
-			for (const hash of uniqueScripts) {
-				const asset = cache.get(hash);
-				if (asset && asset.type === "mjs") {
-					output += `<script type="module" src="${baseUrl}/${hash}.mjs"></script>\n`;
-				} else {
-					output += `<script src="${baseUrl}/${hash}.js" defer></script>\n`;
+		kire.element({
+			name: injectionTag,
+			description: "Internal placeholder for assets injection.",
+			example: "<!-- Internal Use -->",
+			onCall(ctx) {
+				if (!ctx._assets) {
+					ctx.replace("");
+					return;
 				}
-			}
 
-			ctx.replace(output);
+				let output = "";
+				const baseUrl = domain ? `${domain}/${prefix}` : `/${prefix}`;
+
+				// Generate links for styles
+				// Use Set to avoid duplicates if any
+				const uniqueStyles = [...new Set(ctx._assets.styles)];
+				for (const hash of uniqueStyles) {
+					output += `<link rel="stylesheet" href="${baseUrl}/${hash}.css" />\n`;
+				}
+
+				// Generate scripts
+				const uniqueScripts = [...new Set(ctx._assets.scripts)];
+				for (const hash of uniqueScripts) {
+					const asset = cache.get(hash);
+					if (asset && asset.type === "mjs") {
+						output += `<script type="module" src="${baseUrl}/${hash}.mjs"></script>\n`;
+					} else {
+						output += `<script src="${baseUrl}/${hash}.js" defer></script>\n`;
+					}
+				}
+
+				ctx.replace(output);
+			},
 		});
 	},
 };

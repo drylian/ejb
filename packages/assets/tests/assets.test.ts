@@ -117,7 +117,7 @@ describe("KireAssets", () => {
     {
         const mockContext = {
             path: scriptPath,
-            set: { headers: {} }
+            set: { headers: {} as Record<string, string> }
         };
         
         const result = kireFS.elysia(mockContext);

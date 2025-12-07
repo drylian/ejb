@@ -127,6 +127,9 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 			params: ["code:string"],
 			children: true,
 			childrenRaw: true,
+			description: "Processes CSS content within the block using Tailwind CSS.",
+			example:
+				"@tailwind\n  @tailwind base;\n  @tailwind components;\n  @tailwind utilities;\n@end",
 			async onCall(ctx) {
 				try {
 					let code = ctx.param("code");
@@ -165,66 +168,72 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 		/**
 		 * <tailwind> element for CSS content processing
 		 */
-		kire.element("tailwind", async (ctx) => {
-			try {
-				const id = ctx.element.attributes.id;
+		kire.element({
+			name: "tailwind",
+			description: "Processes CSS content within the block using Tailwind CSS.",
+			example:
+				"<tailwind>@tailwind base; @tailwind components; @tailwind utilities;</tailwind>",
+			async onCall(ctx) {
+				try {
+					const id = ctx.element.attributes.id;
 
-				// Use cached CSS if available and caching is enabled
-				if (kire.cache && id && cache.has(id)) {
-					const cachedCss = cache.get(id) ?? "";
+					// Use cached CSS if available and caching is enabled
+					if (kire.cache && id && cache.has(id)) {
+						const cachedCss = cache.get(id) ?? "";
+						const newHtml = ctx.content.replace(
+							ctx.element.outer,
+							`<style>${cachedCss}</style>`,
+						);
+						ctx.update(newHtml);
+						return;
+					}
+
+					// Compilation logic (cache miss or caching disabled)
+					let content = ctx.element.inner || "";
+
+					// Ensure Tailwind CSS is imported if not present
+					if (!content.includes('@import "tailwindcss"')) {
+						content = `@import "tailwindcss";\n${content}`;
+					}
+
+					// Extract CSS classes from the entire HTML content
+					const candidates = new Set<string>();
+					const classRegex = /\bclass(?:Name)?\s*=\s*(["'])(.*?)\1/g;
+					let match: RegExpExecArray;
+
+					while ((match = classRegex.exec(ctx.content)!) !== null) {
+						const cls = match[2]?.split(/\s+/);
+						cls?.forEach((c) => {
+							if (c) candidates.add(c);
+						});
+					}
+
+					const processedCSS = await compileCSSWithTailwind(
+						content,
+						tailwindOptions,
+						Array.from(candidates),
+					);
+
+					// Cache the result if caching is enabled
+					if (kire.cache && id) {
+						cache.set(id, processedCSS);
+					}
+
 					const newHtml = ctx.content.replace(
 						ctx.element.outer,
-						`<style>${cachedCss}</style>`,
+						`<style>${processedCSS}</style>`,
 					);
 					ctx.update(newHtml);
-					return;
+				} catch (error) {
+					console.warn("Tailwind compilation error:", error);
+					// Fallback: use original content without processing
+					const newHtml = ctx.content.replace(
+						ctx.element.outer,
+						`<style>${ctx.element.inner || ""}</style>`,
+					);
+					ctx.update(newHtml);
 				}
-
-				// Compilation logic (cache miss or caching disabled)
-				let content = ctx.element.inner || "";
-
-				// Ensure Tailwind CSS is imported if not present
-				if (!content.includes('@import "tailwindcss"')) {
-					content = `@import "tailwindcss";\n${content}`;
-				}
-
-				// Extract CSS classes from the entire HTML content
-				const candidates = new Set<string>();
-				const classRegex = /\bclass(?:Name)?\s*=\s*(["'])(.*?)\1/g;
-				let match: RegExpExecArray;
-
-				while ((match = classRegex.exec(ctx.content)!) !== null) {
-					const cls = match[2]?.split(/\s+/);
-					cls?.forEach((c) => {
-						if (c) candidates.add(c);
-					});
-				}
-
-				const processedCSS = await compileCSSWithTailwind(
-					content,
-					tailwindOptions,
-					Array.from(candidates),
-				);
-
-				// Cache the result if caching is enabled
-				if (kire.cache && id) {
-					cache.set(id, processedCSS);
-				}
-
-				const newHtml = ctx.content.replace(
-					ctx.element.outer,
-					`<style>${processedCSS}</style>`,
-				);
-				ctx.update(newHtml);
-			} catch (error) {
-				console.warn("Tailwind compilation error:", error);
-				// Fallback: use original content without processing
-				const newHtml = ctx.content.replace(
-					ctx.element.outer,
-					`<style>${ctx.element.inner || ""}</style>`,
-				);
-				ctx.update(newHtml);
-			}
+			},
 		});
 	},
 };

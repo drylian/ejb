@@ -21,6 +21,15 @@ export const KireMarkdown: KirePlugin<MarkdownOptions> = {
 				| string as Promise<string>;
 		};
 
+		// Expose readDir proxy for runtime
+		kire.$ctx("readDir", async (pattern: string) => {
+			if (kire.readDirFn) {
+				return kire.readDirFn(pattern);
+			}
+			console.warn("kire.readDirFn is not defined. Make sure @kirejs/resolver is loaded.");
+			return [];
+		});
+
 		// Runtime helper for processing markdown (file or string) with cache
 		kire.$ctx("renderMarkdown", async (source: string) => {
 			if (!source) return "";
@@ -50,12 +59,20 @@ export const KireMarkdown: KirePlugin<MarkdownOptions> = {
 		kire.directive({
 			name: "markdown",
 			params: ["source:string"],
+			description: "Renders Markdown content from a string or file path.",
+			example: "@markdown('path/to/file.md')",
 			async onCall(ctx) {
 				const source = ctx.param(0) ?? "";
 
-				// 1. Check if it is a glob pattern (SSG layout mode)
+				// 1. Check if it is a glob pattern
 				if (source.includes("*")) {
-					ctx.raw(`$ctx.res("<!-- KIRE_MARKDOWN_GEN:${source} -->");`);
+					ctx.raw(`await (async () => {
+						const files = await $ctx.readDir(${JSON.stringify(source)});
+						for (const file of files) {
+							const html = await $ctx.renderMarkdown(file);
+							$ctx.res(html);
+						}
+					})();`);
 					return;
 				}
 
@@ -64,6 +81,28 @@ export const KireMarkdown: KirePlugin<MarkdownOptions> = {
                     const html = await $ctx.renderMarkdown(${JSON.stringify(source)});
                     $ctx.res(html);
                 })();`);
+			},
+		});
+
+		kire.directive({
+			name: "mdslots",
+			params: ["pattern:string", "name:string"],
+			description:
+				"Loads Markdown files matching a glob pattern into a context variable and marks them for SSG generation.",
+			example: "@mdslots('posts/*.md', 'posts')",
+			async onCall(ctx) {
+				const pattern = ctx.param("pattern");
+				const name = ctx.param("name") || "$mdslot";
+
+				ctx.raw(`await (async () => {
+					const files = await $ctx.readDir(${JSON.stringify(pattern)});
+					const slots = {};
+					for (const file of files) {
+						slots[file] = await $ctx.renderMarkdown(file);
+					}
+					$ctx[${JSON.stringify(name)}] = slots;
+					$ctx.res("<!-- KIRE_GEN:" + ${JSON.stringify(pattern)} + " -->");
+				})();`);
 			},
 		});
 	},

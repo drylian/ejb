@@ -172,7 +172,8 @@ export default () => {
 
         while ((match = exprRegex.exec(originalText))) {
           const raw = match[0];
-          const code = match[1].trim();
+          const code = match[1]?.trim();
+          if (!code) continue;
           try {
             const exprFn = new Function(
               'scope',

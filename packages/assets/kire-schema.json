@@ -1,0 +1,33 @@
+{
+    "package": "@kirejs/assets",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/drylian/kire.git"
+    },
+    "version": "0.1.0",
+    "directives": [
+        {
+            "name": "assets",
+            "description": "Injects the assets placeholder where scripts and styles will be output.",
+            "example": "@assets()"
+        }
+    ],
+    "elements": [
+        {
+            "name": "style",
+            "description": "Captures inline styles to be injected via @assets.",
+            "example": "<style>body { color: red; }</style>"
+        },
+        {
+            "name": "script",
+            "description": "Captures inline scripts to be injected via @assets.",
+            "example": "<script>console.log('hello');</script>"
+        },
+        {
+            "name": "kire-assets-injection-point",
+            "description": "Internal placeholder for assets injection.",
+            "example": "<!-- Internal Use -->"
+        }
+    ],
+    "globals": {}
+}

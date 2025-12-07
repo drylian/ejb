@@ -5,6 +5,8 @@ export class Parser {
 	private cursor = 0;
 	private stack: Node[] = [];
 	private rootChildren: Node[] = [];
+	private line = 1;
+	private column = 1;
 
 	constructor(
 		private template: string,
@@ -57,7 +59,7 @@ export class Parser {
 				//console.log('FOUND DIRECTIVE:', { name, fullMatch, stack: this.stack.map(s => s.name) });
 
 				// Check if it has arguments
-				let argsStr:string;
+				let argsStr: string | undefined;
 				let argsEndIndex = fullMatch.length;
 
 				// Verifica se tem parênteses APENAS se o próximo caractere for '('
@@ -323,7 +325,7 @@ export class Parser {
 		const lines = str.split("\n");
 		if (lines.length > 1) {
 			this.line += lines.length - 1;
-			this.column = lines[lines.length - 1]?.length + 1;
+			this.column = (lines[lines.length - 1]?.length || 0) + 1;
 		} else {
 			this.column += str.length;
 		}

@@ -3,6 +3,7 @@ import { KireDirectives } from "./directives";
 import { Parser } from "./parser";
 import type {
 	DirectiveDefinition,
+	ElementDefinition,
 	ICompilerConstructor,
 	IParserConstructor,
 	KireCache,
@@ -14,20 +15,19 @@ import type {
 	KirePlugin,
 	KireSchematic,
 } from "./types";
+import { md5 } from "./utils/md5";
 import { join } from "./utils/path";
 
 export class Kire {
 	public directives: Map<string, DirectiveDefinition> = new Map();
-	public elements: Map<
-		string,
-		{ handler: KireElementHandler; options?: KireElementOptions }
-	> = new Map();
+	public elements: Set<ElementDefinition> = new Set();
 	public globalContext: Map<string, any> = new Map();
 	public hooks: KireHooks = {};
 
 	public root: string;
 	public cache: boolean;
 	public resolverFn: (filename: string) => Promise<string>;
+	public readDirFn?: (pattern: string) => Promise<string[]>;
 	public alias: Record<string, string>;
 	public extension: string;
 	public cacheFiles: Map<string, Function> = new Map();
@@ -75,6 +75,45 @@ export class Kire {
 
 		this.parserConstructor = options.engine?.parser ?? Parser;
 		this.compilerConstructor = options.engine?.compiler ?? Compiler;
+
+		// Register internal helpers
+		this.$ctx("md5", md5);
+		this.$ctx(
+			"require",
+			async (path: string, $ctx: KireContext, locals: any) => {
+				const cached = this.cached("@kirejs/core");
+				// esse sistema sempre cacheará, diferente dos outros, ja que o objetivo é ser mais rapido de carregar
+				const isProd = this.cache;
+				// obtem o md5 da path atual ou undefined
+				const hash = cached.get(`md5:${path}`);
+				let content = "";
+
+				// se não tiver hash ainda significa que não possue cachge armazenado, então regerar, caso tenha, e não for prod, então atualizar
+				if (!hash || !isProd) {
+					content = await this.resolverFn(path);
+					const ihash = md5(content);
+
+					if (!isProd && hash) {
+						// compara o hash atual com o novo, e se for igual usa a função ja gerada, para evitar necessidade de regerar ela
+						if (ihash === hash) {
+							return cached.get(`js:${path}`);
+						} else {
+							// hash existe, mais é diferente, então limpe o cache
+							cached.delete(`md5:${path}`);
+							cached.delete(`js:${path}`);
+						}
+					}
+					// compileFn é diferente do compile, ele é usado para gerar a função do codigo, ao invez apenas gerar o codigo sem a função async
+					const fn = await this.compileFn(content);
+					cached.set(`md5:${path}`, ihash);
+					cached.set(`js:${path}`, fn);
+					return fn;
+				} else {
+					// significa que ta com cache ativo e ja tem a função compilada, então usa o cache
+					return cached.get(`js:${path}`);
+				}
+			},
+		);
 
 		// Collect plugins to load
 		const pluginsToLoad: Array<{ p: KirePlugin<any>; o?: any }> = [];
@@ -135,16 +174,32 @@ export class Kire {
 			repository,
 			version,
 			directives: Array.from(this.directives.values()),
+			elements: Array.from(this.elements.values()),
 			globals: globals,
 		};
 	}
 
 	public element(
-		name: string,
-		handler: KireElementHandler,
+		nameOrDef: string | RegExp | ElementDefinition,
+		handler?: KireElementHandler,
 		options?: KireElementOptions,
 	) {
-		this.elements.set(name, { handler, options });
+		if (
+			typeof nameOrDef === "object" &&
+			"onCall" in nameOrDef &&
+			!("source" in nameOrDef)
+		) {
+			// It's an ElementDefinition (and not a RegExp)
+			this.elements.add(nameOrDef as ElementDefinition);
+		} else {
+			// Legacy or simple overload
+			if (!handler) throw new Error("Handler is required for legacy element()");
+			this.elements.add({
+				name: nameOrDef as string | RegExp,
+				void: options?.void,
+				onCall: handler,
+			});
+		}
 		return this;
 	}
 
@@ -237,6 +292,17 @@ export class Kire {
 		return resolved.replace(/\/+/g, "/");
 	}
 
+	public async compileFn(content: string): Promise<Function> {
+		const code = await this.compile(content);
+		try {
+			const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+			return new AsyncFunction("$ctx", code);
+		} catch (e) {
+			console.error("Error creating function from code:", code);
+			throw e;
+		}
+	}
+
 	// Helper to compile and create a function
 	public async createFunction(
 		template: string,
@@ -280,19 +346,12 @@ export class Kire {
 			return null as any;
 		}
 
-		const code = await this.compile(content);
-		try {
-			const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-			const fn = new AsyncFunction("$ctx", code);
+		const fn = await this.compileFn(content);
 
-			if (usedFilename && this.cache) {
-				this.cacheFiles.set(usedFilename, fn);
-			}
-			return fn;
-		} catch (e) {
-			console.error("Error creating function from code:", code);
-			throw e;
+		if (usedFilename && this.cache) {
+			this.cacheFiles.set(usedFilename, fn);
 		}
+		return fn;
 	}
 
 	public async render(
@@ -402,25 +461,33 @@ export class Kire {
 		}
 
 		if (this.elements.size > 0) {
-			for (const [tagName, { handler, options }] of this.elements) {
+			for (const def of this.elements) {
+				const tagName =
+					def.name instanceof RegExp ? def.name.source : def.name;
+
 				// Check if void tag
 				const isVoid =
-					options?.void ||
-					/^(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i.test(
-						tagName,
-					);
+					def.void ||
+					(typeof def.name === "string" &&
+						/^(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i.test(
+							def.name,
+						));
 
 				const regex = isVoid
-					? new RegExp(`<${tagName}([^>]*)>`, "gi")
-					: new RegExp(`<${tagName}([^>]*)>([\\s\\S]*?)<\\/${tagName}>`, "gi");
+					? new RegExp(`<(${tagName})([^>]*)>`, "gi")
+					: new RegExp(
+							`<(${tagName})([^>]*)>([\\s\\S]*?)<\\/\\1>`,
+							"gi",
+					  );
 
 				const matches = [];
 				let match;
 				while ((match = regex.exec(resultHtml)) !== null) {
 					matches.push({
 						full: match[0],
-						attrs: match[1],
-						inner: isVoid ? "" : match[2],
+						tagName: match[1],
+						attrs: match[2],
+						inner: isVoid ? "" : match[3],
 						index: match.index,
 					});
 				}
@@ -440,7 +507,7 @@ export class Kire {
 					const elCtx: any = rctx.clone();
 					elCtx.content = resultHtml;
 					elCtx.element = {
-						tagName,
+						tagName: m.tagName,
 						attributes,
 						inner: m.inner,
 						outer: m.full,
@@ -461,7 +528,7 @@ export class Kire {
 						}
 					};
 
-					await handler(elCtx);
+					await def.onCall(elCtx);
 
 					if (elCtx.content !== resultHtml) {
 						resultHtml = elCtx.content;
