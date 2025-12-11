@@ -52,9 +52,9 @@ export default (kire: Kire) => {
 
 			// Now load the component template
 			ctx.raw(`  const path = $ctx.resolve(${JSON.stringify(pathExpr)});`);
-			ctx.raw(`  const templateFn = await $ctx.load(path);`);
+			ctx.raw(`  const locals = ${varsExpr};`);
+			ctx.raw(`  const templateFn = await $ctx.require(path, $ctx, locals);`);
 			ctx.raw(`  if (templateFn) {`);
-						ctx.raw(`  const locals = ${varsExpr};`);
 						ctx.raw(`  const componentCtx = $ctx.clone(locals);`);
 						ctx.raw(`  componentCtx[${JSON.stringify(kire.varLocals)}] = locals;`); // Expose locals under the configured name
 						ctx.raw(`  if(typeof locals === 'object' && locals !== null) locals.slots = $slots;`); // Attach slots to locals for it.slots access

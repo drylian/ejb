@@ -90,7 +90,19 @@ export class Kire {
 
 				// se não tiver hash ainda significa que não possue cachge armazenado, então regerar, caso tenha, e não for prod, então atualizar
 				if (!hash || !isProd) {
-					content = await this.resolverFn(path);
+					try {
+						content = await this.resolverFn(path);
+					} catch (e: any) {
+						if (!e.message.includes("No resolver")) {
+							console.warn(`Failed to resolve path: ${path}`, e);
+						}
+						return null;
+					}
+
+					if (!content) {
+						return null;
+					}
+
 					const ihash = md5(content);
 
 					if (!isProd && hash) {
@@ -359,7 +371,6 @@ export class Kire {
 		locals: Record<string, any> = {},
 	): Promise<string> {
 		const fn = await this.createFunction(template);
-
 		// Runtime context merging globals and locals
 		const rctx: any = {};
 		for (const [k, v] of this.globalContext) {
@@ -377,8 +388,8 @@ export class Kire {
 		rctx[STRUCTURE_SYMBOL] = [];
 
 		// Runtime helper to append to response
-		rctx.res = (str: any) => {
-			rctx[RESPONSE_SYMBOL] += str;
+		rctx.res = function (this: any, str: any) {
+			this[RESPONSE_SYMBOL] += str;
 		};
 
 		// Runtime alias to get response
@@ -389,15 +400,9 @@ export class Kire {
 			return this.resolvePath(path);
 		};
 
-		// Helper to load templates at runtime (for @include)
-		rctx.load = async (path: string) => {
-			return this.createFunction(path);
-		};
-
 		// Method to create a new context based on current one (for isolation)
-		rctx.clone = (locals: Record<string, any> = {}): KireContext => {
-			const newCtx = Object.create(rctx); // Inherit prototype
-			Object.assign(newCtx, locals); // Assign locals
+		rctx.clone = function (this: any, locals: Record<string, any> = {}): KireContext {
+			const newCtx = { ...this, ...locals };
 			// Initialize for new context
 			newCtx[RESPONSE_SYMBOL] = "";
 			newCtx[STRUCTURE_SYMBOL] = [];

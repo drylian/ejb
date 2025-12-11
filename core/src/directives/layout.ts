@@ -12,7 +12,7 @@ export default (kire: Kire) => {
 		description:
 			"Defines a named, reusable section of content that can be rendered elsewhere.",
 		example: `@define('header')\n  <h1>My Website</h1>\n@end`,
-		onCall(ctx) {
+		async onCall(ctx) {
 			const name = ctx.param("name");
 
 			ctx.raw(
@@ -20,7 +20,7 @@ export default (kire: Kire) => {
 			);
 			ctx.raw(`  const $ctx = $parentCtx.clone();`);
 
-			if (ctx.children) ctx.set(ctx.children);
+			if (ctx.children) await ctx.set(ctx.children);
 
 			ctx.raw(`  return $ctx[Symbol.for('~response')];`);
 			ctx.raw(`})($ctx);`);
@@ -94,7 +94,7 @@ export default (kire: Kire) => {
 		type: "html",
 		description: "Pushes a block of content onto a named stack.",
 		example: `@push('scripts')\n  <script src="app.js"></script>\n@end`,
-		onCall(ctx: KireContext) {
+		async onCall(ctx: KireContext) {
 			const name = ctx.param("name");
 			ctx.raw(
 				`if (!$ctx.stacks[${JSON.stringify(name)}]) $ctx.stacks[${JSON.stringify(name)}] = [];`,
@@ -104,7 +104,7 @@ export default (kire: Kire) => {
 			);
 			ctx.raw(`  const $ctx = $parentCtx.clone();`);
 
-			if (ctx.children) ctx.set(ctx.children);
+			if (ctx.children) await ctx.set(ctx.children);
 
 			ctx.raw(`  return $ctx[Symbol.for('~response')];`);
 			ctx.raw(`})($ctx));`);

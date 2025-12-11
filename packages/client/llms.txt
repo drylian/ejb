@@ -7,12 +7,14 @@ import type { KirePlugin, Node } from 'kire';
 
 const plugin: KirePlugin = {
   name: 'client',
+  options: {},
   load(kire) {
     // Injeta o runtime no client
     kire.directive({
       name: 'kireclient',
       type: 'html',
-      description: 'Injects the Kire client-side runtime.',
+      description: 'Injects the client-side runtime necessary for Kire interactivity.',
+      example: "@kireclient",
       onCall(ctx) {
         const code = clientFn.toString();
         ctx.res(`<script>(${code})();</script>`);
@@ -25,7 +27,8 @@ const plugin: KirePlugin = {
       params: ['ref:string', 'state:object'],
       children: true,
       type: 'html',
-      description: 'Mounts a client-side interactive region.',
+      description: 'Mounts a client-side interactive region associated with a specific reference and initial state. This directive compiles its children into a render function executed on the client.',
+      example: "@client('counter-app', { count: 0 })\n  <h2>Counter: {{ it.count }}</h2>\n  <button onclick=\"it.increment()\">Increment</button>\n@end",
       async onCall(ctx) {
         const ref = ctx.param('ref');
 
@@ -59,7 +62,8 @@ const plugin: KirePlugin = {
       params: ['ref:string'],
       children: true,
       type: 'html',
-      description: 'Defines the reactive setup for a reference.',
+      description: 'Defines the reactive logic (state, computed values, functions) for a specific reference. This code is executed on the client to setup the store.',
+      example: "@reactive('counter-app')\n  let count = $state(0);\n  const increment = () => count(prev => prev + 1);\n  return { count, increment };\n@end",
       onCall(ctx) {
         const ref = ctx.param('ref');
 
@@ -89,7 +93,8 @@ const plugin: KirePlugin = {
       name: 'ref',
       params: ['name:string'],
       type: 'html',
-      description: 'Adds the kire:ref attribute to an element.',
+      description: 'Marks an element with a kire:ref attribute, creating a mount point or a referenceable DOM element for client-side logic.',
+      example: "<div @ref('counter-app')>...</div>",
       onCall(ctx) {
         const name = ctx.param('name');
         // Contexto HTML, então não usamos JSON.stringify aqui
@@ -277,7 +282,8 @@ export default () => {
 
         while ((match = exprRegex.exec(originalText))) {
           const raw = match[0];
-          const code = match[1].trim();
+          const code = match[1]?.trim();
+          if (!code) continue;
           try {
             const exprFn = new Function(
               'scope',

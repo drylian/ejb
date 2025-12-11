@@ -15,10 +15,10 @@ export default (kire: Kire) => {
 
 			ctx.raw(`await (async () => {
     const path = $ctx.resolve(${JSON.stringify(pathExpr)});
-    const templateFn = await $ctx.load(path);
+    const locals = ${localsExpr};
+    const templateFn = await $ctx.require(path, $ctx, locals);
     
     if (templateFn) {
-        const locals = ${localsExpr};
         const childCtx = $ctx.clone(locals);
         childCtx[${JSON.stringify(kire.varLocals)}] = locals;
         await templateFn(childCtx);

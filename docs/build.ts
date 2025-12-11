@@ -55,7 +55,7 @@ console.log(`Loaded ${schemas.length} schemas.`);
 const kire = new Kire({
   root: resolve(docsRoot, "src"),
   plugins: [
-    KireAnalytical,
+    //KireAnalytical,
     KireMarkdown,
     KireIconify,
     [KireTailwind, {}],
@@ -72,7 +72,7 @@ const kire = new Kire({
 });
 
 // Inject schemas into global context
-kire.$ctx("items", schemas);
+kire.$ctx("packages", schemas);
 
 if (process.argv.includes("--dev")) {
   console.log("Starting dev server...");

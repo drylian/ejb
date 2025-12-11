@@ -15,8 +15,9 @@ declare module "kire" {
 
 
 // --- From: packages/resolver/src/index.ts ---
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import type { Kire, KirePlugin } from "kire";
+import { join } from "node:path";
 import "./types";
 
 // These are global objects that may or may not exist depending on the runtime
@@ -25,6 +26,46 @@ declare const Deno: any;
 
 export interface ResolverOptions {
 	adapter?: "node" | "bun" | "deno" | "fetch";
+}
+
+async function recursiveReaddir(
+	dir: string,
+	pattern: RegExp,
+): Promise<string[]> {
+	const entries = await readdir(dir, { withFileTypes: true });
+	const files: string[] = [];
+
+	for (const entry of entries) {
+		const fullPath = join(dir, entry.name);
+		if (entry.isDirectory()) {
+			files.push(...(await recursiveReaddir(fullPath, pattern)));
+		} else {
+			// Check pattern
+			// Simple check: match extension
+			if (pattern.test(entry.name) || pattern.test(fullPath)) {
+				files.push(fullPath);
+			}
+		}
+	}
+	return files;
+}
+
+function globToRegex(glob: string): RegExp {
+	// Basic glob to regex for **/*.ext
+	// escape dots
+	let regex = glob.replace(/\./g, "\\.");
+	// ** -> .*
+	regex = regex.replace(/\*\*/g, ".*");
+	// * -> [^/]*
+	regex = regex.replace(/\*/g, "[^/]*");
+	// {a,b} -> (a|b)
+	regex = regex.replace(/\{([^}]+)\}/g, "($1)");
+	// Replace commas in groups with |
+	regex = regex.replace(/\(([^)]+)\)/g, (_, group) =>
+		group.replace(/,/g, "|"),
+	);
+
+	return new RegExp(`^${regex}$`);
 }
 
 function createResolver(options: ResolverOptions = {}) {
@@ -70,12 +111,45 @@ function createResolver(options: ResolverOptions = {}) {
 	};
 }
 
+function createReadDir(options: ResolverOptions = {}) {
+	const adapter = options.adapter ?? "node";
+
+	return async (pattern: string): Promise<string[]> => {
+		// This is a simplified implementation focusing on Node/Bun/Deno file systems
+		// Pattern example: **/*.{md,markdown}
+		// We assume the pattern starts relative to CWD or is absolute
+
+		// Extract directory base if possible, currently scanning CWD or root if not specified
+		const root = "."; // Default to current dir
+		const regex = globToRegex(pattern);
+
+		// Using Node fs for now as a baseline, Bun/Deno have their own globs usually
+		// but for consistency we use a recursive walk if native glob isn't easy to normalize here
+		try {
+			if (adapter === "bun" && typeof Bun !== "undefined") {
+				const glob = new Bun.Glob(pattern);
+				const files = [];
+				for await (const file of glob.scan(".")) {
+					files.push(file);
+				}
+				return files;
+			}
+			// Fallback to node recursive readdir
+			return await recursiveReaddir(root, regex);
+		} catch (e) {
+			console.error("ReadDir Error:", e);
+			return [];
+		}
+	};
+}
+
 export const KireResolver: KirePlugin<ResolverOptions> = {
 	name: "@kirejs/resolver",
 	options: {},
 	load(kire: Kire, opts) {
 		// Assign the new resolver
 		kire.resolverFn = createResolver(opts);
+		kire.readDirFn = createReadDir(opts);
 
 		// Add the .view() method to the Kire instance
 		kire.view = function (filepath: string, locals: Record<string, any> = {}) {

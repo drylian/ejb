@@ -18,9 +18,9 @@ export default (kire: Kire) => {
 				description:
 					"Renders a block of content if the preceding @if/@elseif is false and the current expression is true.",
 				example: `@elseif(user.isAdmin)\n  Admin access granted.\n@end`,
-				onCall(c) {
+				async onCall(c) {
 					c.raw(`} else if (${c.param("cond")}) {`);
-					if (c.children) c.set(c.children);
+					if (c.children) await c.set(c.children);
 				},
 			},
 			{
@@ -30,9 +30,9 @@ export default (kire: Kire) => {
 				type: "js",
 				description: "Alias for @elseif.",
 				example: `@elif(user.isAdmin)\n  Admin access granted.\n@end`,
-				onCall(c) {
+				async onCall(c) {
 					c.raw(`} else if (${c.param("cond")}) {`);
-					if (c.children) c.set(c.children);
+					if (c.children) await c.set(c.children);
 				},
 			},
 			{
@@ -42,16 +42,16 @@ export default (kire: Kire) => {
 				description:
 					"Renders a block of content if the preceding @if/@elseif expressions are all false.",
 				example: `@else\n  Please log in.\n@end`,
-				onCall(c) {
+				async onCall(c) {
 					c.raw(`} else {`);
-					if (c.children) c.set(c.children);
+					if (c.children) await c.set(c.children);
 				},
 			},
 		],
-		onCall(ctx) {
+		async onCall(ctx) {
 			ctx.raw(`if (${ctx.param("cond")}) {`);
-			if (ctx.children) ctx.set(ctx.children);
-			if (ctx.parents) ctx.set(ctx.parents);
+			if (ctx.children) await ctx.set(ctx.children);
+			if (ctx.parents) await ctx.set(ctx.parents);
 			ctx.raw("}");
 		},
 	});
@@ -64,7 +64,7 @@ export default (kire: Kire) => {
 		description:
 			"Iterates over an array or object, similar to a JavaScript for...of loop.",
 		example: `@for(user of users)\n  <p>{{ user.name }}</p>\n@end`,
-		onCall(ctx) {
+		async onCall(ctx) {
 			const expr = ctx.param("expr");
 			if (expr.includes(" in ")) {
 				const [lhs, rhs] = expr.split(" in ");
@@ -76,7 +76,7 @@ export default (kire: Kire) => {
 				ctx.raw(`for (${expr}) {`);
 			}
 
-			if (ctx.children) ctx.set(ctx.children);
+			if (ctx.children) await ctx.set(ctx.children);
 			ctx.raw(`}`);
 		},
 	});
@@ -138,9 +138,9 @@ export default (kire: Kire) => {
 				type: "js",
 				description: "A case clause for a @switch statement.",
 				example: `@case('A')\n  <p>Value is A</p>\n@end`,
-				onCall(c) {
+				async onCall(c) {
 					c.raw(`case ${JSON.stringify(c.param("val"))}: {`);
-					if (c.children) c.set(c.children);
+					if (c.children) await c.set(c.children);
 					c.raw(`break; }`);
 				},
 			},
@@ -150,9 +150,9 @@ export default (kire: Kire) => {
 				type: "js",
 				description: "The default clause for a @switch statement.",
 				example: `@default\n  <p>Value is something else</p>\n@end`,
-				onCall(c) {
+				async onCall(c) {
 					c.raw(`default: {`);
-					if (c.children) c.set(c.children);
+					if (c.children) await c.set(c.children);
 					c.raw(`}`);
 				},
 			},

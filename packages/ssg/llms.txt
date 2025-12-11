@@ -82,62 +82,35 @@ export const KireSsg: KirePlugin<SsgOptions> & {
 
 			try {
 				// 1. Render the template to check for generator markers
-				// We pass an empty object or maybe we should detect params?
-				// For generator detection, we render without specific locals first.
-				const html = await kireInstance.render(file);
+				// Pass a default empty string for currentPath during detection pass
+				const html = await kireInstance.render(file, { currentPath: "" });
 
 				// Check for marker
-				const markerRegex = /<!-- KIRE_MARKDOWN_GEN:(.*?) -->/;
+				const markerRegex = /<!-- KIRE_GEN:(.*?) -->/;
 				const match = html.match(markerRegex);
 
 				if (match) {
 					const globPattern = match[1];
 					console.log(
-						`> Detected Markdown Generator in ${relativePath} for '${globPattern}'`,
+						`> Detected Generator in ${relativePath} for '${globPattern}'`,
 					);
 
 					// Find markdown files
-					// Glob is relative to root?
 					const mdFiles = await glob(globPattern!, { cwd: rootDir });
 
 					for (const mdFile of mdFiles) {
-						// mdFile can be Path object or string depending on glob version/options.
-						// With just cwd option, it usually returns strings relative to cwd.
 						const mdRelative = String(mdFile);
-						const mdPath = resolve(rootDir, mdRelative);
-						const mdContent = await readFile(mdPath, "utf-8");
+						
+						// Render template again with currentPath local
+						const pageHtml = await kireInstance.render(file, {
+							currentPath: mdRelative
+						});
 
-						if (typeof kireInstance.parseMarkdown !== "function") {
-							throw new Error(
-								"Markdown plugin not loaded or parseMarkdown method missing.",
-							);
-						}
+						// Remove the marker from final output
+						// The directive output the marker, so it is in pageHtml.
+						const finalHtml = pageHtml.replace(match[0], "");
 
-						const parsedContent = await kireInstance.parseMarkdown(mdContent);
-
-						// Render template again with content
-						// We assume the template uses {{ content }} or similar variable,
-						// OR the @markdown directive logic in runtime handles injection if we pass context?
-						// Wait, @markdown directive in "glob mode" just printed the marker.
-						// It didn't render content.
-						// So we need the template to be able to accept 'content' variable and print it?
-						// But the @markdown directive occupied the place where content should go.
-
-						// IMPORTANT: The template has `@markdown('docs/*.md')`.
-						// This resulted in `<!-- KIRE_MARKDOWN_GEN... -->`.
-						// We want to replace that marker with the actual content!
-						// So we can just replace the marker in the already rendered string 'html'.
-						// AND we might need to pass other metadata (frontmatter?)
-
-						// Simple approach: Replace marker with content.
-						// But we need to generate a NEW file for each markdown.
-
-						const finalHtml = html.replace(match[0], parsedContent as string);
-
-						// Determine output path
-						// mdRelative is already defined above
-						// e.g. docs/intro.md
-						// Output: dist/docs/intro.html
+						// Output: dist/path/to/file.html
 						const htmlOutPath = mdRelative.replace(/\.(md|markdown)$/, ".html");
 						const fullOutPath = join(outDir, htmlOutPath);
 

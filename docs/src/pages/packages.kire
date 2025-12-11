@@ -1,3 +1,5 @@
+@include('layouts/_main.kire', { title: 'Packages | Kire' })
+
 @define('content')
     <div class="space-y-12">
         <div class="text-center">
@@ -5,8 +7,8 @@
             <p class="text-lg opacity-75">Explore the official packages and directives available in the Kire ecosystem.</p>
         </div>
 
-        @for(item of $ctx.items)
-            @log($ctx.items)
+        @for(item of $ctx.packages)
+
             <div class="card bg-base-100 shadow-xl border border-base-300" id="{{ item.package }}">
                 <div class="card-body">
                     <div class="flex items-center gap-4 mb-4">
@@ -14,14 +16,12 @@
                             {{ item.package }}
                             <span class="badge badge-primary badge-outline">{{ item.version }}</span>
                         </h2>
-                        <!-- REPO LINK COMMENTED OUT -->
-                        <!-- 
                         @if(item.repository && item.repository.url)
                             <a href="{{ item.repository.url.replace('git+', '') }}" target="_blank" class="btn btn-ghost btn-circle btn-sm">
+                            
                                 <iconify icon="mdi:github" class="text-xl" />
                             </a>
                         @end
-                        -->
                     </div>
                     
                     <!-- DIRECTIVES COMMENTED OUT -->
@@ -42,5 +42,3 @@
         @end
     </div>
 @end
-
-@include('layouts/_main.kire', { title: 'Packages | Kire' })

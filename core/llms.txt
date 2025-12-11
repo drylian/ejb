@@ -86,6 +86,14 @@ export interface KireElementOptions {
 	void?: boolean;
 }
 
+export interface ElementDefinition {
+	name: string | RegExp;
+	description?: string;
+	example?: string;
+	void?: boolean;
+	onCall: KireElementHandler;
+}
+
 export interface KireHooks {
 	onBewareDirectives?:
 		| ((compiler: ICompiler) => undefined | string)
@@ -130,6 +138,7 @@ export interface KireSchematic {
 	repository?: string | { type: string; url: string };
 	version?: string;
 	directives?: DirectiveDefinition[];
+	elements?: ElementDefinition[];
 	globals?: Record<string, any>;
 }
 
@@ -161,6 +170,7 @@ import { KireDirectives } from "./directives";
 import { Parser } from "./parser";
 import type {
 	DirectiveDefinition,
+	ElementDefinition,
 	ICompilerConstructor,
 	IParserConstructor,
 	KireCache,
@@ -172,20 +182,19 @@ import type {
 	KirePlugin,
 	KireSchematic,
 } from "./types";
+import { md5 } from "./utils/md5";
 import { join } from "./utils/path";
 
 export class Kire {
 	public directives: Map<string, DirectiveDefinition> = new Map();
-	public elements: Map<
-		string,
-		{ handler: KireElementHandler; options?: KireElementOptions }
-	> = new Map();
+	public elements: Set<ElementDefinition> = new Set();
 	public globalContext: Map<string, any> = new Map();
 	public hooks: KireHooks = {};
 
 	public root: string;
 	public cache: boolean;
 	public resolverFn: (filename: string) => Promise<string>;
+	public readDirFn?: (pattern: string) => Promise<string[]>;
 	public alias: Record<string, string>;
 	public extension: string;
 	public cacheFiles: Map<string, Function> = new Map();
@@ -233,6 +242,57 @@ export class Kire {
 
 		this.parserConstructor = options.engine?.parser ?? Parser;
 		this.compilerConstructor = options.engine?.compiler ?? Compiler;
+
+		// Register internal helpers
+		this.$ctx("md5", md5);
+		this.$ctx(
+			"require",
+			async (path: string, $ctx: KireContext, locals: any) => {
+				const cached = this.cached("@kirejs/core");
+				// esse sistema sempre cacheará, diferente dos outros, ja que o objetivo é ser mais rapido de carregar
+				const isProd = this.cache;
+				// obtem o md5 da path atual ou undefined
+				const hash = cached.get(`md5:${path}`);
+				let content = "";
+
+				// se não tiver hash ainda significa que não possue cachge armazenado, então regerar, caso tenha, e não for prod, então atualizar
+				if (!hash || !isProd) {
+					try {
+						content = await this.resolverFn(path);
+					} catch (e: any) {
+						if (!e.message.includes("No resolver")) {
+							console.warn(`Failed to resolve path: ${path}`, e);
+						}
+						return null;
+					}
+
+					if (!content) {
+						return null;
+					}
+
+					const ihash = md5(content);
+
+					if (!isProd && hash) {
+						// compara o hash atual com o novo, e se for igual usa a função ja gerada, para evitar necessidade de regerar ela
+						if (ihash === hash) {
+							return cached.get(`js:${path}`);
+						} else {
+							// hash existe, mais é diferente, então limpe o cache
+							cached.delete(`md5:${path}`);
+							cached.delete(`js:${path}`);
+						}
+					}
+					// compileFn é diferente do compile, ele é usado para gerar a função do codigo, ao invez apenas gerar o codigo sem a função async
+					const fn = await this.compileFn(content);
+					cached.set(`md5:${path}`, ihash);
+					cached.set(`js:${path}`, fn);
+					return fn;
+				} else {
+					// significa que ta com cache ativo e ja tem a função compilada, então usa o cache
+					return cached.get(`js:${path}`);
+				}
+			},
+		);
 
 		// Collect plugins to load
 		const pluginsToLoad: Array<{ p: KirePlugin<any>; o?: any }> = [];
@@ -293,16 +353,32 @@ export class Kire {
 			repository,
 			version,
 			directives: Array.from(this.directives.values()),
+			elements: Array.from(this.elements.values()),
 			globals: globals,
 		};
 	}
 
 	public element(
-		name: string,
-		handler: KireElementHandler,
+		nameOrDef: string | RegExp | ElementDefinition,
+		handler?: KireElementHandler,
 		options?: KireElementOptions,
 	) {
-		this.elements.set(name, { handler, options });
+		if (
+			typeof nameOrDef === "object" &&
+			"onCall" in nameOrDef &&
+			!("source" in nameOrDef)
+		) {
+			// It's an ElementDefinition (and not a RegExp)
+			this.elements.add(nameOrDef as ElementDefinition);
+		} else {
+			// Legacy or simple overload
+			if (!handler) throw new Error("Handler is required for legacy element()");
+			this.elements.add({
+				name: nameOrDef as string | RegExp,
+				void: options?.void,
+				onCall: handler,
+			});
+		}
 		return this;
 	}
 
@@ -395,6 +471,17 @@ export class Kire {
 		return resolved.replace(/\/+/g, "/");
 	}
 
+	public async compileFn(content: string): Promise<Function> {
+		const code = await this.compile(content);
+		try {
+			const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+			return new AsyncFunction("$ctx", code);
+		} catch (e) {
+			console.error("Error creating function from code:", code);
+			throw e;
+		}
+	}
+
 	// Helper to compile and create a function
 	public async createFunction(
 		template: string,
@@ -438,19 +525,12 @@ export class Kire {
 			return null as any;
 		}
 
-		const code = await this.compile(content);
-		try {
-			const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-			const fn = new AsyncFunction("$ctx", code);
+		const fn = await this.compileFn(content);
 
-			if (usedFilename && this.cache) {
-				this.cacheFiles.set(usedFilename, fn);
-			}
-			return fn;
-		} catch (e) {
-			console.error("Error creating function from code:", code);
-			throw e;
+		if (usedFilename && this.cache) {
+			this.cacheFiles.set(usedFilename, fn);
 		}
+		return fn;
 	}
 
 	public async render(
@@ -458,7 +538,6 @@ export class Kire {
 		locals: Record<string, any> = {},
 	): Promise<string> {
 		const fn = await this.createFunction(template);
-
 		// Runtime context merging globals and locals
 		const rctx: any = {};
 		for (const [k, v] of this.globalContext) {
@@ -476,8 +555,8 @@ export class Kire {
 		rctx[STRUCTURE_SYMBOL] = [];
 
 		// Runtime helper to append to response
-		rctx.res = (str: any) => {
-			rctx[RESPONSE_SYMBOL] += str;
+		rctx.res = function (this: any, str: any) {
+			this[RESPONSE_SYMBOL] += str;
 		};
 
 		// Runtime alias to get response
@@ -488,15 +567,9 @@ export class Kire {
 			return this.resolvePath(path);
 		};
 
-		// Helper to load templates at runtime (for @include)
-		rctx.load = async (path: string) => {
-			return this.createFunction(path);
-		};
-
 		// Method to create a new context based on current one (for isolation)
-		rctx.clone = (locals: Record<string, any> = {}): KireContext => {
-			const newCtx = Object.create(rctx); // Inherit prototype
-			Object.assign(newCtx, locals); // Assign locals
+		rctx.clone = function (this: any, locals: Record<string, any> = {}): KireContext {
+			const newCtx = { ...this, ...locals };
 			// Initialize for new context
 			newCtx[RESPONSE_SYMBOL] = "";
 			newCtx[STRUCTURE_SYMBOL] = [];
@@ -560,25 +633,33 @@ export class Kire {
 		}
 
 		if (this.elements.size > 0) {
-			for (const [tagName, { handler, options }] of this.elements) {
+			for (const def of this.elements) {
+				const tagName =
+					def.name instanceof RegExp ? def.name.source : def.name;
+
 				// Check if void tag
 				const isVoid =
-					options?.void ||
-					/^(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i.test(
-						tagName,
-					);
+					def.void ||
+					(typeof def.name === "string" &&
+						/^(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i.test(
+							def.name,
+						));
 
 				const regex = isVoid
-					? new RegExp(`<${tagName}([^>]*)>`, "gi")
-					: new RegExp(`<${tagName}([^>]*)>([\\s\\S]*?)<\\/${tagName}>`, "gi");
+					? new RegExp(`<(${tagName})([^>]*)>`, "gi")
+					: new RegExp(
+							`<(${tagName})([^>]*)>([\\s\\S]*?)<\\/\\1>`,
+							"gi",
+					  );
 
 				const matches = [];
 				let match;
 				while ((match = regex.exec(resultHtml)) !== null) {
 					matches.push({
 						full: match[0],
-						attrs: match[1],
-						inner: isVoid ? "" : match[2],
+						tagName: match[1],
+						attrs: match[2],
+						inner: isVoid ? "" : match[3],
 						index: match.index,
 					});
 				}
@@ -598,7 +679,7 @@ export class Kire {
 					const elCtx: any = rctx.clone();
 					elCtx.content = resultHtml;
 					elCtx.element = {
-						tagName,
+						tagName: m.tagName,
 						attributes,
 						inner: m.inner,
 						outer: m.full,
@@ -619,7 +700,7 @@ export class Kire {
 						}
 					};
 
-					await handler(elCtx);
+					await def.onCall(elCtx);
 
 					if (elCtx.content !== resultHtml) {
 						resultHtml = elCtx.content;
@@ -671,10 +752,10 @@ export default (kire: Kire) => {
 
 			ctx.raw(`await (async () => {
     const path = $ctx.resolve(${JSON.stringify(pathExpr)});
-    const templateFn = await $ctx.load(path);
+    const locals = ${localsExpr};
+    const templateFn = await $ctx.require(path, $ctx, locals);
     
     if (templateFn) {
-        const locals = ${localsExpr};
         const childCtx = $ctx.clone(locals);
         childCtx[${JSON.stringify(kire.varLocals)}] = locals;
         await templateFn(childCtx);
@@ -706,9 +787,9 @@ export default (kire: Kire) => {
 				description:
 					"Renders a block of content if the preceding @if/@elseif is false and the current expression is true.",
 				example: `@elseif(user.isAdmin)\n  Admin access granted.\n@end`,
-				onCall(c) {
+				async onCall(c) {
 					c.raw(`} else if (${c.param("cond")}) {`);
-					if (c.children) c.set(c.children);
+					if (c.children) await c.set(c.children);
 				},
 			},
 			{
@@ -718,9 +799,9 @@ export default (kire: Kire) => {
 				type: "js",
 				description: "Alias for @elseif.",
 				example: `@elif(user.isAdmin)\n  Admin access granted.\n@end`,
-				onCall(c) {
+				async onCall(c) {
 					c.raw(`} else if (${c.param("cond")}) {`);
-					if (c.children) c.set(c.children);
+					if (c.children) await c.set(c.children);
 				},
 			},
 			{
@@ -730,16 +811,16 @@ export default (kire: Kire) => {
 				description:
 					"Renders a block of content if the preceding @if/@elseif expressions are all false.",
 				example: `@else\n  Please log in.\n@end`,
-				onCall(c) {
+				async onCall(c) {
 					c.raw(`} else {`);
-					if (c.children) c.set(c.children);
+					if (c.children) await c.set(c.children);
 				},
 			},
 		],
-		onCall(ctx) {
+		async onCall(ctx) {
 			ctx.raw(`if (${ctx.param("cond")}) {`);
-			if (ctx.children) ctx.set(ctx.children);
-			if (ctx.parents) ctx.set(ctx.parents);
+			if (ctx.children) await ctx.set(ctx.children);
+			if (ctx.parents) await ctx.set(ctx.parents);
 			ctx.raw("}");
 		},
 	});
@@ -752,19 +833,19 @@ export default (kire: Kire) => {
 		description:
 			"Iterates over an array or object, similar to a JavaScript for...of loop.",
 		example: `@for(user of users)\n  <p>{{ user.name }}</p>\n@end`,
-		onCall(ctx) {
+		async onCall(ctx) {
 			const expr = ctx.param("expr");
 			if (expr.includes(" in ")) {
 				const [lhs, rhs] = expr.split(" in ");
-				ctx.raw(`for (const ${lhs} in ${rhs}) {`);
+				ctx.raw(`for (const ${lhs.trim()} in ${rhs.trim()}) {`);
 			} else if (expr.includes(" of ")) {
 				const [lhs, rhs] = expr.split(" of ");
-				ctx.raw(`for (const ${lhs} of ${rhs}) {`);
+				ctx.raw(`for (const ${lhs.trim()} of ${rhs.trim()}) {`);
 			} else {
 				ctx.raw(`for (${expr}) {`);
 			}
 
-			if (ctx.children) ctx.set(ctx.children);
+			if (ctx.children) await ctx.set(ctx.children);
 			ctx.raw(`}`);
 		},
 	});
@@ -826,9 +907,9 @@ export default (kire: Kire) => {
 				type: "js",
 				description: "A case clause for a @switch statement.",
 				example: `@case('A')\n  <p>Value is A</p>\n@end`,
-				onCall(c) {
+				async onCall(c) {
 					c.raw(`case ${JSON.stringify(c.param("val"))}: {`);
-					if (c.children) c.set(c.children);
+					if (c.children) await c.set(c.children);
 					c.raw(`break; }`);
 				},
 			},
@@ -838,9 +919,9 @@ export default (kire: Kire) => {
 				type: "js",
 				description: "The default clause for a @switch statement.",
 				example: `@default\n  <p>Value is something else</p>\n@end`,
-				onCall(c) {
+				async onCall(c) {
 					c.raw(`default: {`);
-					if (c.children) c.set(c.children);
+					if (c.children) await c.set(c.children);
 					c.raw(`}`);
 				},
 			},
@@ -909,9 +990,9 @@ export default (kire: Kire) => {
 
 			// Now load the component template
 			ctx.raw(`  const path = $ctx.resolve(${JSON.stringify(pathExpr)});`);
-			ctx.raw(`  const templateFn = await $ctx.load(path);`);
+			ctx.raw(`  const locals = ${varsExpr};`);
+			ctx.raw(`  const templateFn = await $ctx.require(path, $ctx, locals);`);
 			ctx.raw(`  if (templateFn) {`);
-						ctx.raw(`  const locals = ${varsExpr};`);
 						ctx.raw(`  const componentCtx = $ctx.clone(locals);`);
 						ctx.raw(`  componentCtx[${JSON.stringify(kire.varLocals)}] = locals;`); // Expose locals under the configured name
 						ctx.raw(`  if(typeof locals === 'object' && locals !== null) locals.slots = $slots;`); // Attach slots to locals for it.slots access
@@ -934,7 +1015,6 @@ import type { KireContext } from "../types";
 export default (kire: Kire) => {
 	// Initialize global defines object
 	kire.$ctx("defines", {});
-
 	kire.directive({
 		name: "define",
 		params: ["name:string"],
@@ -943,7 +1023,7 @@ export default (kire: Kire) => {
 		description:
 			"Defines a named, reusable section of content that can be rendered elsewhere.",
 		example: `@define('header')\n  <h1>My Website</h1>\n@end`,
-		onCall(ctx) {
+		async onCall(ctx) {
 			const name = ctx.param("name");
 
 			ctx.raw(
@@ -951,7 +1031,7 @@ export default (kire: Kire) => {
 			);
 			ctx.raw(`  const $ctx = $parentCtx.clone();`);
 
-			if (ctx.children) ctx.set(ctx.children);
+			if (ctx.children) await ctx.set(ctx.children);
 
 			ctx.raw(`  return $ctx[Symbol.for('~response')];`);
 			ctx.raw(`})($ctx);`);
@@ -1025,7 +1105,7 @@ export default (kire: Kire) => {
 		type: "html",
 		description: "Pushes a block of content onto a named stack.",
 		example: `@push('scripts')\n  <script src="app.js"></script>\n@end`,
-		onCall(ctx: KireContext) {
+		async onCall(ctx: KireContext) {
 			const name = ctx.param("name");
 			ctx.raw(
 				`if (!$ctx.stacks[${JSON.stringify(name)}]) $ctx.stacks[${JSON.stringify(name)}] = [];`,
@@ -1035,7 +1115,7 @@ export default (kire: Kire) => {
 			);
 			ctx.raw(`  const $ctx = $parentCtx.clone();`);
 
-			if (ctx.children) ctx.set(ctx.children);
+			if (ctx.children) await ctx.set(ctx.children);
 
 			ctx.raw(`  return $ctx[Symbol.for('~response')];`);
 			ctx.raw(`})($ctx));`);
@@ -1064,6 +1144,461 @@ export const KireDirectives: KirePlugin = {
 };
 
 
+// --- From: core/src/compiler/index.ts ---
+import type { Kire } from "../kire";
+import type { KireContext, Node } from "../types";
+
+// Define the symbols for internal use
+export const RESPONSE_SYMBOL = Symbol.for("~response");
+export const STRUCTURE_SYMBOL = Symbol.for("~structure");
+
+export class Compiler {
+	private preBuffer: string[] = [];
+	private resBuffer: string[] = [];
+	private posBuffer: string[] = [];
+
+	constructor(private kire: Kire) {}
+
+	public async compile(nodes: Node[]): Promise<string> {
+		this.preBuffer = [];
+		this.resBuffer = [];
+		this.posBuffer = [];
+
+		this.resBuffer.push(`with($ctx) {`);
+
+		// Hook: onBewareDirectives
+		if (this.kire.hooks?.onBewareDirectives) {
+			if (Array.isArray(this.kire.hooks.onBewareDirectives)) {
+				for (const hook of this.kire.hooks.onBewareDirectives) {
+					const injected = hook(this);
+					if (typeof injected === "string") {
+						this.resBuffer.push(injected);
+					}
+				}
+			} else {
+				const injected = this.kire.hooks.onBewareDirectives(this);
+				if (typeof injected === "string") {
+					this.resBuffer.push(injected);
+				}
+			}
+		}
+
+		// Compile the root nodes
+		await this.compileNodes(nodes);
+
+		this.resBuffer.push(`}`); // Close with($ctx)
+
+		const pre = this.preBuffer.join("\n");
+		const res = this.resBuffer.join("\n");
+		const pos = this.posBuffer.join("\n");
+
+		// Return statement must be last
+		const ret = `return $ctx;`;
+
+		return `${pre}\n${res}\n${pos}\n${ret}`;
+	}
+
+	private async compileNodes(nodes: Node[]) {
+		for (const node of nodes) {
+			if (node.type === "text") {
+				if (node.content) {
+					this.resBuffer.push(
+						`$ctx[Symbol.for('~response')] += ${JSON.stringify(node.content)};`,
+					);
+				}
+			} else if (node.type === "variable") {
+				if (node.content) {
+					// Simple interpolation
+					this.resBuffer.push(
+						`$ctx[Symbol.for('~response')] += (${node.content});`,
+					);
+				}
+			} else if (node.type === "directive") {
+				await this.processDirective(node);
+			}
+		}
+	}
+
+	private async processDirective(node: Node) {
+		const name = node.name;
+		if (!name) return;
+
+		// Check if directive exists in Kire instance
+		const directive = this.kire.getDirective(name);
+
+		if (!directive) {
+			// Handle unknown directive
+			console.warn(`Directive @${name} not found.`);
+			return;
+		}
+
+		const ctx: KireContext = {
+			param: (key: string | number) => {
+				if (typeof key === "number") {
+					return node.args?.[key];
+				}
+				if (directive.params && node.args) {
+					const index = directive.params.findIndex(
+						(p) => p.split(":")[0] === key,
+					);
+					if (index !== -1) return node.args[index];
+				}
+				return undefined;
+			},
+			children: node.children,
+			parents: node.related, // 'parents' in user logic map to 'related' nodes from parser
+			set: async (nodes: Node[]) => {
+				if (!nodes) return;
+				await this.compileNodes(nodes);
+			},
+			render: async (content: string) => {
+				return this.kire.compile(content);
+			},
+			resolve: (path: string) => {
+				return this.kire.resolvePath(path);
+			},
+			func: (code: string) => {
+				return `async function($ctx) { ${code} }`;
+			},
+			pre: (code: string) => {
+				this.preBuffer.push(code);
+			},
+			res: (content: string) => {
+				const escaped = content
+					.replace(/\\/g, "\\\\")
+					.replace(/`/g, "\\`")
+					.replace(/\$\{/g, "\\${");
+				this.resBuffer.push(`$ctx.res(\`${escaped}\`);`);
+			},
+			raw: (code: string) => {
+				this.resBuffer.push(code);
+			},
+			pos: (code: string) => {
+				this.posBuffer.push(code);
+			},
+			error: (msg: string) => {
+				throw new Error(`Error in directive @${name}: ${msg}`);
+			},
+			clone: (locals: Record<string, any> = {}) => {
+				this.resBuffer.push(`$ctx.clone(${JSON.stringify(locals)});`);
+				return ctx;
+			},
+			clear: () => {
+				this.resBuffer.push(`$ctx.clear();`);
+				return ctx;
+			},
+		};
+
+		await directive.onCall(ctx);
+	}
+}
+
+
+// --- From: core/src/utils/path.ts ---
+/**
+ * Joins path segments and normalizes the resulting path
+ */
+export function join(...segments: string[]): string {
+	if (!segments.length) return ".";
+
+	const windowsAbsoluteRegex = /^[a-zA-Z]:[\\/]/;
+	const isWindowsAbsolute = segments.some((s) => windowsAbsoluteRegex.test(s));
+	const driveLetter = isWindowsAbsolute
+		? segments
+				.find((s) => windowsAbsoluteRegex.test(s))
+				?.charAt(0)
+				.toUpperCase()
+		: null;
+
+	// Normalize all segments at once
+	const normalized = segments
+		.join("/")
+		.replace(/\\/g, "/")
+		.replace(/\/+/g, "/");
+	const isAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(normalized);
+
+	const parts = normalized.split("/");
+	const result: string[] = [];
+	let i = 0;
+
+	while (i < parts.length) {
+		const part = parts[i++];
+		if (!part || part === ".") continue;
+
+		if (part === "..") {
+			if (result.length && result[result.length - 1] !== "..") {
+				result.pop();
+			} else {
+				result.push(part);
+			}
+		} else {
+			result.push(part);
+		}
+	}
+
+	let path = result.join("/");
+
+	if (isWindowsAbsolute && driveLetter) {
+		path = path.replace(/^[a-zA-Z]:/, "").replace(/^\//, "");
+		path = `${driveLetter}:\\${path.replace(/\//g, "\\")}`.replace(
+			/\\+/g,
+			"\\",
+		);
+		return path || ".";
+	}
+
+	return isAbsolute ? `/${path.replace(/^\//, "")}` : path || ".";
+}
+
+
+// --- From: core/src/utils/md5.ts ---
+
+export function md5(string: string): string {
+	function rotateLeft(lValue: number, iShiftBits: number): number {
+		return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits));
+	}
+
+	function addUnsigned(lX: number, lY: number): number {
+		const lX8 = lX & 0x80000000;
+		const lY8 = lY & 0x80000000;
+		const lX4 = lX & 0x40000000;
+		const lY4 = lY & 0x40000000;
+		const lResult = (lX & 0x3fffffff) + (lY & 0x3fffffff);
+		if (lX4 & lY4) {
+			return lResult ^ 0x80000000 ^ lX8 ^ lY8;
+		}
+		if (lX4 | lY4) {
+			if (lResult & 0x40000000) {
+				return lResult ^ 0xc0000000 ^ lX8 ^ lY8;
+			} else {
+				return lResult ^ 0x40000000 ^ lX8 ^ lY8;
+			}
+		} else {
+			return lResult ^ lX8 ^ lY8;
+		}
+	}
+
+	function F(x: number, y: number, z: number): number {
+		return (x & y) | (~x & z);
+	}
+	function G(x: number, y: number, z: number): number {
+		return (x & z) | (y & ~z);
+	}
+	function H(x: number, y: number, z: number): number {
+		return x ^ y ^ z;
+	}
+	function I(x: number, y: number, z: number): number {
+		return y ^ (x | ~z);
+	}
+
+	function FF(
+		a: number,
+		b: number,
+		c: number,
+		d: number,
+		x: number,
+		s: number,
+		ac: number,
+	): number {
+		a = addUnsigned(a, addUnsigned(addUnsigned(F(b, c, d), x), ac));
+		return addUnsigned(rotateLeft(a, s), b);
+	}
+
+	function GG(
+		a: number,
+		b: number,
+		c: number,
+		d: number,
+		x: number,
+		s: number,
+		ac: number,
+	): number {
+		a = addUnsigned(a, addUnsigned(addUnsigned(G(b, c, d), x), ac));
+		return addUnsigned(rotateLeft(a, s), b);
+	}
+
+	function HH(
+		a: number,
+		b: number,
+		c: number,
+		d: number,
+		x: number,
+		s: number,
+		ac: number,
+	): number {
+		a = addUnsigned(a, addUnsigned(addUnsigned(H(b, c, d), x), ac));
+		return addUnsigned(rotateLeft(a, s), b);
+	}
+
+	function II(
+		a: number,
+		b: number,
+		c: number,
+		d: number,
+		x: number,
+		s: number,
+		ac: number,
+	): number {
+		a = addUnsigned(a, addUnsigned(addUnsigned(I(b, c, d), x), ac));
+		return addUnsigned(rotateLeft(a, s), b);
+	}
+
+	function convertToWordArray(string: string): number[] {
+		let lWordCount;
+		const lMessageLength = string.length;
+		const lNumberOfWords_temp1 = lMessageLength + 8;
+		const lNumberOfWords_temp2 =
+			(lNumberOfWords_temp1 - (lNumberOfWords_temp1 % 64)) / 64;
+		const lNumberOfWords = (lNumberOfWords_temp2 + 1) * 16;
+		const lWordArray = Array(lNumberOfWords - 1);
+		let lBytePosition = 0;
+		let lByteCount = 0;
+		while (lByteCount < lMessageLength) {
+			lWordCount = (lByteCount - (lByteCount % 4)) / 4;
+			lBytePosition = (lByteCount % 4) * 8;
+			lWordArray[lWordCount] =
+				(lWordArray[lWordCount] || 0) |
+				(string.charCodeAt(lByteCount) << lBytePosition);
+			lByteCount++;
+		}
+		lWordCount = (lByteCount - (lByteCount % 4)) / 4;
+		lBytePosition = (lByteCount % 4) * 8;
+		lWordArray[lWordCount] = (lWordArray[lWordCount] || 0) | (0x80 << lBytePosition);
+		lWordArray[lNumberOfWords - 2] = lMessageLength << 3;
+		lWordArray[lNumberOfWords - 1] = lMessageLength >>> 29;
+		
+		// Ensure no undefined holes
+		for(let i=0; i<lWordArray.length; i++) {
+			if(lWordArray[i] === undefined) lWordArray[i] = 0;
+		}
+		return lWordArray;
+	}
+
+	function wordToHex(lValue: number): string {
+		let WordToHexValue = "";
+		let WordToHexValue_temp = "";
+		for (let lCount = 0; lCount <= 3; lCount++) {
+			const lByte = (lValue >>> (lCount * 8)) & 255;
+			WordToHexValue_temp = `0${lByte.toString(16)}`;
+			WordToHexValue =
+				WordToHexValue +
+				WordToHexValue_temp.substr(WordToHexValue_temp.length - 2, 2);
+		}
+		return WordToHexValue;
+	}
+
+	let x: number[] = [];
+	let k: number = 0, 
+		AA: number = 0, 
+		BB: number = 0, 
+		CC: number = 0, 
+		DD: number = 0, 
+		a: number = 0, 
+		b: number = 0, 
+		c: number = 0, 
+		d: number = 0;
+	const S11 = 7,
+		S12 = 12,
+		S13 = 17,
+		S14 = 22;
+	const S21 = 5,
+		S22 = 9,
+		S23 = 14,
+		S24 = 20;
+	const S31 = 4,
+		S32 = 11,
+		S33 = 16,
+		S34 = 23;
+	const S41 = 6,
+		S42 = 10,
+		S43 = 15,
+		S44 = 21;
+
+	x = convertToWordArray(string);
+	a = 0x67452301;
+	b = 0xefcdab89;
+	c = 0x98badcfe;
+	d = 0x10325476;
+
+	for (k = 0; k < x.length; k += 16) {
+		AA = a;
+		BB = b;
+		CC = c;
+		DD = d;
+		a = FF(a, b, c, d, x[k + 0] || 0, S11, 0xd76aa478);
+		d = FF(d, a, b, c, x[k + 1] || 0, S12, 0xe8c7b756);
+		c = FF(c, d, a, b, x[k + 2] || 0, S13, 0x242070db);
+		b = FF(b, c, d, a, x[k + 3] || 0, S14, 0xc1bdceee);
+		a = FF(a, b, c, d, x[k + 4] || 0, S11, 0xf57c0faf);
+		d = FF(d, a, b, c, x[k + 5] || 0, S12, 0x4787c62a);
+		c = FF(c, d, a, b, x[k + 6] || 0, S13, 0xa8304613);
+		b = FF(b, c, d, a, x[k + 7] || 0, S14, 0xfd469501);
+		a = FF(a, b, c, d, x[k + 8] || 0, S11, 0x698098d8);
+		d = FF(d, a, b, c, x[k + 9] || 0, S12, 0x8b44f7af);
+		c = FF(c, d, a, b, x[k + 10] || 0, S13, 0xffff5bb1);
+		b = FF(b, c, d, a, x[k + 11] || 0, S14, 0x895cd7be);
+		a = FF(a, b, c, d, x[k + 12] || 0, S11, 0x6b901122);
+		d = FF(d, a, b, c, x[k + 13] || 0, S12, 0xfd987193);
+		c = FF(c, d, a, b, x[k + 14] || 0, S13, 0xa679438e);
+		b = FF(b, c, d, a, x[k + 15] || 0, S14, 0x49b40821);
+		a = GG(a, b, c, d, x[k + 1] || 0, S21, 0xf61e2562);
+		d = GG(d, a, b, c, x[k + 6] || 0, S22, 0xc040b340);
+		c = GG(c, d, a, b, x[k + 11] || 0, S23, 0x265e5a51);
+		b = GG(b, c, d, a, x[k + 0] || 0, S24, 0xe9b6c7aa);
+		a = GG(a, b, c, d, x[k + 5] || 0, S21, 0xd62f105d);
+		d = GG(d, a, b, c, x[k + 10] || 0, S22, 0x02441453);
+		c = GG(c, d, a, b, x[k + 15] || 0, S23, 0xd8a1e681);
+		b = GG(b, c, d, a, x[k + 4] || 0, S24, 0xe7d3fbc8);
+		a = GG(a, b, c, d, x[k + 9] || 0, S21, 0x21e1cde6);
+		d = GG(d, a, b, c, x[k + 14] || 0, S22, 0xc33707d6);
+		c = GG(c, d, a, b, x[k + 3] || 0, S23, 0xf4d50d87);
+		b = GG(b, c, d, a, x[k + 8] || 0, S24, 0x455a14ed);
+		a = GG(a, b, c, d, x[k + 13] || 0, S21, 0xa9e3e905);
+		d = GG(d, a, b, c, x[k + 2] || 0, S22, 0xfcefa3f8);
+		c = GG(c, d, a, b, x[k + 7] || 0, S23, 0x676f02d9);
+		b = GG(b, c, d, a, x[k + 12] || 0, S24, 0x8d2a4c8a);
+		a = HH(a, b, c, d, x[k + 5] || 0, S31, 0xfffa3942);
+		d = HH(d, a, b, c, x[k + 8] || 0, S32, 0x8771f681);
+		c = HH(c, d, a, b, x[k + 11] || 0, S33, 0x6d9d6122);
+		b = HH(b, c, d, a, x[k + 14] || 0, S34, 0xfde5380c);
+		a = HH(a, b, c, d, x[k + 1] || 0, S31, 0xa4beea44);
+		d = HH(d, a, b, c, x[k + 4] || 0, S32, 0x4bdecfa9);
+		c = HH(c, d, a, b, x[k + 7] || 0, S33, 0xf6bb4b60);
+		b = HH(b, c, d, a, x[k + 10] || 0, S34, 0xbebfbc70);
+		a = HH(a, b, c, d, x[k + 13] || 0, S31, 0x289b7ec6);
+		d = HH(d, a, b, c, x[k + 0] || 0, S32, 0xeaa127fa);
+		c = HH(c, d, a, b, x[k + 3] || 0, S33, 0xd4ef3085);
+		b = HH(b, c, d, a, x[k + 6] || 0, S34, 0x04881d05);
+		a = HH(a, b, c, d, x[k + 9] || 0, S31, 0xd9d4d039);
+		d = HH(d, a, b, c, x[k + 12] || 0, S32, 0xe6db99e5);
+		c = HH(c, d, a, b, x[k + 15] || 0, S33, 0x1fa27cf8);
+		b = HH(b, c, d, a, x[k + 2] || 0, S34, 0xc4ac5665);
+		a = II(a, b, c, d, x[k + 0] || 0, S41, 0xf4292244);
+		d = II(d, a, b, c, x[k + 7] || 0, S42, 0x432aff97);
+		c = II(c, d, a, b, x[k + 14] || 0, S43, 0xab9423a7);
+		b = II(b, c, d, a, x[k + 5] || 0, S44, 0xfc93a039);
+		a = II(a, b, c, d, x[k + 12] || 0, S41, 0x655b59c3);
+		d = II(d, a, b, c, x[k + 3] || 0, S42, 0x8f0ccc92);
+		c = II(c, d, a, b, x[k + 10] || 0, S43, 0xffeff47d);
+		b = II(b, c, d, a, x[k + 1] || 0, S44, 0x85845dd1);
+		a = II(a, b, c, d, x[k + 8] || 0, S41, 0x6fa87e4f);
+		d = II(d, a, b, c, x[k + 15] || 0, S42, 0xfe2ce6e0);
+		c = II(c, d, a, b, x[k + 6] || 0, S43, 0xa3014314);
+		b = II(b, c, d, a, x[k + 13] || 0, S44, 0x4e0811a1);
+		a = II(a, b, c, d, x[k + 4] || 0, S41, 0xf7537e82);
+		d = II(d, a, b, c, x[k + 11] || 0, S42, 0xbd3af235);
+		c = II(c, d, a, b, x[k + 2] || 0, S43, 0x2ad7d2bb);
+		b = II(b, c, d, a, x[k + 9] || 0, S44, 0xeb86d391);
+		a = addUnsigned(a, AA);
+		b = addUnsigned(b, BB);
+		c = addUnsigned(c, CC);
+		d = addUnsigned(d, DD);
+	}
+	const temp = wordToHex(a) + wordToHex(b) + wordToHex(c) + wordToHex(d);
+	return temp.toLowerCase();
+}
+
+
 // --- From: core/src/parser/index.ts ---
 import type { Kire } from "../kire";
 import type { DirectiveDefinition, Node } from "../types";
@@ -1072,6 +1607,8 @@ export class Parser {
 	private cursor = 0;
 	private stack: Node[] = [];
 	private rootChildren: Node[] = [];
+	private line = 1;
+	private column = 1;
 
 	constructor(
 		private template: string,
@@ -1124,7 +1661,7 @@ export class Parser {
 				//console.log('FOUND DIRECTIVE:', { name, fullMatch, stack: this.stack.map(s => s.name) });
 
 				// Check if it has arguments
-				let argsStr:string;
+				let argsStr: string | undefined;
 				let argsEndIndex = fullMatch.length;
 
 				// Verifica se tem parênteses APENAS se o próximo caractere for '('
@@ -1390,7 +1927,7 @@ export class Parser {
 		const lines = str.split("\n");
 		if (lines.length > 1) {
 			this.line += lines.length - 1;
-			this.column = lines[lines.length - 1]?.length + 1;
+			this.column = (lines[lines.length - 1]?.length || 0) + 1;
 		} else {
 			this.column += str.length;
 		}
@@ -1458,213 +1995,6 @@ export class Parser {
 			if (!Number.isNaN(Number(arg))) return Number(arg);
 			return arg;
 		});
-	}
-}
-
-
-// --- From: core/src/utils/path.ts ---
-/**
- * Joins path segments and normalizes the resulting path
- */
-export function join(...segments: string[]): string {
-	if (!segments.length) return ".";
-
-	const windowsAbsoluteRegex = /^[a-zA-Z]:[\\/]/;
-	const isWindowsAbsolute = segments.some((s) => windowsAbsoluteRegex.test(s));
-	const driveLetter = isWindowsAbsolute
-		? segments
-				.find((s) => windowsAbsoluteRegex.test(s))
-				?.charAt(0)
-				.toUpperCase()
-		: null;
-
-	// Normalize all segments at once
-	const normalized = segments
-		.join("/")
-		.replace(/\\/g, "/")
-		.replace(/\/+/g, "/");
-	const isAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(normalized);
-
-	const parts = normalized.split("/");
-	const result: string[] = [];
-	let i = 0;
-
-	while (i < parts.length) {
-		const part = parts[i++];
-		if (!part || part === ".") continue;
-
-		if (part === "..") {
-			if (result.length && result[result.length - 1] !== "..") {
-				result.pop();
-			} else {
-				result.push(part);
-			}
-		} else {
-			result.push(part);
-		}
-	}
-
-	let path = result.join("/");
-
-	if (isWindowsAbsolute && driveLetter) {
-		path = path.replace(/^[a-zA-Z]:/, "").replace(/^\//, "");
-		path = `${driveLetter}:\\${path.replace(/\//g, "\\")}`.replace(
-			/\\+/g,
-			"\\",
-		);
-		return path || ".";
-	}
-
-	return isAbsolute ? `/${path.replace(/^\//, "")}` : path || ".";
-}
-
-
-// --- From: core/src/compiler/index.ts ---
-import type { Kire } from "../kire";
-import type { KireContext, Node } from "../types";
-
-// Define the symbols for internal use
-export const RESPONSE_SYMBOL = Symbol.for("~response");
-export const STRUCTURE_SYMBOL = Symbol.for("~structure");
-
-export class Compiler {
-	private preBuffer: string[] = [];
-	private resBuffer: string[] = [];
-	private posBuffer: string[] = [];
-
-	constructor(private kire: Kire) {}
-
-	public async compile(nodes: Node[]): Promise<string> {
-		this.preBuffer = [];
-		this.resBuffer = [];
-		this.posBuffer = [];
-
-		this.resBuffer.push(`with($ctx) {`);
-
-		// Hook: onBewareDirectives
-		if (this.kire.hooks?.onBewareDirectives) {
-			if (Array.isArray(this.kire.hooks.onBewareDirectives)) {
-				for (const hook of this.kire.hooks.onBewareDirectives) {
-					const injected = hook(this);
-					if (typeof injected === "string") {
-						this.resBuffer.push(injected);
-					}
-				}
-			} else {
-				const injected = this.kire.hooks.onBewareDirectives(this);
-				if (typeof injected === "string") {
-					this.resBuffer.push(injected);
-				}
-			}
-		}
-
-		// Compile the root nodes
-		await this.compileNodes(nodes);
-
-		this.resBuffer.push(`}`); // Close with($ctx)
-
-		const pre = this.preBuffer.join("\n");
-		const res = this.resBuffer.join("\n");
-		const pos = this.posBuffer.join("\n");
-
-		// Return statement must be last
-		const ret = `return $ctx;`;
-
-		return `${pre}\n${res}\n${pos}\n${ret}`;
-	}
-
-	private async compileNodes(nodes: Node[]) {
-		for (const node of nodes) {
-			if (node.type === "text") {
-				if (node.content) {
-					this.resBuffer.push(
-						`$ctx[Symbol.for('~response')] += ${JSON.stringify(node.content)};`,
-					);
-				}
-			} else if (node.type === "variable") {
-				if (node.content) {
-					// Simple interpolation
-					this.resBuffer.push(
-						`$ctx[Symbol.for('~response')] += (${node.content});`,
-					);
-				}
-			} else if (node.type === "directive") {
-				await this.processDirective(node);
-			}
-		}
-	}
-
-	private async processDirective(node: Node) {
-		const name = node.name;
-		if (!name) return;
-
-		// Check if directive exists in Kire instance
-		const directive = this.kire.getDirective(name);
-
-		if (!directive) {
-			// Handle unknown directive
-			console.warn(`Directive @${name} not found.`);
-			return;
-		}
-
-		const ctx: KireContext = {
-			param: (key: string | number) => {
-				if (typeof key === "number") {
-					return node.args?.[key];
-				}
-				if (directive.params && node.args) {
-					const index = directive.params.findIndex(
-						(p) => p.split(":")[0] === key,
-					);
-					if (index !== -1) return node.args[index];
-				}
-				return undefined;
-			},
-			children: node.children,
-			parents: node.related, // 'parents' in user logic map to 'related' nodes from parser
-			set: async (nodes: Node[]) => {
-				if (!nodes) return;
-				await this.compileNodes(nodes);
-			},
-			render: async (content: string) => {
-				return this.kire.compile(content);
-			},
-			resolve: (path: string) => {
-				return this.kire.resolvePath(path);
-			},
-			func: (code: string) => {
-				return `async function($ctx) { ${code} }`;
-			},
-			pre: (code: string) => {
-				this.preBuffer.push(code);
-			},
-			res: (content: string) => {
-				const escaped = content
-					.replace(/\\/g, "\\\\")
-					.replace(/`/g, "\\`")
-					.replace(/\$\{/g, "\\${");
-				this.resBuffer.push(`$ctx.res(\`${escaped}\`);`);
-			},
-			raw: (code: string) => {
-				this.resBuffer.push(code);
-			},
-			pos: (code: string) => {
-				this.posBuffer.push(code);
-			},
-			error: (msg: string) => {
-				throw new Error(`Error in directive @${name}: ${msg}`);
-			},
-			clone: (locals: Record<string, any> = {}) => {
-				this.resBuffer.push(`$ctx.clone(${JSON.stringify(locals)});`);
-				return ctx;
-			},
-			clear: () => {
-				this.resBuffer.push(`$ctx.clear();`);
-				return ctx;
-			},
-		};
-
-		await directive.onCall(ctx);
 	}
 }
 
