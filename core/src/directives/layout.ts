@@ -2,9 +2,9 @@ import type { Kire } from "../kire";
 import type { KireContext } from "../types";
 
 export default (kire: Kire) => {
-	// Initialize global defines object
-	kire.$ctx("defines", {});
-	kire.directive({
+	// Initialize global defines object via runtime checks, not kire.$ctx
+	
+kire.directive({
 		name: "define",
 		params: ["name:string"],
 		children: true,
@@ -15,15 +15,14 @@ export default (kire: Kire) => {
 		async onCall(ctx) {
 			const name = ctx.param("name");
 
-			ctx.raw(
-				`$ctx.defines[${JSON.stringify(name)}] = await (async ($parentCtx) => {`,
-			);
-			ctx.raw(`  const $ctx = $parentCtx.clone();`);
+			ctx.raw(`if(!$ctx['~defines']) $ctx['~defines'] = {};`);
+			ctx.raw(`await $ctx.$merge(async ($ctx) => {`);
 
 			if (ctx.children) await ctx.set(ctx.children);
 
-			ctx.raw(`  return $ctx[Symbol.for('~response')];`);
-			ctx.raw(`})($ctx);`);
+			ctx.raw(`  $ctx['~defines'][${JSON.stringify(name)}] = $ctx['~res'];`);
+			ctx.raw(`  $ctx['~res'] = '';`);
+			ctx.raw(`});`);
 		},
 	});
 
@@ -37,27 +36,26 @@ export default (kire: Kire) => {
 			const name = ctx.param("name");
 
 			ctx.raw(
-				`$ctx.res("<!-- KIRE:defined(" + ${JSON.stringify(name)} + ") -->");`,
+				`$ctx.res("<!-- KIRE:defined(" + ${JSON.stringify(name)} + ") -->");`
 			);
-
-			ctx.pos(`
+		},
+		once(ctx) {
+			ctx.$pre(`if(!$ctx['~defines']) $ctx['~defines'] = {};`);
+			ctx.$pos(`
                 // Post-process defined placeholders
-                if ($ctx.defines) {
-                    for (const key in $ctx.defines) {
+                if ($ctx['~defines']) {
+                    for (const key in $ctx['~defines']) {
                         const placeholder = "<!-- KIRE:defined(" + key + ") -->";
-                        if ($ctx[Symbol.for('~response')].includes(placeholder)) {
-                             $ctx[Symbol.for('~response')] = $ctx[Symbol.for('~response')].split(placeholder).join($ctx.defines[key]);
+                        if ($ctx['~res'].includes(placeholder)) {
+                             $ctx['~res'] = $ctx['~res'].split(placeholder).join($ctx['~defines'][key]);
                         }
                     }
                     // Cleanup unmatched placeholders?
-                    $ctx[Symbol.for('~response')] = $ctx[Symbol.for('~response')].replace(/<!-- KIRE:defined\\(.*?\\) -->/g, '');
+                    $ctx['~res'] = $ctx['~res'].replace(/<!-- KIRE:defined\\(.*?\\) -->/g, '');
                 }
             `);
-		},
+		}
 	});
-
-	// Initialize global stacks object
-	kire.$ctx("stacks", {});
 
 	kire.directive({
 		name: "stack",
@@ -69,22 +67,24 @@ export default (kire: Kire) => {
 		onCall(ctx) {
 			const name = ctx.param("name");
 			ctx.raw(
-				`$ctx.res("<!-- KIRE:stack(" + ${JSON.stringify(name)} + ") -->");`,
+				`$ctx.res("<!-- KIRE:stack(" + ${JSON.stringify(name)} + ") -->");`
 			);
-
-			ctx.pos(`
-                if ($ctx.stacks) {
-                    for (const key in $ctx.stacks) {
+		},
+		once(ctx) {
+			ctx.$pre(`if(!$ctx['~stacks']) $ctx['~stacks'] = {};`);
+			ctx.$pos(`
+                if ($ctx['~stacks']) {
+                    for (const key in $ctx['~stacks']) {
                          const placeholder = "<!-- KIRE:stack(" + key + ") -->";
-                         if ($ctx[Symbol.for('~response')].includes(placeholder)) {
-                              const content = $ctx.stacks[key].join('\\n');
-                              $ctx[Symbol.for('~response')] = $ctx[Symbol.for('~response')].split(placeholder).join(content);
+                         if ($ctx['~res'].includes(placeholder)) {
+                              const content = $ctx['~stacks'][key].join('\\n');
+                              $ctx['~res'] = $ctx['~res'].split(placeholder).join(content);
                          }
                     }
-                    $ctx[Symbol.for('~response')] = $ctx[Symbol.for('~response')].replace(/<!-- KIRE:stack\\(.*?\\) -->/g, '');
+                    $ctx['~res'] = $ctx['~res'].replace(/<!-- KIRE:stack\\(.*?\\) -->/g, '');
                 }
              `);
-		},
+		}
 	});
 
 	kire.directive({
@@ -96,18 +96,19 @@ export default (kire: Kire) => {
 		example: `@push('scripts')\n  <script src="app.js"></script>\n@end`,
 		async onCall(ctx: KireContext) {
 			const name = ctx.param("name");
+			ctx.raw(`if(!$ctx['~stacks']) $ctx['~stacks'] = {};`);
 			ctx.raw(
-				`if (!$ctx.stacks[${JSON.stringify(name)}]) $ctx.stacks[${JSON.stringify(name)}] = [];`,
+				`if (!$ctx['~stacks'][${JSON.stringify(name)}]) $ctx['~stacks'][${JSON.stringify(name)}] = [];`
 			);
 			ctx.raw(
-				`$ctx.stacks[${JSON.stringify(name)}].push(await (async ($parentCtx) => {`,
+				`await $ctx.$merge(async ($ctx) => {`
 			);
-			ctx.raw(`  const $ctx = $parentCtx.clone();`);
 
 			if (ctx.children) await ctx.set(ctx.children);
 
-			ctx.raw(`  return $ctx[Symbol.for('~response')];`);
-			ctx.raw(`})($ctx));`);
+			ctx.raw(`  $ctx['~stacks'][${JSON.stringify(name)}].push($ctx['~res']);`);
+			ctx.raw(`  $ctx['~res'] = '';`);
+			ctx.raw(`});`);
 		},
 	});
 };

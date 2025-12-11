@@ -26,7 +26,7 @@ export type ICompilerConstructor = new (kire: Kire) => ICompiler;
 
 export interface KireOptions {
 	root?: string;
-	cache?: boolean;
+	production?: boolean;
 	resolver?: (filename: string) => Promise<string>;
 	alias?: Record<string, string>;
 	extension?: string;
@@ -44,10 +44,17 @@ export interface KireContext {
 	param(name: string | number): any;
 	render(content: string): Promise<string>; // Returns compiled function string
 	func(code: string): string; // Wraps code in a function definition
+	
+	// Local function scope
 	pre(code: string): void;
 	res(content: string): void;
 	raw(code: string): void;
 	pos(code: string): void;
+	
+	// Global scope (Main file)
+	$pre(code: string): void;
+	$pos(code: string): void;
+
 	error(message: string): void;
 	resolve(path: string): string;
 
@@ -55,10 +62,6 @@ export interface KireContext {
 	children?: Node[];
 	parents?: Node[]; // The instances of sub-directives (e.g., elseif blocks)
 	set(nodes: Node[]): Promise<void>;
-
-	// Context management (compile-time, generates code)
-	clone(locals?: Record<string, any>): KireContext; // Returns code string for cloning
-	clear(): KireContext; // Returns code string for clearing
 }
 
 export interface KireElementContext {
@@ -91,33 +94,6 @@ export interface ElementDefinition {
 	onCall: KireElementHandler;
 }
 
-export interface KireHooks {
-	onBewareDirectives?:
-		| ((compiler: ICompiler) => undefined | string)
-		| ((compiler: ICompiler) => undefined | string)[];
-	onAfterDirectives?:
-		| ((ctx: KireContext) => void | Promise<void>)
-		| ((ctx: KireContext) => void | Promise<void>)[];
-	onBewareElements?:
-		| ((
-				ctx: KireContext,
-				html: string,
-		  ) => undefined | string | Promise<string | undefined>)
-		| ((
-				ctx: KireContext,
-				html: string,
-		  ) => undefined | string | Promise<string | undefined>)[];
-	onAfterElements?:
-		| ((
-				ctx: KireContext,
-				html: string,
-		  ) => undefined | string | Promise<string | undefined>)
-		| ((
-				ctx: KireContext,
-				html: string,
-		  ) => undefined | string | Promise<string | undefined>)[];
-}
-
 export interface DirectiveDefinition {
 	name: string;
 	params?: string[]; // e.g. ['filepath:string']
@@ -125,6 +101,7 @@ export interface DirectiveDefinition {
 	childrenRaw?: boolean; // Should the children be treated as raw text?
 	parents?: DirectiveDefinition[]; // Sub-directives like elseif/else
 	onCall: (ctx: KireContext) => void | Promise<void>;
+	once?: (ctx: KireContext) => void | Promise<void>;
 	description?: string;
 	example?: string;
 	type?: "css" | "js" | "html";

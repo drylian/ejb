@@ -1,14 +1,13 @@
 import type { Kire } from "../kire";
 import type { KireContext, Node } from "../types";
 
-// Define the symbols for internal use
-export const RESPONSE_SYMBOL = Symbol.for("~response");
-export const STRUCTURE_SYMBOL = Symbol.for("~structure");
-
 export class Compiler {
 	private preBuffer: string[] = [];
 	private resBuffer: string[] = [];
 	private posBuffer: string[] = [];
+	// Removed gPreBuffer and gPosBuffer
+
+	private usedDirectives: Set<string> = new Set();
 
 	constructor(private kire: Kire) {}
 
@@ -16,59 +15,44 @@ export class Compiler {
 		this.preBuffer = [];
 		this.resBuffer = [];
 		this.posBuffer = [];
-
-		this.resBuffer.push(`with($ctx) {`);
-
-		// Hook: onBewareDirectives
-		if (this.kire.hooks?.onBewareDirectives) {
-			if (Array.isArray(this.kire.hooks.onBewareDirectives)) {
-				for (const hook of this.kire.hooks.onBewareDirectives) {
-					const injected = hook(this);
-					if (typeof injected === "string") {
-						this.resBuffer.push(injected);
-					}
-				}
-			} else {
-				const injected = this.kire.hooks.onBewareDirectives(this);
-				if (typeof injected === "string") {
-					this.resBuffer.push(injected);
-				}
-			}
-		}
+		// Removed gPreBuffer and gPosBuffer init
+		this.usedDirectives.clear();
 
 		// Compile the root nodes
 		await this.compileNodes(nodes);
 
-		this.resBuffer.push(`}`); // Close with($ctx)
-
+		// gPre and gPos are now collected at runtime via generated code
 		const pre = this.preBuffer.join("\n");
 		const res = this.resBuffer.join("\n");
 		const pos = this.posBuffer.join("\n");
 
-		// Return statement must be last
-		const ret = `return $ctx;`;
+		// Main function body code
+		const code = `with($ctx) { \n${pre}\n${res}\n${pos}\nreturn $ctx;\n }`;
 
-		return `${pre}\n${res}\n${pos}\n${ret}`;
+		return code;
 	}
 
 	private async compileNodes(nodes: Node[]) {
-		for (const node of nodes) {
+		let i = 0;
+		while (i < nodes.length) {
+			const node = nodes[i]!;
 			if (node.type === "text") {
 				if (node.content) {
 					this.resBuffer.push(
-						`$ctx[Symbol.for('~response')] += ${JSON.stringify(node.content)};`,
+						`$ctx['~res'] += ${JSON.stringify(node.content)};`,
 					);
 				}
 			} else if (node.type === "variable") {
 				if (node.content) {
 					// Simple interpolation
 					this.resBuffer.push(
-						`$ctx[Symbol.for('~response')] += (${node.content});`,
+						`$ctx['~res'] += (${node.content});`,
 					);
 				}
 			} else if (node.type === "directive") {
 				await this.processDirective(node);
 			}
+			i++;
 		}
 	}
 
@@ -105,7 +89,9 @@ export class Compiler {
 				await this.compileNodes(nodes);
 			},
 			render: async (content: string) => {
-				return this.kire.compile(content);
+				// This needs to return the object {code, gPre, gPos}
+				// But compile expects string for now.
+				return (await this.kire.compile(content)); 
 			},
 			resolve: (path: string) => {
 				return this.kire.resolvePath(path);
@@ -120,8 +106,8 @@ export class Compiler {
 				const escaped = content
 					.replace(/\\/g, "\\\\")
 					.replace(/`/g, "\\`")
-					.replace(/\$\{/g, "\\${");
-				this.resBuffer.push(`$ctx.res(\`${escaped}\`);`);
+					.replace(/\${/g, "\\${ ");
+				this.resBuffer.push(`$ctx.res(${escaped}\n");`);
 			},
 			raw: (code: string) => {
 				this.resBuffer.push(code);
@@ -129,18 +115,21 @@ export class Compiler {
 			pos: (code: string) => {
 				this.posBuffer.push(code);
 			},
+			$pre: (code: string) => {
+				this.resBuffer.push(`$ctx['~$pre'].push(async ($ctx) => { with($ctx) { ${code} } });`);
+			},
+			$pos: (code: string) => {
+				this.resBuffer.push(`$ctx['~$pos'].push(async ($ctx) => { with($ctx) { ${code} } });`);
+			},
 			error: (msg: string) => {
 				throw new Error(`Error in directive @${name}: ${msg}`);
 			},
-			clone: (locals: Record<string, any> = {}) => {
-				this.resBuffer.push(`$ctx.clone(${JSON.stringify(locals)});`);
-				return ctx;
-			},
-			clear: () => {
-				this.resBuffer.push(`$ctx.clear();`);
-				return ctx;
-			},
 		};
+
+		if (directive.once && !this.usedDirectives.has(name)) {
+			this.usedDirectives.add(name);
+			await directive.once(ctx);
+		}
 
 		await directive.onCall(ctx);
 	}

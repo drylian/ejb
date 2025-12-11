@@ -80,7 +80,7 @@ export const KireSsg: KirePlugin<SsgOptions> & {
 			try {
 				// 1. Render the template to check for generator markers
 				// Pass a default empty string for currentPath during detection pass
-				const html = await kireInstance.render(file, { currentPath: "" });
+				const html = await kireInstance.view(file, { currentPath: "" });
 
 				// Check for marker
 				const markerRegex = /<!-- KIRE_GEN:(.*?) -->/;
@@ -99,7 +99,7 @@ export const KireSsg: KirePlugin<SsgOptions> & {
 						const mdRelative = String(mdFile);
 						
 						// Render template again with currentPath local
-						const pageHtml = await kireInstance.render(file, {
+						const pageHtml = await kireInstance.view(file, {
 							currentPath: mdRelative
 						});
 
@@ -208,7 +208,7 @@ export const KireSsg: KirePlugin<SsgOptions> & {
 				for (const candidate of candidates) {
 					try {
 						// console.log(`[DEV] Trying candidate: ${candidate}`);
-						html = await kireInstance?.render(candidate);
+						html = await kireInstance?.view(candidate);
 						servedCandidate = candidate;
 						break;
 					} catch (e: any) {

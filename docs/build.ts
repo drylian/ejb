@@ -74,6 +74,8 @@ const kire = new Kire({
 // Inject schemas into global context
 kire.$ctx("packages", schemas);
 
+console.log(await kire.view('pages/packages.kire'))
+process.exit(0);
 if (process.argv.includes("--dev")) {
   console.log("Starting dev server...");
   await KireSsg.dev({ port: 3000 });

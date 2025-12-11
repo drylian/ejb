@@ -145,7 +145,7 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 					}
 
 					// Generate cache ID if caching is enabled
-					if (kire.cache) {
+					if (kire.production) {
 						const hash = createHash("sha256").update(code).digest("hex");
 						ctx.raw(`$ctx.res('<tailwind id="${hash}">');`);
 					} else {
@@ -178,7 +178,7 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 					const id = ctx.element.attributes.id;
 
 					// Use cached CSS if available and caching is enabled
-					if (kire.cache && id && cache.has(id)) {
+					if (kire.production && id && cache.has(id)) {
 						const cachedCss = cache.get(id) ?? "";
 						const newHtml = ctx.content.replace(
 							ctx.element.outer,
@@ -215,7 +215,7 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 					);
 
 					// Cache the result if caching is enabled
-					if (kire.cache && id) {
+					if (kire.production && id) {
 						cache.set(id, processedCSS);
 					}
 

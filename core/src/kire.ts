@@ -1,4 +1,4 @@
-import { Compiler, RESPONSE_SYMBOL, STRUCTURE_SYMBOL } from "./compiler";
+import { Compiler } from "./compiler";
 import { KireDirectives } from "./directives";
 import { Parser } from "./parser";
 import type {
@@ -7,10 +7,8 @@ import type {
 	ICompilerConstructor,
 	IParserConstructor,
 	KireCache,
-	KireContext,
 	KireElementHandler,
 	KireElementOptions,
-	KireHooks,
 	KireOptions,
 	KirePlugin,
 	KireSchematic,
@@ -22,14 +20,12 @@ export class Kire {
 	public directives: Map<string, DirectiveDefinition> = new Map();
 	public elements: Set<ElementDefinition> = new Set();
 	public globalContext: Map<string, any> = new Map();
-	public hooks: KireHooks = {};
 
 	public root: string;
-	public cache: boolean;
+	public production: boolean;
 	public resolverFn: (filename: string) => Promise<string>;
 	public readDirFn?: (pattern: string) => Promise<string[]>;
-	public alias: Record<string, string>;
-	public extension: string;
+	public alias: Record<string, string>; extension: string;
 	public cacheFiles: Map<string, Function> = new Map();
 	public parserConstructor: IParserConstructor;
 	public compilerConstructor: ICompilerConstructor;
@@ -42,6 +38,11 @@ export class Kire {
 		return {
 			clear: () => this._cacheStore.clear(),
 		};
+	}
+
+	public cacheClear() {
+		this._cacheStore.clear();
+		this.cacheFiles.clear();
 	}
 
 	public cached<T = any>(namespace: string): KireCache<T> {
@@ -61,7 +62,7 @@ export class Kire {
 
 	constructor(options: KireOptions = {}) {
 		this.root = options.root ?? "./";
-		this.cache = options.cache ?? true;
+		this.production = options.production ?? true;
 		this.alias = options.alias ?? { "~/": this.root };
 		this.extension = options.extension ?? "kire";
 		this.varLocals = options.varLocals ?? "it";
@@ -78,17 +79,16 @@ export class Kire {
 
 		// Register internal helpers
 		this.$ctx("md5", md5);
+		this.$ctx("~$pre", []);
+		this.$ctx("~$pos", []);
 		this.$ctx(
 			"require",
-			async (path: string, $ctx: KireContext, locals: any) => {
+			async (path: string) => {
 				const cached = this.cached("@kirejs/core");
-				// esse sistema sempre cacheará, diferente dos outros, ja que o objetivo é ser mais rapido de carregar
-				const isProd = this.cache;
-				// obtem o md5 da path atual ou undefined
+				const isProd = this.production;
 				const hash = cached.get(`md5:${path}`);
 				let content = "";
 
-				// se não tiver hash ainda significa que não possue cachge armazenado, então regerar, caso tenha, e não for prod, então atualizar
 				if (!hash || !isProd) {
 					try {
 						content = await this.resolverFn(path);
@@ -106,25 +106,23 @@ export class Kire {
 					const ihash = md5(content);
 
 					if (!isProd && hash) {
-						// compara o hash atual com o novo, e se for igual usa a função ja gerada, para evitar necessidade de regerar ela
 						if (ihash === hash) {
 							return cached.get(`js:${path}`);
-						} else {
-							// hash existe, mais é diferente, então limpe o cache
+						}
+						else {
 							cached.delete(`md5:${path}`);
 							cached.delete(`js:${path}`);
 						}
 					}
-					// compileFn é diferente do compile, ele é usado para gerar a função do codigo, ao invez apenas gerar o codigo sem a função async
+
 					const fn = await this.compileFn(content);
 					cached.set(`md5:${path}`, ihash);
 					cached.set(`js:${path}`, fn);
 					return fn;
 				} else {
-					// significa que ta com cache ativo e ja tem a função compilada, então usa o cache
 					return cached.get(`js:${path}`);
 				}
-			},
+			}
 		);
 
 		// Collect plugins to load
@@ -149,10 +147,8 @@ export class Kire {
 			}
 		}
 
-		// Sort plugins (default sort 100)
 		pluginsToLoad.sort((a, b) => (a.p.sort ?? 100) - (b.p.sort ?? 100));
 
-		// Load plugins
 		for (const item of pluginsToLoad) {
 			this.plugin(item.p, item.o);
 		}
@@ -163,7 +159,6 @@ export class Kire {
 		opts?: KirePlugged["options"],
 	) {
 		if (typeof plugin === "function") {
-			// Support functional plugins if any legacy ones exist, though interface says otherwise
 			(plugin as any)(this, opts);
 		} else if (plugin.load) {
 			plugin.load(this, opts);
@@ -201,11 +196,9 @@ export class Kire {
 			"onCall" in nameOrDef &&
 			!("source" in nameOrDef)
 		) {
-			// It's an ElementDefinition (and not a RegExp)
 			this.elements.add(nameOrDef as ElementDefinition);
 		} else {
-			// Legacy or simple overload
-			if (!handler) throw new Error("Handler is required for legacy element()");
+			if (!handler) throw new Error("Handler is required for legacy element()")
 			this.elements.add({
 				name: nameOrDef as string | RegExp,
 				void: options?.void,
@@ -249,26 +242,21 @@ export class Kire {
 	public resolvePath(filepath: string, currentFile?: string): string {
 		if (!filepath) return filepath;
 
-		// If it's a URL, return it directly
 		if (filepath.startsWith("http://") || filepath.startsWith("https://")) {
 			return filepath;
 		}
 
-		// Normalize
 		let resolved = filepath.replace(/\\/g, "/").replace(/(?<!:)\/+/g, "/");
 		const root = this.root.replace(/\\/g, "/").replace(/\/$/, "");
 
-		// Check absolute
 		const isWindowsAbsolute = /^[a-zA-Z]:\//.test(resolved);
 
-		// Aliases
 		const aliases = Object.entries(this.alias);
-		// Sort aliases by length desc
 		aliases.sort((a, b) => b[0].length - a[0].length);
 
 		let matchedAlias = false;
 		for (const [alias, replacement] of aliases) {
-			const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+			const escapedAlias = alias.replace(/[.*+?^${}()|[\\]/g, "\\$& ");
 			if (new RegExp(`^${escapedAlias}`).test(filepath)) {
 				resolved = join(replacement, filepath.slice(alias.length));
 				matchedAlias = true;
@@ -277,7 +265,7 @@ export class Kire {
 		}
 
 		if (matchedAlias) {
-			// if alias matched, it might still need normalization or extension
+			// handled
 		} else {
 			const isResolvedAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(resolved);
 			if (!isResolvedAbsolute && !isWindowsAbsolute) {
@@ -288,7 +276,6 @@ export class Kire {
 			}
 		}
 
-		// Add extension if needed, but not to URLs
 		if (
 			this.extension &&
 			!/\.[^/.]+$/.test(resolved) &&
@@ -307,170 +294,101 @@ export class Kire {
 	public async compileFn(content: string): Promise<Function> {
 		const code = await this.compile(content);
 		try {
-			const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-			return new AsyncFunction("$ctx", code);
+			const AsyncFunction = Object.getPrototypeOf(async () => { }).constructor;
+
+			const mainFn = new AsyncFunction("$ctx", code);
+
+			return async ($ctx: any) => {
+				await mainFn($ctx);
+				return $ctx;
+			};
 		} catch (e) {
 			console.error("Error creating function from code:", code);
 			throw e;
 		}
 	}
 
-	// Helper to compile and create a function
-	public async createFunction(
-		template: string,
-		filename?: string,
-	): Promise<Function> {
-		let content = template;
-		let usedFilename = filename;
-
-		// Check if template is a path (heuristic)
-		const isTemplatePath = (str: string) => {
-			// If it has newlines or template syntax, it's definitely content
-			if (str.includes("\n") || str.includes("{{") || str.includes("@"))
-				return false;
-
-			// If it looks like a path or simple filename
-			return (
-				str.includes("/") ||
-				str.includes("\\") ||
-				str.endsWith(`.${this.extension}`) ||
-				/^[a-zA-Z0-9_-]+$/.test(str)
-			);
-		};
-
-		if (isTemplatePath(template)) {
-			const resolvedPath = this.resolvePath(template);
-			if (this.cache && this.cacheFiles.has(resolvedPath)) {
-				return this.cacheFiles.get(resolvedPath) as Function;
-			}
-			try {
-				content = await this.resolverFn(resolvedPath);
-				usedFilename = resolvedPath;
-			} catch (e: any) {
-				// If resolver fails, assume it's a literal string
-				if (!e.message.includes("No resolver")) {
-					throw e;
-				}
-			}
-		}
-
-		if (content === null || content === undefined) {
-			return null as any;
-		}
-
-		const fn = await this.compileFn(content);
-
-		if (usedFilename && this.cache) {
-			this.cacheFiles.set(usedFilename, fn);
-		}
-		return fn;
-	}
-
 	public async render(
 		template: string,
 		locals: Record<string, any> = {},
 	): Promise<string> {
-		const fn = await this.createFunction(template);
-		// Runtime context merging globals and locals
+		const fn = await this.compileFn(template);
+		return this.run(fn, locals);
+	}
+
+	public async view(
+		path: string,
+		locals: Record<string, any> = {},
+	): Promise<string> {
+		const resolvedPath = this.resolvePath(path);
+		let fn: Function | undefined;
+
+		if (this.production && this.cacheFiles.has(resolvedPath)) {
+			fn = this.cacheFiles.get(resolvedPath);
+		} else {
+			try {
+				const content = await this.resolverFn(resolvedPath);
+				fn = await this.compileFn(content);
+				if (this.production) {
+					this.cacheFiles.set(resolvedPath, fn);
+				}
+			} catch (e) {
+				throw e;
+			}
+		}
+
+		if (!fn) throw new Error(`Could not load view: ${path}`);
+		return this.run(fn, locals);
+	}
+
+	private async run(fn: Function, locals: Record<string, any>): Promise<string> {
 		const rctx: any = {};
 		for (const [k, v] of this.globalContext) {
 			rctx[k] = v;
 		}
 		Object.assign(rctx, locals);
 
-		// Expose locals under the configured varLocals name if exposeLocals is true
 		if (this.exposeLocals) {
 			rctx[this.varLocals] = locals;
 		}
 
-		// Initialize the response and structure symbols on the runtime context
-		rctx[RESPONSE_SYMBOL] = "";
-		rctx[STRUCTURE_SYMBOL] = [];
+		// Reset arrays for this request to avoid sharing global instance
+		rctx['~res'] = "";
+		rctx['~$pre'] = [];
+		rctx['~$pos'] = [];
 
-		// Runtime helper to append to response
 		rctx.res = function (this: any, str: any) {
-			this[RESPONSE_SYMBOL] += str;
+			rctx['~res'] += str;
 		};
 
-		// Runtime alias to get response
-		rctx.$res = () => rctx[RESPONSE_SYMBOL];
+		rctx.$res = () => rctx['~res'];
 
-		// Helper to resolve paths inside directives
 		rctx.resolve = (path: string) => {
 			return this.resolvePath(path);
 		};
 
-		// Method to create a new context based on current one (for isolation)
-		rctx.clone = function (this: any, locals: Record<string, any> = {}): KireContext {
-			const newCtx = { ...this, ...locals };
-			// Initialize for new context
-			newCtx[RESPONSE_SYMBOL] = "";
-			newCtx[STRUCTURE_SYMBOL] = [];
-			return newCtx;
+		rctx.$merge = async function (this: any, func: Function) {
+			const parentRes = this['~res'];
+			this['~res'] = "";
+			await func(this);
+			this['~res'] = parentRes + this['~res'];
 		};
 
-		// Method to clear response/structure for current context
-		rctx.clear = (): void => {
-			rctx[RESPONSE_SYMBOL] = "";
-			rctx[STRUCTURE_SYMBOL] = [];
-		};
+		const fctx = await fn(rctx);
 
-		// Helper to add to context (used by imports logic)
-		rctx.add = async (childFn: Function) => {
-			if (typeof childFn === "function") {
-				// Use clone to create child context, locals are usually passed in @include
-				// If childFn (e.g. from createFunction) needs locals, it's passed during its execution.
-				// Here, childCtx is for its OWN response and structure.
-				const childCtx = rctx.clone();
-
-				// Execute the child function with the child context
-				const resultCtx = await childFn(childCtx);
-
-				// Add the result context to the parent's structure
-				rctx[STRUCTURE_SYMBOL].push(resultCtx);
-
-				// Append the child's response to the parent's response
-				rctx[RESPONSE_SYMBOL] += resultCtx[RESPONSE_SYMBOL];
-			} else {
-				rctx[RESPONSE_SYMBOL] += childFn;
-			}
-		};
-
-		// Execute the compiled function
-		if (this.hooks.onAfterDirectives) {
-			if (Array.isArray(this.hooks.onAfterDirectives)) {
-				for (const hook of this.hooks.onAfterDirectives) {
-					await hook(rctx);
-				}
-			} else {
-				await this.hooks.onAfterDirectives(rctx);
+		// Execute ~$pre functions collected during execution
+		if (fctx['~$pre'] && fctx['~$pre'].length > 0) {
+			for (const preFn of fctx['~$pre']) {
+				await preFn(rctx);
 			}
 		}
 
-		const finalCtx = await fn(rctx);
-
-		// Post-process elements
-		let resultHtml = finalCtx[RESPONSE_SYMBOL];
-
-		// Hook: onBewareElements
-		if (this.hooks.onBewareElements) {
-			if (Array.isArray(this.hooks.onBewareElements)) {
-				for (const hook of this.hooks.onBewareElements) {
-					const res = await hook(rctx, resultHtml);
-					if (typeof res === "string") resultHtml = res;
-				}
-			} else {
-				const res = await this.hooks.onBewareElements(rctx, resultHtml);
-				if (typeof res === "string") resultHtml = res;
-			}
-		}
-
+		let resultHtml = fctx['~res'];
 		if (this.elements.size > 0) {
 			for (const def of this.elements) {
 				const tagName =
 					def.name instanceof RegExp ? def.name.source : def.name;
 
-				// Check if void tag
 				const isVoid =
 					def.void ||
 					(typeof def.name === "string" &&
@@ -481,9 +399,9 @@ export class Kire {
 				const regex = isVoid
 					? new RegExp(`<(${tagName})([^>]*)>`, "gi")
 					: new RegExp(
-							`<(${tagName})([^>]*)>([\\s\\S]*?)<\\/\\1>`,
-							"gi",
-					  );
+						`<(${tagName})([^>]*)>([\\s\\S]*?)<\\/\\1>`,
+						"gi",
+					);
 
 				const matches = [];
 				let match;
@@ -509,7 +427,7 @@ export class Kire {
 						attributes[attrMatch[1]!] = attrMatch[2]!;
 					}
 
-					const elCtx: any = rctx.clone();
+					const elCtx: any = Object.create(rctx);
 					elCtx.content = resultHtml;
 					elCtx.element = {
 						tagName: m.tagName,
@@ -542,17 +460,13 @@ export class Kire {
 			}
 		}
 
-		// Hook: onAfterElements
-		if (this.hooks.onAfterElements) {
-			if (Array.isArray(this.hooks.onAfterElements)) {
-				for (const hook of this.hooks.onAfterElements) {
-					const res = await hook(rctx, resultHtml);
-					if (typeof res === "string") resultHtml = res;
-				}
-			} else {
-				const res = await this.hooks.onAfterElements(rctx, resultHtml);
-				if (typeof res === "string") resultHtml = res;
+		// Execute ~$pos functions (deferred logic)
+		if (fctx['~$pos'] && fctx['~$pos'].length > 0) {
+			for (const posFn of fctx['~$pos']) {
+				await posFn(rctx);
 			}
+			// Update resultHtml if ~$pos modified ~res (e.g. @defined replacement)
+			resultHtml = fctx['~res'];
 		}
 
 		return resultHtml;

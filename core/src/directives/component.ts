@@ -13,11 +13,11 @@ export default (kire: Kire) => {
 		example: `@slot('header')\n  <h1>This is the header</h1>\n@end`,
 		onCall(c) {
 			const name = c.param("name");
-			c.raw(`$slots[${JSON.stringify(name)}] = await (async ($parentCtx) => {`);
-			c.raw(`  const $ctx = $parentCtx.clone();`);
+			c.raw(`await $ctx.$merge(async ($ctx) => {`);
 			if (c.children) c.set(c.children);
-			c.raw(`  return $ctx[Symbol.for('~response')];`);
-			c.raw(`})($ctx);`);
+			c.raw(`  $slots[${JSON.stringify(name)}] = $ctx['~res'];`);
+			c.raw(`  $ctx['~res'] = '';`);
+			c.raw(`});`);
 		},
 	});
 
@@ -36,35 +36,58 @@ export default (kire: Kire) => {
 			ctx.raw(`await (async () => {`);
 			ctx.raw(`  const $slots = {};`);
 
-			ctx.raw(`  const $bodyCtx = $ctx.clone();`);
-			ctx.raw(`  $bodyCtx.slots = $slots;`);
-
-			ctx.raw(`  await (async ($parentCtx) => {`);
-			ctx.raw(`    const $ctx = $bodyCtx;`); // Shadow $ctx
-			ctx.raw(`    with($ctx) {`);
-
+			// Run children to populate slots
+			ctx.raw(`  await $ctx.$merge(async ($ctx) => {`);
+			// Inject $slots into scope for @slot to access
+			// But wait, @slot uses $slots from closure scope if defined in `component` block.
+			// `const $slots = {}` is in the `await (async () => {` block.
+			// @slot runs inside `$ctx.$merge`.
+			// The closure scope is preserved.
+			// But we need to make sure `default` slot is captured correctly.
+			// Default slot is whatever is output by children (excluding what @slot captures/clears).
+			// @slot clears its output. So `~res` will contain only non-slot content.
+			
+			// We need to expose `$slots` to children if they need it? No, @slot uses it from parent scope.
+			// But wait, `slot` directive code `c.raw` will be emitted inside `component` body code.
+			// So `$slots` variable is available.
+			
+			// However, `component` used `$bodyCtx.slots = $slots`.
+			// If we remove `$bodyCtx`, we rely on closure variable `$slots`.
+			
+			ctx.raw(`    $ctx.slots = $slots;`); // Should we attach to ctx? Maybe for nested access?
+			
 			if (ctx.children) await ctx.set(ctx.children);
 
-			ctx.raw(`    }`);
-			ctx.raw(`  })($ctx);`);
-
-			ctx.raw(`  if (!$slots.default) $slots.default = $bodyCtx[Symbol.for('~response')];`);
+			ctx.raw(`    if (!$slots.default) $slots.default = $ctx['~res'];`);
+			ctx.raw(`    $ctx['~res'] = '';`); // Clear default content from parent stream
+			ctx.raw(`  });`);
 
 			// Now load the component template
 			ctx.raw(`  const path = $ctx.resolve(${JSON.stringify(pathExpr)});`);
 			ctx.raw(`  const locals = ${varsExpr};`);
 			ctx.raw(`  const templateFn = await $ctx.require(path, $ctx, locals);`);
 			ctx.raw(`  if (templateFn) {`);
-						ctx.raw(`  const componentCtx = $ctx.clone(locals);`);
-						ctx.raw(`  componentCtx[${JSON.stringify(kire.varLocals)}] = locals;`); // Expose locals under the configured name
-						ctx.raw(`  if(typeof locals === 'object' && locals !== null) locals.slots = $slots;`); // Attach slots to locals for it.slots access
-						ctx.raw(`  componentCtx.slots = $slots;`); // Pass slots to component
-						ctx.raw(`  await templateFn(componentCtx);`);
-						ctx.raw(`  $ctx.res(componentCtx[Symbol.for('~response')]);`);
+			
+			// Render component template
+			// We use $merge to capture output or just run it?
+			// Component output SHOULD be rendered to parent stream.
+			// But we need isolated scope for locals?
+			// "remover o const child = { ...this }".
+			// So we use global context + $merge (which handles res buffer).
+			// We assign locals to global context?
+			
+			ctx.raw(`    await $ctx.$merge(async ($ctx) => {`);
+			ctx.raw(`      Object.assign($ctx, locals);`);
+			ctx.raw(`      $ctx[${JSON.stringify(kire.varLocals)}] = locals;`);
+			ctx.raw(`      if(typeof locals === 'object' && locals !== null) locals.slots = $slots;`);
+			ctx.raw(`      $ctx.slots = $slots;`);
+			
+			ctx.raw(`      await templateFn($ctx);`);
+			ctx.raw(`    });`);
+			
 			ctx.raw(`  }`);
 
 			ctx.raw(`})();`);
 		},
 	});
 };
-

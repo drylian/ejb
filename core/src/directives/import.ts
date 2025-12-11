@@ -13,18 +13,18 @@ export default (kire: Kire) => {
 			const pathExpr = ctx.param("path");
 			const localsExpr = ctx.param("locals") || "{}";
 
-			ctx.raw(`await (async () => {
+			ctx.raw(`await $ctx.$merge(async ($ctx) => {
     const path = $ctx.resolve(${JSON.stringify(pathExpr)});
     const locals = ${localsExpr};
     const templateFn = await $ctx.require(path, $ctx, locals);
     
     if (templateFn) {
-        const childCtx = $ctx.clone(locals);
-        childCtx[${JSON.stringify(kire.varLocals)}] = locals;
-        await templateFn(childCtx);
-        $ctx.res(childCtx[Symbol.for('~response')]);
+        Object.assign($ctx, locals);
+        if(${JSON.stringify(kire.exposeLocals)}) $ctx[${JSON.stringify(kire.varLocals)}] = locals;
+        
+        await templateFn($ctx);
     }
-})();`);
+});`);
 		},
 	});
 };

@@ -133,12 +133,6 @@ export const KireResolver: KirePlugin<ResolverOptions> = {
 		// Assign the new resolver
 		kire.resolverFn = createResolver(opts);
 		kire.readDirFn = createReadDir(opts);
-
-		// Add the .view() method to the Kire instance
-		kire.view = function (filepath: string, locals: Record<string, any> = {}) {
-			// 'this' refers to the Kire instance on which .view() is called
-			return this.render(filepath, locals);
-		};
 	},
 };
 

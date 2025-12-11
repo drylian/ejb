@@ -61,6 +61,6 @@ test("Kire - File Resolver Integration (Mock)", async () => {
 	// Our mock assumes /views/partial.kire is the resolved path.
 
 	// render('partial') -> resolves to /views/partial.kire -> calls resolver -> returns content -> compiles content
-	const result = await kire.render("partial");
+	const result = await kire.view("partial");
 	expect(result).toBe("Partial Content");
 });

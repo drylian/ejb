@@ -5,8 +5,8 @@ export class Parser {
 	private cursor = 0;
 	private stack: Node[] = [];
 	private rootChildren: Node[] = [];
-	private line = 1;
-	private column = 1;
+	public line = 1;
+	public column = 1;
 
 	constructor(
 		private template: string,
