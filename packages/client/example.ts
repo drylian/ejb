@@ -59,7 +59,6 @@ const template = `
             <input
                 type="text"
                 value="{{ it.text }}"
-                <!-- evento agora é it.text(this.value) direto -->
                 oninput="it.text(this.value)"
                 placeholder="Add todo..."
             />
@@ -100,6 +99,38 @@ const template = `
             add,
             remove
         };
+    @end
+
+    <div @ref('form-app') class="card">
+        @client('form-app', { name: '', email: '' })
+            <h2>Form Example</h2>
+            <form onsubmit="it.submit($event)">
+                <div style="margin-bottom: 10px;">
+                    <label>Name:</label>
+                    <input type="text" value="{{ it.name }}" oninput="it.name(this.value)" placeholder="Your name" />
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <label>Email:</label>
+                    <input type="email" value="{{ it.email }}" oninput="it.email(this.value)" placeholder="Your email" />
+                </div>
+                <button type="submit">Submit</button>
+            </form>
+            <p>Preview: {{ it.name }} <span style="color: #888">{{ it.email ? '(' + it.email + ')' : '' }}</span></p>
+        @end
+    </div>
+
+    @reactive('form-app')
+        let name = $state('');
+        let email = $state('');
+
+        const submit = (e) => {
+            e.preventDefault();
+            alert('Form submitted!\\nName: ' + name() + '\\nEmail: ' + email());
+            name('');
+            email('');
+        };
+
+        return { name, email, submit };
     @end
 
 </body>

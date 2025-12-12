@@ -36,7 +36,7 @@ const plugin: KirePlugin = {
         }
 
         // Compila os filhos para gerar o JS que monta HTML no client
-        const compiler = new kire.compilerConstructor(kire);
+        const compiler = new kire.$compiler(kire);
         const children = ctx.children || [];
         const code = await compiler.compile(children);
 

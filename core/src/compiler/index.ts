@@ -107,7 +107,7 @@ export class Compiler {
 					.replace(/\\/g, "\\\\")
 					.replace(/`/g, "\\`")
 					.replace(/\${/g, "\\${ ");
-				this.resBuffer.push(`$ctx.res(${escaped}\n");`);
+				this.resBuffer.push(`$ctx.res(\`${escaped}\`);`);
 			},
 			raw: (code: string) => {
 				this.resBuffer.push(code);

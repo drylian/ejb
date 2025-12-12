@@ -4,11 +4,78 @@ export default () => {
   // Global State & helpers
   // -----------------------------
 
-  let activeEffect: (() => void) | null = null;
+  interface Effect {
+    execute: () => void;
+    deps: Set<Set<Effect>>;
+  }
+
+  let activeEffect: Effect | null = null;
 
   const escapeAttrName = (name: string) => name.replace(/:/g, '\\:');
   const buildAttrSelector = (attr: string, value: string) =>
     `[${escapeAttrName(attr)}=${JSON.stringify(value)}]`;
+
+  // -----------------------------
+  // Diff / Patch Helpers
+  // -----------------------------
+
+  const updateAttributes = (target: Element, source: Element) => {
+    // Remove old
+    Array.from(target.attributes).forEach(attr => {
+        if (!source.hasAttribute(attr.name)) {
+            target.removeAttribute(attr.name);
+        }
+    });
+    // Add/Update new
+    Array.from(source.attributes).forEach(attr => {
+        if (target.getAttribute(attr.name) !== attr.value) {
+            target.setAttribute(attr.name, attr.value);
+            // Sync value/checked properties for inputs
+            if (attr.name === 'value' && 'value' in target && (target as any).value !== attr.value) {
+                (target as any).value = attr.value;
+            }
+            if (attr.name === 'checked' && 'checked' in target) {
+                 (target as any).checked = true;
+            }
+        }
+    });
+  };
+
+  const patch = (parent: Node, newChild: Node, oldChild?: Node) => {
+      if (!oldChild) {
+          parent.appendChild(newChild);
+          return;
+      }
+      
+      if (
+          oldChild.nodeType === newChild.nodeType &&
+          oldChild.nodeName === newChild.nodeName
+      ) {
+          if (oldChild.nodeType === Node.TEXT_NODE) {
+              if (oldChild.nodeValue !== newChild.nodeValue) {
+                  oldChild.nodeValue = newChild.nodeValue;
+              }
+          } else if (oldChild.nodeType === Node.ELEMENT_NODE) {
+              const elOld = oldChild as Element;
+              const elNew = newChild as Element;
+              updateAttributes(elOld, elNew);
+              
+              const oldKids = Array.from(elOld.childNodes);
+              const newKids = Array.from(elNew.childNodes);
+              const max = Math.max(oldKids.length, newKids.length);
+              
+              for(let i=0; i<max; i++) {
+                  if (i >= newKids.length) {
+                      elOld.removeChild(oldKids[i]);
+                  } else {
+                      patch(elOld, newKids[i], oldKids[i]);
+                  }
+              }
+          }
+      } else {
+          parent.replaceChild(newChild, oldChild);
+      }
+  };
 
   // -----------------------------
   // kire.varLocals + Proxy
@@ -49,11 +116,12 @@ export default () => {
 
   const createSignal = (initialValue: any) => {
     let value = initialValue;
-    const subscribers = new Set<() => void>();
+    const subscribers = new Set<Effect>();
 
     const read = () => {
       if (activeEffect) {
         subscribers.add(activeEffect);
+        activeEffect.deps.add(subscribers);
       }
       return value;
     };
@@ -64,7 +132,8 @@ export default () => {
       } else {
         value = newValue;
       }
-      [...subscribers].forEach((fn) => fn());
+      // Copy to array to avoid infinite loops if effects modify signal
+      [...subscribers].forEach((eff) => eff.execute());
       return value;
     };
 
@@ -90,56 +159,45 @@ export default () => {
 
     // Computed / derived signal: $state(() => ...)
     if (typeof initialValue === 'function') {
-      const computedEffect = () => {
+      // Create a computed effect
+      createEffect(() => {
         const newValue = initialValue();
         if (newValue !== value) {
           write(newValue);
         }
-      };
-      createEffect(computedEffect);
+      });
     }
 
     return signal;
   };
 
-  const createEffect = (
-    fn: () => void,
-    deps?: Array<() => any>,
-    debounceMs: number = 0
-  ) => {
-    let timeout: any;
-
-    const work = () => {
-      fn();
+  const createEffect = (fn: () => void) => {
+    const effect: Effect = {
+        execute: () => {
+            // Cleanup deps from previous run
+            cleanupDeps();
+            
+            const prev = activeEffect;
+            activeEffect = effect;
+            try {
+                fn();
+            } finally {
+                activeEffect = prev;
+            }
+        },
+        deps: new Set()
     };
 
-    const run = () => {
-      if (debounceMs > 0) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => {
-          activeEffect = run;
-          work();
-          activeEffect = null;
-        }, debounceMs);
-      } else {
-        activeEffect = run;
-        work();
-        activeEffect = null;
-      }
+    const cleanupDeps = () => {
+        effect.deps.forEach(sub => sub.delete(effect));
+        effect.deps.clear();
     };
 
-    if (deps && Array.isArray(deps) && deps.length) {
-      activeEffect = run;
-      deps.forEach((d) => {
-        if (typeof d === 'function') d();
-      });
-      activeEffect = null;
-      work();
-    } else {
-      run();
-    }
+    // Initial run
+    effect.execute();
 
-    return run;
+    // Return stop function
+    return cleanupDeps;
   };
 
   // -----------------------------
@@ -157,6 +215,18 @@ export default () => {
 
     while (node) {
       const targetNode = node;
+      
+      // Cleanup previous bindings if any
+      if ((targetNode as any).__kire_cleanups) {
+          (targetNode as any).__kire_cleanups.forEach((fn: any) => fn());
+          (targetNode as any).__kire_cleanups = [];
+      } else {
+          (targetNode as any).__kire_cleanups = [];
+      }
+      
+      const addCleanup = (fn: () => void) => {
+          (targetNode as any).__kire_cleanups.push(fn);
+      };
 
       // 1. Text nodes com {{ ... }}
       if (
@@ -186,7 +256,7 @@ export default () => {
         }
 
         if (bindings.length) {
-          createEffect(() => {
+          const stop = createEffect(() => {
             let newText = originalText;
 
             bindings.forEach(({ raw, fn }) => {
@@ -208,6 +278,7 @@ export default () => {
               targetNode.textContent = newText;
             }
           });
+          addCleanup(stop);
         }
       }
 
@@ -240,13 +311,16 @@ export default () => {
                 return;
               }
 
-              el.addEventListener(eventName, function (e) {
+              const listener = function (e: Event) {
                 try {
                   handler.call(el, scope, e);
                 } catch (err) {
                   console.error('[Kire] Event Error', code, err);
                 }
-              });
+              };
+              el.addEventListener(eventName, listener);
+              addCleanup(() => el.removeEventListener(eventName, listener));
+              
             } else if (name === 'kire:ref') {
               // ignore, tratado em $kire.ref
             } else {
@@ -261,7 +335,7 @@ export default () => {
                 return;
               }
 
-              createEffect(() => {
+              const stop = createEffect(() => {
                 try {
                   let result = attrFn(scope);
                   if (typeof result === 'function') {
@@ -272,6 +346,7 @@ export default () => {
                   // ignora erro em attr
                 }
               });
+              addCleanup(stop);
             }
 
             return;
@@ -299,7 +374,7 @@ export default () => {
                 return;
               }
 
-              el.addEventListener(eventName, function (e) {
+              const listener = function (e: Event) {
                 const prev = currentElement;
                 currentElement = el;
                 try {
@@ -312,7 +387,9 @@ export default () => {
                 } finally {
                   currentElement = prev;
                 }
-              });
+              };
+              el.addEventListener(eventName, listener);
+              addCleanup(() => el.removeEventListener(eventName, listener));
             }
           }
         });
@@ -448,20 +525,29 @@ export default () => {
             // re-renderiza o HTML desse @client
             createEffect(() => {
               const ctx: any = {
-                [Symbol.for('~response')]: '',
-                res: (s: string) => (ctx[Symbol.for('~response')] += s)
+                '~res': '',
+                res: (s: string) => (ctx['~res'] += s)
               };
 
               // renderFn vem do compiler do servidor (@client)
               renderFn(ctx, scope);
 
-              const html = ctx[Symbol.for('~response')] || '';
+              const html = ctx['~res'] || '';
               const tpl = document.createElement('template');
               tpl.innerHTML = html;
 
-              // swap de conteúdo
-              container.innerHTML = '';
-              container.appendChild(tpl.content);
+              // Diff / Patch instead of full replacement
+              const oldKids = Array.from(container.childNodes);
+              const newKids = Array.from(tpl.content.childNodes);
+              const max = Math.max(oldKids.length, newKids.length);
+
+              for(let i=0; i<max; i++) {
+                  if (i >= newKids.length) {
+                      container.removeChild(oldKids[i]);
+                  } else {
+                      patch(container, newKids[i], oldKids[i]);
+                  }
+              }
 
               if (rootEl) {
                 // mapeia variáveis de loop (todo de todos, item de items, etc)

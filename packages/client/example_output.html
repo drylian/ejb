@@ -7,7 +7,42 @@
     <title>Kire Client Example</title>
     <script>(() => {
   let activeEffect = null;
-  const escapeAttrName = (name) => name.replace(/:/g, "\\:"), buildAttrSelector = (attr, value) => `[${escapeAttrName(attr)}=${JSON.stringify(value)}]`, varLocals = new WeakMap;
+  const escapeAttrName = (name) => name.replace(/:/g, "\\:"), buildAttrSelector = (attr, value) => `[${ escapeAttrName(attr)}=${ JSON.stringify(value)}]`, updateAttributes = (target, source) => {
+    Array.from(target.attributes).forEach((attr) => {
+      if (!source.hasAttribute(attr.name))
+        target.removeAttribute(attr.name);
+    });
+    Array.from(source.attributes).forEach((attr) => {
+      if (target.getAttribute(attr.name) !== attr.value) {
+        target.setAttribute(attr.name, attr.value);
+        if (attr.name === "value" && "value" in target && target.value !== attr.value)
+          target.value = attr.value;
+        if (attr.name === "checked" && "checked" in target)
+          target.checked = !0;
+      }
+    });
+  }, patch = (parent, newChild, oldChild) => {
+    if (!oldChild) {
+      parent.appendChild(newChild);
+      return;
+    }
+    if (oldChild.nodeType === newChild.nodeType && oldChild.nodeName === newChild.nodeName) {
+      if (oldChild.nodeType === Node.TEXT_NODE) {
+        if (oldChild.nodeValue !== newChild.nodeValue)
+          oldChild.nodeValue = newChild.nodeValue;
+      } else if (oldChild.nodeType === Node.ELEMENT_NODE) {
+        const elOld = oldChild, elNew = newChild;
+        updateAttributes(elOld, elNew);
+        const oldKids = Array.from(elOld.childNodes), newKids = Array.from(elNew.childNodes), max = Math.max(oldKids.length, newKids.length);
+        for (let i = 0;i < max; i++)
+          if (i >= newKids.length)
+            elOld.removeChild(oldKids[i]);
+          else
+            patch(elOld, newKids[i], oldKids[i]);
+      }
+    } else
+      parent.replaceChild(newChild, oldChild);
+  }, varLocals = new WeakMap;
   let currentElement = null;
   const resolveLocal = (start, name) => {
     let el = start;
@@ -36,15 +71,17 @@
   }), createSignal = (initialValue) => {
     let value = initialValue;
     const subscribers = new Set, read = () => {
-      if (activeEffect)
+      if (activeEffect) {
         subscribers.add(activeEffect);
+        activeEffect.deps.add(subscribers);
+      }
       return value;
     }, write = (newValue) => {
       if (typeof newValue === "function")
         value = newValue(value);
       else
         value = newValue;
-      [...subscribers].forEach((fn) => fn());
+      [...subscribers].forEach((eff) => eff.execute());
       return value;
     }, signal = (...args) => {
       if (args.length === 0)
@@ -66,54 +103,54 @@
           write(newValue);
       });
     return signal;
-  }, createEffect = (fn, deps, debounceMs = 0) => {
-    let timeout;
-    const work = () => {
-      fn();
-    }, run = () => {
-      if (debounceMs > 0) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => {
-          activeEffect = run;
-          work();
-          activeEffect = null;
-        }, debounceMs);
-      } else {
-        activeEffect = run;
-        work();
-        activeEffect = null;
-      }
+  }, createEffect = (fn) => {
+    const effect = {
+      execute: () => {
+        cleanupDeps();
+        const prev = activeEffect;
+        activeEffect = effect;
+        try {
+          fn();
+        } finally {
+          activeEffect = prev;
+        }
+      },
+      deps: new Set
+    }, cleanupDeps = () => {
+      effect.deps.forEach((sub) => sub.delete(effect));
+      effect.deps.clear();
     };
-    if (deps && Array.isArray(deps) && deps.length) {
-      activeEffect = run;
-      deps.forEach((d) => {
-        if (typeof d === "function")
-          d();
-      });
-      activeEffect = null;
-      work();
-    } else
-      run();
-    return run;
+    effect.execute();
+    return cleanupDeps;
   }, scanAndBind = (root, scope) => {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null);
     let node = walker.currentNode;
     while (node) {
       const targetNode = node;
+      if (targetNode.__kire_cleanups) {
+        targetNode.__kire_cleanups.forEach((fn) => fn());
+        targetNode.__kire_cleanups = [];
+      } else
+        targetNode.__kire_cleanups = [];
+      const addCleanup = (fn) => {
+        targetNode.__kire_cleanups.push(fn);
+      };
       if (targetNode.nodeType === Node.TEXT_NODE && targetNode.textContent && targetNode.textContent.includes("{{")) {
         const originalText = targetNode.textContent, exprRegex = /{{(.*?)}}/g, bindings = [];
         let match;
         while (match = exprRegex.exec(originalText)) {
-          const raw = match[0], code = match[1].trim();
+          const raw = match[0], code = match[1]?.trim();
+          if (!code)
+            continue;
           try {
-            const exprFn = Function("scope", `with(scope) { return ${code} }`);
+            const exprFn = Function("scope", `with(scope) { return ${ code} }`);
             bindings.push({ raw, fn: exprFn });
           } catch (e) {
             console.error("[Kire] Error compiling", code, e);
           }
         }
-        if (bindings.length)
-          createEffect(() => {
+        if (bindings.length) {
+          const stop = createEffect(() => {
             let newText = originalText;
             bindings.forEach(({ raw, fn }) => {
               try {
@@ -128,6 +165,8 @@
             if (targetNode.textContent !== newText)
               targetNode.textContent = newText;
           });
+          addCleanup(stop);
+        }
       }
       if (targetNode.nodeType === Node.ELEMENT_NODE) {
         const el = targetNode;
@@ -142,29 +181,31 @@
               el.removeAttribute(name);
               let handler;
               try {
-                handler = Function("scope", "$event", `with(scope) { ${code} }`);
+                handler = Function("scope", "$event", `with(scope) { ${ code} }`);
               } catch (err) {
                 console.error("[Kire] Event compile error", code, err);
                 return;
               }
-              el.addEventListener(eventName, function(e) {
+              const listener = function(e) {
                 try {
                   handler.call(el, scope, e);
                 } catch (err) {
                   console.error("[Kire] Event Error", code, err);
                 }
-              });
+              };
+              el.addEventListener(eventName, listener);
+              addCleanup(() => el.removeEventListener(eventName, listener));
             } else if (name === "kire:ref")
               ;
             else {
               let attrFn;
               try {
-                attrFn = Function("scope", `with(scope) { return ${code} }`);
+                attrFn = Function("scope", `with(scope) { return ${ code} }`);
               } catch (e) {
                 console.error("[Kire] Attr compile error", code, e);
                 return;
               }
-              createEffect(() => {
+              const stop = createEffect(() => {
                 try {
                   let result = attrFn(scope);
                   if (typeof result === "function")
@@ -172,6 +213,7 @@
                   el.setAttribute(name, String(result));
                 } catch (e) {}
               });
+              addCleanup(stop);
             }
             return;
           }
@@ -182,12 +224,12 @@
               el.removeAttribute(name);
               let handlerFn;
               try {
-                handlerFn = Function("$locals", "$event", `with($locals) { ${trimmed} }`);
+                handlerFn = Function("$locals", "$event", `with($locals) { ${ trimmed} }`);
               } catch (err) {
                 console.error("[Kire] Event compile error (it.*) " + trimmed, err);
                 return;
               }
-              el.addEventListener(eventName, function(e) {
+              const listener = function(e) {
                 const prev = currentElement;
                 currentElement = el;
                 try {
@@ -197,7 +239,9 @@
                 } finally {
                   currentElement = prev;
                 }
-              });
+              };
+              el.addEventListener(eventName, listener);
+              addCleanup(() => el.removeEventListener(eventName, listener));
             }
           }
         });
@@ -279,14 +323,18 @@
             }
             createEffect(() => {
               const ctx = {
-                [Symbol.for("~response")]: "",
-                res: (s) => ctx[Symbol.for("~response")] += s
+                "~res": "",
+                res: (s) => ctx["~res"] += s
               };
               renderFn(ctx, scope);
-              const html = ctx[Symbol.for("~response")] || "", tpl = document.createElement("template");
+              const html = ctx["~res"] || "", tpl = document.createElement("template");
               tpl.innerHTML = html;
-              container.innerHTML = "";
-              container.appendChild(tpl.content);
+              const oldKids = Array.from(container.childNodes), newKids = Array.from(tpl.content.childNodes), max = Math.max(oldKids.length, newKids.length);
+              for (let i = 0;i < max; i++)
+                if (i >= newKids.length)
+                  container.removeChild(oldKids[i]);
+                else
+                  patch(container, newKids[i], oldKids[i]);
               if (rootEl) {
                 assignLoopLocals(rootEl, scope);
                 scanAndBind(rootEl, scope);
@@ -326,17 +374,17 @@
     
     <div kire:ref="counter-app" class="card">
         <!-- The client directive mounts the logic here -->
-        <!-- $counter-app --><script>$kire.mount("counter-app", async ($ctx, $scope) => {  const it = $scope || { count: 0 };
-with($ctx) {
-$ctx[Symbol.for('~response')] += "\n            <h2>Counter: ";
-$ctx[Symbol.for('~response')] += (it.count);
-$ctx[Symbol.for('~response')] += "</h2>\n            <p>Double: ";
-$ctx[Symbol.for('~response')] += (it.double());
-$ctx[Symbol.for('~response')] += "</p>\n            <!-- AQUI: sem ";
-$ctx[Symbol.for('~response')] += ", deixamos it.increment() literal -->\n            <button onclick=\"it.increment()\">Increment</button>\n        ";
-}
+        <!-- $counter-app --><script>$kire.mount("counter-app", async ($ctx, $scope) => {  const it = $scope || { count: 0 };with($ctx) { 
 
-return $ctx;});</script>
+$ctx['~res'] += "\n            <h2>Counter: ";
+$ctx['~res'] += (it.count);
+$ctx['~res'] += "</h2>\n            <p>Double: ";
+$ctx['~res'] += (it.double());
+$ctx['~res'] += "</p>\n            <!-- AQUI: sem ";
+$ctx['~res'] += ", deixamos it.increment() literal -->\n            <button onclick=\"it.increment()\">Increment</button>\n        ";
+
+return $ctx;
+ }});</script>
     </div>
 
     <script>$kire.reactive("counter-app", () => {
@@ -359,21 +407,21 @@ return $ctx;});</script>
     });</script>
 
     <div kire:ref="todo-app" class="card">
-        <!-- $todo-app --><script>$kire.mount("todo-app", async ($ctx, $scope) => {  const it = $scope || { todos: [], text: '' };
-with($ctx) {
-$ctx[Symbol.for('~response')] += "\n            <h2>Todos</h2>\n            <!-- value ainda pode usar ";
-$ctx[Symbol.for('~response')] += ", é só renderização -->\n            <input\n                type=\"text\"\n                value=\"";
-$ctx[Symbol.for('~response')] += (it.text);
-$ctx[Symbol.for('~response')] += "\"\n                <!-- evento agora é it.text(this.value) direto -->\n                oninput=\"it.text(this.value)\"\n                placeholder=\"Add todo...\"\n            />\n            <button onclick=\"it.add()\">Add</button>\n            <ul>\n                ";
-for (const todo of it.todos) {
-$ctx[Symbol.for('~response')] += "\n                     <li>\n                         ";
-$ctx[Symbol.for('~response')] += (todo);
-$ctx[Symbol.for('~response')] += "\n                         <button\n                             onclick=\"it.remove(todo)\"\n                             style=\"font-size:0.8em; padding:2px 5px; margin-left:5px; background:red;\"\n                         >\n                             x\n                         </button>\n                     </li>\n                ";
-}
-$ctx[Symbol.for('~response')] += "\n            </ul>\n        ";
-}
+        <!-- $todo-app --><script>$kire.mount("todo-app", async ($ctx, $scope) => {  const it = $scope || { todos: [], text: '' };with($ctx) { 
 
-return $ctx;});</script>
+$ctx['~res'] += "\n            <h2>Todos</h2>\n            <!-- value ainda pode usar ";
+$ctx['~res'] += ", é só renderização -->\n            <input\n                type=\"text\"\n                value=\"";
+$ctx['~res'] += (it.text);
+$ctx['~res'] += "\"\n                oninput=\"it.text(this.value)\"\n                placeholder=\"Add todo...\"\n            />\n            <button onclick=\"it.add()\">Add</button>\n            <ul>\n                ";
+for (const todo of it.todos) {
+$ctx['~res'] += "\n                     <li>\n                         ";
+$ctx['~res'] += (todo);
+$ctx['~res'] += "\n                         <button\n                             onclick=\"it.remove(todo)\"\n                             style=\"font-size:0.8em; padding:2px 5px; margin-left:5px; background:red;\"\n                         >\n                             x\n                         </button>\n                     </li>\n                ";
+}
+$ctx['~res'] += "\n            </ul>\n        ";
+
+return $ctx;
+ }});</script>
     </div>
 
     <script>$kire.reactive("todo-app", () => {
@@ -396,6 +444,37 @@ return $ctx;});</script>
             add,
             remove
         };
+    });</script>
+
+    <div kire:ref="form-app" class="card">
+        <!-- $form-app --><script>$kire.mount("form-app", async ($ctx, $scope) => {  const it = $scope || { name: '', email: '' };with($ctx) { 
+
+$ctx['~res'] += "\n            <h2>Form Example</h2>\n            <form onsubmit=\"it.submit($event)\">\n                <div style=\"margin-bottom: 10px;\">\n                    <label>Name:</label>\n                    <input type=\"text\" value=\"";
+$ctx['~res'] += (it.name);
+$ctx['~res'] += "\" oninput=\"it.name(this.value)\" placeholder=\"Your name\" />\n                </div>\n                <div style=\"margin-bottom: 10px;\">\n                    <label>Email:</label>\n                    <input type=\"email\" value=\"";
+$ctx['~res'] += (it.email);
+$ctx['~res'] += "\" oninput=\"it.email(this.value)\" placeholder=\"Your email\" />\n                </div>\n                <button type=\"submit\">Submit</button>\n            </form>\n            <p>Preview: ";
+$ctx['~res'] += (it.name);
+$ctx['~res'] += " <span style=\"color: #888\">";
+$ctx['~res'] += (it.email ? '(' + it.email + ')' : '');
+$ctx['~res'] += "</span></p>\n        ";
+
+return $ctx;
+ }});</script>
+    </div>
+
+    <script>$kire.reactive("form-app", () => {
+        let name = $state('');
+        let email = $state('');
+
+        const submit = (e) => {
+            e.preventDefault();
+            alert('Form submitted!\nName: ' + name() + '\nEmail: ' + email());
+            name('');
+            email('');
+        };
+
+        return { name, email, submit };
     });</script>
 
 </body>
