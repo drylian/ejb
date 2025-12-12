@@ -26,10 +26,10 @@ export const KireMarkdown: KirePlugin<MarkdownOptions> = {
 
 		// Expose readDir proxy for runtime
 		kire.$ctx("readDir", async (pattern: string) => {
-			if (kire.readDirFn) {
-				return kire.readDirFn(pattern);
+			if (kire.$readdir) {
+				return kire.$readdir(pattern);
 			}
-			console.warn("kire.readDirFn is not defined. Make sure @kirejs/resolver is loaded.");
+			console.warn("kire.$readdir is not defined. Make sure @kirejs/resolver is loaded.");
 			return [];
 		});
 

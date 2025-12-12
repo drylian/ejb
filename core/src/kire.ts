@@ -14,42 +14,36 @@ import type {
 	KireSchematic,
 } from "./types";
 import { md5 } from "./utils/md5";
-import { join } from "./utils/path";
+import { resolvePath } from "./utils/resolve";
 
 export class Kire {
-	public directives: Map<string, DirectiveDefinition> = new Map();
-	public elements: Set<ElementDefinition> = new Set();
-	public globalContext: Map<string, any> = new Map();
+	public $directives: Map<string, DirectiveDefinition> = new Map();
+	public $elements: Set<ElementDefinition> = new Set();
+	public $globals: Map<string, any> = new Map();
 
 	public root: string;
 	public production: boolean;
-	public resolverFn: (filename: string) => Promise<string>;
-	public readDirFn?: (pattern: string) => Promise<string[]>;
-	public alias: Record<string, string>; extension: string;
-	public cacheFiles: Map<string, Function> = new Map();
-	public parserConstructor: IParserConstructor;
-	public compilerConstructor: ICompilerConstructor;
-	public varLocals: string;
-	public exposeLocals: boolean;
-
-	private _cacheStore: Map<string, Map<string, any>> = new Map();
-
-	public get $cache() {
-		return {
-			clear: () => this._cacheStore.clear(),
-		};
-	}
+	public $resolver: (filename: string) => Promise<string>;
+	public $readdir?: (pattern: string) => Promise<string[]>;
+	public alias: Record<string, string>;
+	public extension: string;
+	public $files: Map<string, Function> = new Map();
+	public $parser: IParserConstructor;
+	public $compiler: ICompilerConstructor;
+	public $var_locals: string;
+	public $expose_locals: boolean;
+	public $cache: Map<string, Map<string, any>> = new Map();
 
 	public cacheClear() {
-		this._cacheStore.clear();
-		this.cacheFiles.clear();
+		this.$cache.clear();
+		this.$files.clear();
 	}
 
 	public cached<T = any>(namespace: string): KireCache<T> {
-		if (!this._cacheStore.has(namespace)) {
-			this._cacheStore.set(namespace, new Map());
+		if (!this.$cache.has(namespace)) {
+			this.$cache.set(namespace, new Map());
 		}
-		const store = this._cacheStore.get(namespace)!;
+		const store = this.$cache.get(namespace)!;
 		return {
 			get: (key: string) => store.get(key),
 			set: (key: string, value: T) => store.set(key, value),
@@ -65,36 +59,44 @@ export class Kire {
 		this.production = options.production ?? true;
 		this.alias = options.alias ?? { "~/": this.root };
 		this.extension = options.extension ?? "kire";
-		this.varLocals = options.varLocals ?? "it";
-		this.exposeLocals = options.exposeLocals ?? true;
+		this.$var_locals = options.varLocals ?? "it";
+		this.$expose_locals = options.exposeLocals ?? true;
 
-		this.resolverFn =
+		this.$resolver =
 			options.resolver ??
 			(async (filename) => {
 				throw new Error(`No resolver defined for path: ${filename}`);
 			});
 
-		this.parserConstructor = options.engine?.parser ?? Parser;
-		this.compilerConstructor = options.engine?.compiler ?? Compiler;
+		this.$parser = options.engine?.parser ?? Parser;
+		this.$compiler = options.engine?.compiler ?? Compiler;
 
 		// Register internal helpers
-		this.$ctx("md5", md5);
+		this.$ctx("$md5", md5);
 		this.$ctx("~$pre", []);
 		this.$ctx("~$pos", []);
 		this.$ctx(
-			"require",
+			"$require",
 			async (path: string) => {
+				// Use absolute path for caching key to avoid conflicts
+				const resolvedPath = resolvePath(
+					path,
+					this.root,
+					this.alias,
+					this.extension,
+				);
+
 				const cached = this.cached("@kirejs/core");
 				const isProd = this.production;
-				const hash = cached.get(`md5:${path}`);
+				const hash = cached.get(`md5:${resolvedPath}`);
 				let content = "";
 
 				if (!hash || !isProd) {
 					try {
-						content = await this.resolverFn(path);
+						content = await this.$resolver(resolvedPath);
 					} catch (e: any) {
 						if (!e.message.includes("No resolver")) {
-							console.warn(`Failed to resolve path: ${path}`, e);
+							console.warn(`Failed to resolve path: ${resolvedPath}`, e);
 						}
 						return null;
 					}
@@ -107,20 +109,20 @@ export class Kire {
 
 					if (!isProd && hash) {
 						if (ihash === hash) {
-							return cached.get(`js:${path}`);
+							return cached.get(`js:${resolvedPath}`);
 						}
 						else {
-							cached.delete(`md5:${path}`);
-							cached.delete(`js:${path}`);
+							cached.delete(`md5:${resolvedPath}`);
+							cached.delete(`js:${resolvedPath}`);
 						}
 					}
 
-					const fn = await this.compileFn(content);
-					cached.set(`md5:${path}`, ihash);
-					cached.set(`js:${path}`, fn);
-					return fn;
+					const compiled = await this.compileFn(content);
+					cached.set(`md5:${resolvedPath}`, ihash);
+					cached.set(`js:${resolvedPath}`, compiled);
+					return compiled;
 				} else {
-					return cached.get(`js:${path}`);
+					return cached.get(`js:${resolvedPath}`);
 				}
 			}
 		);
@@ -172,7 +174,7 @@ export class Kire {
 		version?: string,
 	): KireSchematic {
 		const globals: Record<string, any> = {};
-		this.globalContext.forEach((value, key) => {
+		this.$globals.forEach((value, key) => {
 			globals[key] = value;
 		});
 
@@ -180,8 +182,8 @@ export class Kire {
 			package: name,
 			repository,
 			version,
-			directives: Array.from(this.directives.values()),
-			elements: Array.from(this.elements.values()),
+			directives: Array.from(this.$directives.values()),
+			elements: Array.from(this.$elements.values()),
 			globals: globals,
 		};
 	}
@@ -196,10 +198,10 @@ export class Kire {
 			"onCall" in nameOrDef &&
 			!("source" in nameOrDef)
 		) {
-			this.elements.add(nameOrDef as ElementDefinition);
+			this.$elements.add(nameOrDef as ElementDefinition);
 		} else {
 			if (!handler) throw new Error("Handler is required for legacy element()")
-			this.elements.add({
+			this.$elements.add({
 				name: nameOrDef as string | RegExp,
 				void: options?.void,
 				onCall: handler,
@@ -209,7 +211,7 @@ export class Kire {
 	}
 
 	public directive(def: DirectiveDefinition) {
-		this.directives.set(def.name, def);
+		this.$directives.set(def.name, def);
 		if (def.parents) {
 			for (const parent of def.parents) {
 				this.directive(parent);
@@ -219,76 +221,24 @@ export class Kire {
 	}
 
 	public getDirective(name: string) {
-		return this.directives.get(name);
+		return this.$directives.get(name);
 	}
 
 	public $ctx(key: string, value: any) {
-		this.globalContext.set(key, value);
+		this.$globals.set(key, value);
 		return this;
 	}
 
 	public parse(template: string) {
-		const parser = new this.parserConstructor(template, this);
+		const parser = new this.$parser(template, this);
 		return parser.parse();
 	}
 
 	public async compile(template: string): Promise<string> {
-		const parser = new this.parserConstructor(template, this);
+		const parser = new this.$parser(template, this);
 		const nodes = parser.parse();
-		const compiler = new this.compilerConstructor(this);
+		const compiler = new this.$compiler(this);
 		return compiler.compile(nodes);
-	}
-
-	public resolvePath(filepath: string, currentFile?: string): string {
-		if (!filepath) return filepath;
-
-		if (filepath.startsWith("http://") || filepath.startsWith("https://")) {
-			return filepath;
-		}
-
-		let resolved = filepath.replace(/\\/g, "/").replace(/(?<!:)\/+/g, "/");
-		const root = this.root.replace(/\\/g, "/").replace(/\/$/, "");
-
-		const isWindowsAbsolute = /^[a-zA-Z]:\//.test(resolved);
-
-		const aliases = Object.entries(this.alias);
-		aliases.sort((a, b) => b[0].length - a[0].length);
-
-		let matchedAlias = false;
-		for (const [alias, replacement] of aliases) {
-			const escapedAlias = alias.replace(/[.*+?^${}()|[\\]/g, "\\$& ");
-			if (new RegExp(`^${escapedAlias}`).test(filepath)) {
-				resolved = join(replacement, filepath.slice(alias.length));
-				matchedAlias = true;
-				break;
-			}
-		}
-
-		if (matchedAlias) {
-			// handled
-		} else {
-			const isResolvedAbsolute = /^(?:\/|[a-zA-Z]:\/)/.test(resolved);
-			if (!isResolvedAbsolute && !isWindowsAbsolute) {
-				const base = currentFile
-					? currentFile.replace(/\\/g, "/").replace(/\/[^/]*$/, "")
-					: root;
-				resolved = join(base, resolved);
-			}
-		}
-
-		if (
-			this.extension &&
-			!/\.[^/.]+$/.test(resolved) &&
-			!(resolved.startsWith("http://") || resolved.startsWith("https://"))
-		) {
-			const ext =
-				this.extension.charAt(0) === "."
-					? this.extension
-					: `.${this.extension}`;
-			resolved += ext;
-		}
-
-		return resolved.replace(/\/+/g, "/");
 	}
 
 	public async compileFn(content: string): Promise<Function> {
@@ -298,10 +248,8 @@ export class Kire {
 
 			const mainFn = new AsyncFunction("$ctx", code);
 
-			return async ($ctx: any) => {
-				await mainFn($ctx);
-				return $ctx;
-			};
+			// Return the separated functions
+			return mainFn;
 		} catch (e) {
 			console.error("Error creating function from code:", code);
 			throw e;
@@ -320,39 +268,45 @@ export class Kire {
 		path: string,
 		locals: Record<string, any> = {},
 	): Promise<string> {
-		const resolvedPath = this.resolvePath(path);
-		let fn: Function | undefined;
+		const resolvedPath = resolvePath(path, this.root, this.alias, this.extension);
+		let compiled: Function | undefined;
 
-		if (this.production && this.cacheFiles.has(resolvedPath)) {
-			fn = this.cacheFiles.get(resolvedPath);
+		if (this.production && this.$files.has(resolvedPath)) {
+			compiled = this.$files.get(resolvedPath) as any;
 		} else {
 			try {
-				const content = await this.resolverFn(resolvedPath);
-				fn = await this.compileFn(content);
+				const content = await this.$resolver(resolvedPath);
+				compiled = await this.compileFn(content);
 				if (this.production) {
-					this.cacheFiles.set(resolvedPath, fn);
+					this.$files.set(resolvedPath, compiled as any);
 				}
 			} catch (e) {
 				throw e;
 			}
 		}
 
-		if (!fn) throw new Error(`Could not load view: ${path}`);
-		return this.run(fn, locals);
+		if (!compiled) throw new Error(`Could not load view: ${path}`);
+		return this.run(compiled, locals);
 	}
 
-	private async run(fn: Function, locals: Record<string, any>): Promise<string> {
+	public resolvePath(
+		filepath: string,
+		currentFile?: string,
+	): string {
+		return resolvePath(filepath, this.root, this.alias, this.extension, currentFile);
+	}
+
+	private async run(mainFn: Function, locals: Record<string, any>): Promise<string> {
 		const rctx: any = {};
-		for (const [k, v] of this.globalContext) {
+		for (const [k, v] of this.$globals) {
 			rctx[k] = v;
 		}
 		Object.assign(rctx, locals);
 
-		if (this.exposeLocals) {
-			rctx[this.varLocals] = locals;
+		if (this.$expose_locals) {
+			rctx[this.$var_locals] = locals;
 		}
 
-		// Reset arrays for this request to avoid sharing global instance
 		rctx['~res'] = "";
 		rctx['~$pre'] = [];
 		rctx['~$pos'] = [];
@@ -363,7 +317,7 @@ export class Kire {
 
 		rctx.$res = () => rctx['~res'];
 
-		rctx.resolve = (path: string) => {
+		rctx.$resolve = (path: string) => {
 			return this.resolvePath(path);
 		};
 
@@ -374,18 +328,27 @@ export class Kire {
 			this['~res'] = parentRes + this['~res'];
 		};
 
-		const fctx = await fn(rctx);
+		const finalCtx = await mainFn(rctx);
 
 		// Execute ~$pre functions collected during execution
-		if (fctx['~$pre'] && fctx['~$pre'].length > 0) {
-			for (const preFn of fctx['~$pre']) {
+		if (finalCtx['~$pre'] && finalCtx['~$pre'].length > 0) {
+			for (const preFn of finalCtx['~$pre']) {
 				await preFn(rctx);
 			}
 		}
 
-		let resultHtml = fctx['~res'];
-		if (this.elements.size > 0) {
-			for (const def of this.elements) {
+		let resultHtml = finalCtx['~res'];
+		
+		// Execute ~$pos functions (deferred logic)
+		if (finalCtx['~$pos'] && finalCtx['~$pos'].length > 0) {
+			for (const posFn of finalCtx['~$pos']) {
+				await posFn(rctx);
+			}
+			resultHtml = finalCtx['~res'];
+		}
+
+		if (this.$elements.size > 0) {
+			for (const def of this.$elements) {
 				const tagName =
 					def.name instanceof RegExp ? def.name.source : def.name;
 
@@ -399,7 +362,7 @@ export class Kire {
 				const regex = isVoid
 					? new RegExp(`<(${tagName})([^>]*)>`, "gi")
 					: new RegExp(
-						`<(${tagName})([^>]*)>([\\s\\S]*?)<\\/\\1>`,
+						`<(${tagName})([^>]*)>([\\s\\S]*?)<\/\\1>`,
 						"gi",
 					);
 
@@ -458,15 +421,6 @@ export class Kire {
 					}
 				}
 			}
-		}
-
-		// Execute ~$pos functions (deferred logic)
-		if (fctx['~$pos'] && fctx['~$pos'].length > 0) {
-			for (const posFn of fctx['~$pos']) {
-				await posFn(rctx);
-			}
-			// Update resultHtml if ~$pos modified ~res (e.g. @defined replacement)
-			resultHtml = fctx['~res'];
 		}
 
 		return resultHtml;

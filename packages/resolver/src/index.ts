@@ -131,8 +131,8 @@ export const KireResolver: KirePlugin<ResolverOptions> = {
 	options: {},
 	load(kire: Kire, opts) {
 		// Assign the new resolver
-		kire.resolverFn = createResolver(opts);
-		kire.readDirFn = createReadDir(opts);
+		kire.$resolver = createResolver(opts);
+		kire.$readdir = createReadDir(opts);
 	},
 };
 

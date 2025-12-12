@@ -30,8 +30,8 @@ describe("KireMarkdown", () => {
 			plugins: [KireMarkdown],
 			root: process.cwd(),
 		});
-		// Mock readDirFn just in case, though not used here
-		kire.readDirFn = async () => []; 
+		// Mock $readdir just in case, though not used here
+		kire.$readdir = async () => []; 
 
 		const tpl = `@markdown('${TEMP_MD}')`;
 		const result = await kire.render(tpl);
@@ -42,8 +42,8 @@ describe("KireMarkdown", () => {
 	it("should render wildcard content (glob pattern)", async () => {
 		const kire = new Kire({ plugins: [KireMarkdown] });
 		
-		// Mock readDirFn
-		kire.readDirFn = async (pattern) => {
+		// Mock $readdir
+		kire.$readdir = async (pattern) => {
 			if (pattern === "content/*.md") return ["file1.md", "file2.md"];
 			return [];
 		};

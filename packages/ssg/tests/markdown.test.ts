@@ -82,34 +82,34 @@ describe("KireSsg Build", () => {
                 [KireSsg, { assetsPrefix: 'static' }], 
                 KireMarkdown, 
                 [KireAssets, { prefix: 'static' }],
-                KireResolver // Add resolver to provide readDirFn
+                KireResolver // Add resolver to provide $readdir
             ],
-            // resolver: async (path) => await readFile(path, 'utf-8') // KireResolver handles this now, but we can keep or remove. KireResolver overrides kire.resolverFn.
+            // resolver: async (path) => await readFile(path, 'utf-8') // KireResolver handles this now, but we can keep or remove. KireResolver overrides kire.$resolver.
         });
-        // Since we added KireResolver plugin, it overrides resolverFn. We don't need to manually set it unless we want to.
+        // Since we added KireResolver plugin, it overrides $resolver. We don't need to manually set it unless we want to.
         // However, KireResolver reads from disk relative to CWD usually or absolute paths.
         // In test, kire.root is `srcDir`.
         // `docs/*.md` pattern is relative to `srcDir`?
-        // `readDirFn` in resolver uses `recursiveReaddir` starting from `.` (process.cwd) if not specified?
-        // My `readDirFn` impl uses hardcoded `root = "."`. 
+        // `$readdir` in resolver uses `recursiveReaddir` starting from `.` (process.cwd) if not specified?
+        // My `$readdir` impl uses hardcoded `root = "."`. 
         // This might be an issue if the test runs in project root but files are in `./test-ssg-build/src`.
-        // The pattern passed to `readDirFn` will be `docs/*.md`.
+        // The pattern passed to `$readdir` will be `docs/*.md`.
         // The glob logic: `docs/*.md` in `.` (root).
         // But files are in `test-ssg-build/src/docs/*.md`.
-        // So `readDirFn` won't find them if searching from `.` using pattern `docs/*.md`.
+        // So `$readdir` won't find them if searching from `.` using pattern `docs/*.md`.
         
-        // Hack: Change kire.readDirFn to search in srcDir?
-        // OR update `readDirFn` implementation to respect `kire.root`?
-        // But `readDirFn` is attached by `resolver` plugin, which doesn't know about `kire.root` changes dynamically unless configured.
+        // Hack: Change kire.$readdir to search in srcDir?
+        // OR update `$readdir` implementation to respect `kire.root`?
+        // But `$readdir` is attached by `resolver` plugin, which doesn't know about `kire.root` changes dynamically unless configured.
         // The resolver `createReadDir` uses `.` as root.
         
-        // I should update the test to mock `readDirFn` OR update the pattern to be relative to CWD.
+        // I should update the test to mock `$readdir` OR update the pattern to be relative to CWD.
         // `test-ssg-build/src/docs/*.md`.
         // But the template uses `docs/*.md`.
         
-        // Better: Update the test to mock `readDirFn` manually to ensure it works in test environment without relying on my potentially flawed `readDirFn` implementation regarding root paths.
+        // Better: Update the test to mock `$readdir` manually to ensure it works in test environment without relying on my potentially flawed `$readdir` implementation regarding root paths.
         
-        kire.readDirFn = async (pattern) => {
+        kire.$readdir = async (pattern) => {
              // pattern is 'docs/*.md' or 'blog/**/*.md'
              // we need to return relative paths (as keys for slots)?
              // AND we need to find the files in `srcDir`.
@@ -118,11 +118,11 @@ describe("KireSsg Build", () => {
              // import { glob } from 'glob'; // wait, I don't have it imported in test file.
              // I can use readdir recursively.
              
-             // But wait, `KireMarkdown` calls `readDirFn(pattern)`.
+             // But wait, `KireMarkdown` calls `$readdir(pattern)`.
              // And uses the result to call `renderMarkdown(file)`.
              // `renderMarkdown` uses `resolvePath`.
-             // If `readDirFn` returns `docs/intro.md`, `resolvePath` (with root=srcDir) will resolve to `srcDir/docs/intro.md`.
-             // So `readDirFn` MUST return paths relative to `root`.
+             // If `$readdir` returns `docs/intro.md`, `resolvePath` (with root=srcDir) will resolve to `srcDir/docs/intro.md`.
+             // So `$readdir` MUST return paths relative to `root`.
              
              // Let's implement a simple mock for this test.
              if (pattern === 'docs/*.md') {

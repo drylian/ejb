@@ -162,7 +162,7 @@ describe("Kire Layout Directives", () => {
 
 describe("Kire Component Directives", () => {
 	const kire = new Kire();
-	kire.resolverFn = async (path) => {
+	kire.$resolver = async (path) => {
 		if (path.includes("alert"))
 			return `<div class="alert {{ it.type }}">{{ it.slots.default }} @if(it.slots.footer)<footer>{{ it.slots.footer }}</footer>@end</div>`;
 		if (path.includes("card"))
@@ -226,7 +226,7 @@ describe("Kire Component Directives", () => {
 
 describe("Kire Include Directive", () => {
 	const kire = new Kire();
-	kire.resolverFn = async (path) => {
+	kire.$resolver = async (path) => {
 		if (path === "child.kire") return `Child: {{ it.name }}`;
 		if (path === "grandchild.kire")
 			return `Grandchild: {{ it.item.name }} and {{ it.item.value }}`;

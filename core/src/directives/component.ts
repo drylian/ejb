@@ -63,9 +63,9 @@ export default (kire: Kire) => {
 			ctx.raw(`  });`);
 
 			// Now load the component template
-			ctx.raw(`  const path = $ctx.resolve(${JSON.stringify(pathExpr)});`);
+			ctx.raw(`  const path = $ctx.$resolve(${JSON.stringify(pathExpr)});`);
 			ctx.raw(`  const locals = ${varsExpr};`);
-			ctx.raw(`  const templateFn = await $ctx.require(path, $ctx, locals);`);
+			ctx.raw(`  const templateFn = await $ctx.$require(path, $ctx, locals);`);
 			ctx.raw(`  if (templateFn) {`);
 			
 			// Render component template
@@ -78,7 +78,7 @@ export default (kire: Kire) => {
 			
 			ctx.raw(`    await $ctx.$merge(async ($ctx) => {`);
 			ctx.raw(`      Object.assign($ctx, locals);`);
-			ctx.raw(`      $ctx[${JSON.stringify(kire.varLocals)}] = locals;`);
+			ctx.raw(`      $ctx[${JSON.stringify(kire.$var_locals)}] = locals;`);
 			ctx.raw(`      if(typeof locals === 'object' && locals !== null) locals.slots = $slots;`);
 			ctx.raw(`      $ctx.slots = $slots;`);
 			

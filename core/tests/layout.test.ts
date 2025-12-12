@@ -6,7 +6,7 @@ describe("Layout Directives", () => {
 		const kire = new Kire();
 
 		// Mock resolver
-		kire.resolverFn = async (path) => {
+		kire.$resolver = async (path) => {
 			if (path.includes("layout")) return `<h1>{{ title }}</h1>`;
 			return "";
 		};
@@ -21,7 +21,7 @@ describe("Layout Directives", () => {
 		const kire = new Kire();
 
 		// Mock resolver
-		kire.resolverFn = async (path) => {
+		kire.$resolver = async (path) => {
 			// Accessing 'title' directly implies it's in the scope
 			// Kire render merges locals into the scope.
 			if (path.includes("layout")) return `<h1>{{ title }}</h1>`;

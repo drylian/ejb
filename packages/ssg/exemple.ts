@@ -20,7 +20,7 @@ const kire = new Kire({
 // Since we can't easily write files to 'examples' in this script without fs, 
 // we'll rely on Kire's resolver. 
 // Overriding resolver for this example to return string content directly.
-kire.resolverFn = async (path) => {
+kire.$resolver = async (path) => {
     if (path.includes('index')) return `
         <html>
             <head>

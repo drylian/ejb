@@ -26,11 +26,11 @@ describe("Kire Core - Caching & Require", () => {
 
 	it("$ctx.require should cache compiled functions", async () => {
 		const kire = new Kire({ production: true });
-		const requireFn = kire.globalContext.get("require");
-		const ctx = { md5: (s: string) => md5(s) };
+		const requireFn = kire.$globals.get("$require");
+		const ctx: any = { $md5: (s: string) => md5(s) };
 
 		let callCount = 0;
-		kire.resolverFn = async (path) => {
+		kire.$resolver = async (path) => {
 			callCount++;
 			return `Called ${callCount}`;
 		};
@@ -52,11 +52,11 @@ describe("Kire Core - Caching & Require", () => {
 
 	it("$ctx.require should recompile if content changes (non-prod)", async () => {
 		const kire = new Kire({ production: false });
-		const requireFn = kire.globalContext.get("require");
-		const ctx = { md5: (s: string) => md5(s) };
+		const requireFn = kire.$globals.get("$require");
+		const ctx: any = { $md5: (s: string) => md5(s) };
 
 		let content = "Version 1";
-		kire.resolverFn = async () => content;
+		kire.$resolver = async () => content;
 
 		// First call
 		const fn1 = await requireFn("dynamic.kire", ctx, {});
@@ -81,7 +81,7 @@ describe("Kire Core - Caching & Require", () => {
         
         const content = "Same Content";
         let resolverCalls = 0;
-        kire.resolverFn = async () => {
+        kire.$resolver = async () => {
             resolverCalls++;
             return content;
         };
@@ -93,8 +93,8 @@ describe("Kire Core - Caching & Require", () => {
             return originalCompileFn.call(kire, c);
         };
 
-        const ctx: any = { md5: (s: string) => md5(s) };
-        const requireFn = kire.globalContext.get("require");
+        const ctx: any = { $md5: (s: string) => md5(s) };
+        const requireFn = kire.$globals.get("$require");
 
         await requireFn("static.kire", ctx, {});
         expect(resolverCalls).toBe(1);

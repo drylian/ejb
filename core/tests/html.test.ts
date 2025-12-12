@@ -48,7 +48,7 @@ test("Kire - HTML Base Template", async () => {
 		async onCall(ctx) {
 			const layoutPath = ctx.param("path");
 			const resolved = ctx.resolve(layoutPath);
-			const content = await kire.resolverFn(resolved);
+			const content = await kire.$resolver(resolved);
 			const layout = `$ctx.$layouts[\`${layoutPath}\`]`;
 			ctx.pre(`${layout} = ${ctx.func(await ctx.render(content))};`);
 
