@@ -90,7 +90,7 @@ export function md5(string: string): string {
 	}
 
 	function convertToWordArray(string: string): number[] {
-		let lWordCount;
+		let lWordCount:number;
 		const lMessageLength = string.length;
 		const lNumberOfWords_temp1 = lMessageLength + 8;
 		const lNumberOfWords_temp2 =
