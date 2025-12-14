@@ -26,7 +26,7 @@ export class Kire {
 	public $resolver: (filename: string) => Promise<string>;
 	public $readdir?: (pattern: string) => Promise<string[]>;
 	public alias: Record<string, string>;
-	public extension: string;
+	extension: string;
 	public $files: Map<string, Function> = new Map();
 	public $parser: IParserConstructor;
 	public $compiler: ICompilerConstructor;
@@ -73,6 +73,7 @@ export class Kire {
 
 		// Register internal helpers
 		this.$ctx("$md5", md5);
+		this.$ctx("$escape", escapeHtml);
 		this.$ctx("~$pre", []);
 		this.$ctx("~$pos", []);
 		this.$ctx(
@@ -88,12 +89,11 @@ export class Kire {
 
 				const cached = this.cached("@kirejs/core");
 				const isProd = this.production;
-				const hash = cached.get(`md5:${resolvedPath}`);
+				const cachedHash = cached.get(`md5:${resolvedPath}`);
+				let compiledFn: Function | undefined = cached.get(`js:${resolvedPath}`);
 				let content = "";
 
-				let compiledFn: Function | undefined;
-
-				if (!hash || !isProd) {
+				if (!cachedHash || !compiledFn || !isProd) {
 					try {
 						content = await this.$resolver(resolvedPath);
 					} catch (e: any) {
@@ -107,13 +107,15 @@ export class Kire {
 						return null;
 					}
 
-					compiledFn = await this.compileFn(content, resolvedPath);
-					const ihash = md5(content);
-					
-					cached.set(`md5:${resolvedPath}`, ihash);
-					cached.set(`js:${resolvedPath}`, compiledFn); // Cache a função compilada
-				} else {
-					compiledFn = cached.get(`js:${resolvedPath}`);
+					const newHash = md5(content);
+
+					if (cachedHash === newHash && compiledFn) {
+						// Optimization: Content hasn't changed, reuse cached function
+					} else {
+						compiledFn = await this.compileFn(content, resolvedPath);
+						cached.set(`md5:${resolvedPath}`, newHash);
+						cached.set(`js:${resolvedPath}`, compiledFn); // Cache a função compilada
+					}
 				}
 
 				if (!compiledFn) return null; // Retorna null se a função não foi compilada/cacheada
@@ -430,4 +432,14 @@ export class Kire {
 
 		return resultHtml;
 	}
+}
+
+function escapeHtml(unsafe: any): string {
+	if (unsafe === null || unsafe === undefined) return "";
+	return String(unsafe)
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#039;");
 }

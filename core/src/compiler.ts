@@ -44,10 +44,15 @@ export class Compiler {
                 }
             } else if (node.type === "variable") {
                 if (node.content) {
-                    // Simple interpolation
-                    this.resBuffer.push(
-                        `$ctx['~res'] += (${node.content});`,
-                    );
+                    if (node.raw) {
+                        this.resBuffer.push(
+                            `$ctx['~res'] += (${node.content});`,
+                        );
+                    } else {
+                        this.resBuffer.push(
+                            `$ctx['~res'] += $ctx.$escape(${node.content});`,
+                        );
+                    }
                 }
             } else if (node.type === "directive") {
                 await this.processDirective(node);

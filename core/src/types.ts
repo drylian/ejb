@@ -144,4 +144,5 @@ export interface Node {
 	};
 	children?: Node[]; // Inner content
 	related?: Node[]; // For 'parents' (elseif, etc)
+	raw?: boolean;
 }

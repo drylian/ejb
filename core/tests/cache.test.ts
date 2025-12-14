@@ -36,18 +36,14 @@ describe("Kire Core - Caching & Require", () => {
 		};
 
 		// First call
-		const fn1 = await requireFn("test.kire", ctx, {});
+		const res1 = await requireFn("test.kire", ctx, {});
 		expect(callCount).toBe(1);
-
-		// Execute generated function to check content
-		const resCtx1: any = { "~res": "", res: function(s: any) { this['~res'] += s; } };
-		await fn1(resCtx1);
-		expect(resCtx1["~res"]).toContain("Called 1");
+		expect(res1).toContain("Called 1");
 
 		// Second call (should be cached)
-		const fn2 = await requireFn("test.kire", ctx, {});
+		const res2 = await requireFn("test.kire", ctx, {});
 		expect(callCount).toBe(1); // Should still be 1
-		expect(fn1).toBe(fn2); // Same function instance
+		expect(res2).toBe(res1);
 	});
 
 	it("$ctx.require should recompile if content changes (non-prod)", async () => {
@@ -59,21 +55,17 @@ describe("Kire Core - Caching & Require", () => {
 		kire.$resolver = async () => content;
 
 		// First call
-		const fn1 = await requireFn("dynamic.kire", ctx, {});
-		const resCtx1: any = { "~res": "", res: function(s: any) { this['~res'] += s; } };
-		await fn1(resCtx1);
-		expect(resCtx1["~res"]).toContain("Version 1");
+		const res1 = await requireFn("dynamic.kire", ctx, {});
+		expect(res1).toContain("Version 1");
 
 		// Change content
 		content = "Version 2";
 
 		// Second call
-		const fn2 = await requireFn("dynamic.kire", ctx, {});
-		const resCtx2: any = { "~res": "", res: function(s: any) { this['~res'] += s; } };
-		await fn2(resCtx2);
-		expect(resCtx2["~res"]).toContain("Version 2");
+		const res2 = await requireFn("dynamic.kire", ctx, {});
+		expect(res2).toContain("Version 2");
 
-		expect(fn1).not.toBe(fn2);
+		expect(res1).not.toBe(res2);
 	});
 
      test("$ctx.require should NOT recompile if content matches hash (non-prod optimization)", async () => {

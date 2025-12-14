@@ -26,6 +26,22 @@ export class Parser {
             //  stack: this.stack.map(s => s.name)
             //});
 
+            // Check for raw interpolation {{{ ... }}}
+            const rawInterpolationMatch = remaining.match(/^\{\{\{([\s\S]*?)\}\}\}/);
+            if (rawInterpolationMatch) {
+                const content = rawInterpolationMatch[0];
+                this.addNode({
+                    type: "variable",
+                    content: rawInterpolationMatch[1]?.trim(),
+                    raw: true,
+                    start: this.cursor,
+                    end: this.cursor + content.length,
+                    loc: this.getLoc(content),
+                });
+                this.advance(content);
+                continue;
+            }
+
             // Check for interpolation {{ ... }}
             const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
             if (interpolationMatch) {
@@ -33,6 +49,7 @@ export class Parser {
                 this.addNode({
                     type: "variable",
                     content: interpolationMatch[1]?.trim(),
+                    raw: false,
                     start: this.cursor,
                     end: this.cursor + content.length,
                     loc: this.getLoc(content),
