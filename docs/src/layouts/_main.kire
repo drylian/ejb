@@ -9,6 +9,7 @@
       @plugin "daisyui";
       @plugin "@tailwindcss/typography";
     @end
+    <debug-panel />
 </head>
 <body class="min-h-screen bg-base-100 text-base-content">
     <div class="drawer lg:drawer-open">
@@ -95,10 +96,25 @@
                             Visão Geral
                         </a>
                     </li>
+                    <li class="menu-title mt-2">
+                        <span>Pacotes</span>
+                    </li>
                     <li>
-                        <a href="/packages.html">
-                            Pacotes & API
-                        </a>
+                        <details open>
+                            <summary>
+                                <iconify icon="mdi:package-variant-closed" class="text-lg opacity-70" />
+                                Oficiais
+                            </summary>
+                            <ul>
+                                <li><a href="/packages/core.html">Core</a></li>
+                                <li><a href="/packages/iconify.html">Iconify</a></li>
+                                <li><a href="/packages/markdown.html">Markdown</a></li>
+                                <li><a href="/packages/tailwind.html">Tailwind</a></li>
+                                <li><a href="/packages/assets.html">Assets</a></li>
+                                <li><a href="/packages/ssg.html">SSG</a></li>
+                                <li><a href="/packages/resolver.html">Resolver</a></li>
+                            </ul>
+                        </details>
                     </li>
 
                     <li class="menu-title mt-2">

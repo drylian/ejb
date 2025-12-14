@@ -126,6 +126,11 @@ export interface KirePlugin<Options extends object | undefined = {}> {
 // AST Types
 export type NodeType = "text" | "variable" | "directive";
 
+export interface SourceLocation {
+	line: number;
+	column: number;
+}
+
 export interface Node {
 	type: NodeType;
 	content?: string;
@@ -133,6 +138,10 @@ export interface Node {
 	args?: any[]; // For directives
 	start?: number;
 	end?: number;
+	loc?: {
+		start: SourceLocation;
+		end: SourceLocation;
+	};
 	children?: Node[]; // Inner content
 	related?: Node[]; // For 'parents' (elseif, etc)
 }

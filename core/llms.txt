@@ -1,5 +1,143 @@
 // Combined source for kire
 
+// --- From: core/src/compiler.ts ---
+import type { Kire } from "./kire";
+import type { KireContext, Node } from "./types";
+
+export class Compiler {
+    private preBuffer: string[] = [];
+    private resBuffer: string[] = [];
+    private posBuffer: string[] = [];
+    // Removed gPreBuffer and gPosBuffer
+
+    private usedDirectives: Set<string> = new Set();
+
+    constructor(private kire: Kire) {}
+
+    public async compile(nodes: Node[]): Promise<string> {
+        this.preBuffer = [];
+        this.resBuffer = [];
+        this.posBuffer = [];
+        // Removed gPreBuffer and gPosBuffer init
+        this.usedDirectives.clear();
+
+        // Compile the root nodes
+        await this.compileNodes(nodes);
+
+        // gPre and gPos are now collected at runtime via generated code
+        const pre = this.preBuffer.join("\n");
+        const res = this.resBuffer.join("\n");
+        const pos = this.posBuffer.join("\n");
+
+        // Main function body code
+        const code = `with($ctx) { \n${pre}\n${res}\n${pos}\nreturn $ctx;\n }`;
+
+        return code;
+    }
+
+    private async compileNodes(nodes: Node[]) {
+        let i = 0;
+        while (i < nodes.length) {
+            const node = nodes[i]!;
+            if (node.type === "text") {
+                if (node.content) {
+                    this.resBuffer.push(
+                        `$ctx['~res'] += ${JSON.stringify(node.content)};`,
+                    );
+                }
+            } else if (node.type === "variable") {
+                if (node.content) {
+                    // Simple interpolation
+                    this.resBuffer.push(
+                        `$ctx['~res'] += (${node.content});`,
+                    );
+                }
+            } else if (node.type === "directive") {
+                await this.processDirective(node);
+            }
+            i++;
+        }
+    }
+
+    private async processDirective(node: Node) {
+        const name = node.name;
+        if (!name) return;
+
+        // Check if directive exists in Kire instance
+        const directive = this.kire.getDirective(name);
+
+        if (!directive) {
+            // Handle unknown directive
+            console.warn(`Directive @${name} not found.`);
+            return;
+        }
+
+        const ctx: KireContext = {
+            param: (key: string | number) => {
+                if (typeof key === "number") {
+                    return node.args?.[key];
+                }
+                if (directive.params && node.args) {
+                    const index = directive.params.findIndex(
+                        (p) => p.split(":")[0] === key,
+                    );
+                    if (index !== -1) return node.args[index];
+                }
+                return undefined;
+            },
+            children: node.children,
+            parents: node.related, // 'parents' in user logic map to 'related' nodes from parser
+            set: async (nodes: Node[]) => {
+                if (!nodes) return;
+                await this.compileNodes(nodes);
+            },
+            render: async (content: string) => {
+                // This needs to return the object {code, gPre, gPos}
+                // But compile expects string for now.
+                return (await this.kire.compile(content)); 
+            },
+            resolve: (path: string) => {
+                return this.kire.resolvePath(path);
+            },
+            func: (code: string) => {
+                return `async function($ctx) { ${code} }`;
+            },
+            pre: (code: string) => {
+                this.preBuffer.push(code);
+            },
+            res: (content: string) => {
+                const escaped = content
+                    .replace(/\\/g, "\\\\")
+                    .replace(/`/g, "\\`")
+                    .replace(/\${/g, "\\${ ");
+                this.resBuffer.push(`$ctx.res(\`${escaped}\`);`);
+            },
+            raw: (code: string) => {
+                this.resBuffer.push(code);
+            },
+            pos: (code: string) => {
+                this.posBuffer.push(code);
+            },
+            $pre: (code: string) => {
+                this.resBuffer.push(`$ctx['~$pre'].push(async ($ctx) => { with($ctx) { ${code} } });`);
+            },
+            $pos: (code: string) => {
+                this.resBuffer.push(`$ctx['~$pos'].push(async ($ctx) => { with($ctx) { ${code} } });`);
+            },
+            error: (msg: string) => {
+                throw new Error(`Error in directive @${name}: ${msg}`);
+            },
+        };
+
+        if (directive.once && !this.usedDirectives.has(name)) {
+            this.usedDirectives.add(name);
+            await directive.once(ctx);
+        }
+
+        await directive.onCall(ctx);
+    }
+}
+
 // --- From: core/src/types.ts ---
 import type { Kire } from "./kire";
 
@@ -129,6 +267,11 @@ export interface KirePlugin<Options extends object | undefined = {}> {
 // AST Types
 export type NodeType = "text" | "variable" | "directive";
 
+export interface SourceLocation {
+	line: number;
+	column: number;
+}
+
 export interface Node {
 	type: NodeType;
 	content?: string;
@@ -136,8 +279,487 @@ export interface Node {
 	args?: any[]; // For directives
 	start?: number;
 	end?: number;
+	loc?: {
+		start: SourceLocation;
+		end: SourceLocation;
+	};
 	children?: Node[]; // Inner content
 	related?: Node[]; // For 'parents' (elseif, etc)
+}
+
+
+// --- From: core/src/parser.ts ---
+import type { Kire } from "../kire";
+import type { DirectiveDefinition, Node } from "../types";
+
+export class Parser {
+    private cursor = 0;
+    private stack: Node[] = [];
+    private rootChildren: Node[] = [];
+    public line = 1;
+    public column = 1;
+
+    constructor(
+        private template: string,
+        private kire: Kire,
+    ) {}
+
+    public parse(): Node[] {
+        this.cursor = 0;
+        this.stack = [];
+        this.rootChildren = [];
+
+        while (this.cursor < this.template.length) {
+            const remaining = this.template.slice(this.cursor);
+            //console.log('PARSER:', {
+            //  cursor: this.cursor,
+            //  remaining: remaining.slice(0, 30),
+            //  stack: this.stack.map(s => s.name)
+            //});
+
+            // Check for interpolation {{ ... }}
+            const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
+            if (interpolationMatch) {
+                const content = interpolationMatch[0];
+                this.addNode({
+                    type: "variable",
+                    content: interpolationMatch[1]?.trim(),
+                    start: this.cursor,
+                    end: this.cursor + content.length,
+                    loc: this.getLoc(content),
+                });
+                this.advance(content);
+                continue;
+            }
+
+            // Check for escaped directive @@
+            if (remaining.startsWith("@@")) {
+                this.addNode({
+                    type: "text",
+                    content: "@",
+                    start: this.cursor,
+                    end: this.cursor + 2,
+                    loc: this.getLoc("@@"),
+                });
+                this.advance("@@");
+                continue;
+            }
+
+            // Check for directive @name(...) or @name without parentheses
+            const directiveStartMatch = remaining.match(/^@(\w+)/);
+            if (directiveStartMatch) {
+                const [fullMatch, name] = directiveStartMatch;
+
+                //console.log('FOUND DIRECTIVE:', { name, fullMatch, stack: this.stack.map(s => s.name) });
+
+                // Check if it has arguments
+                let argsStr: string | undefined;
+                let argsEndIndex = fullMatch.length;
+
+                // Verifica se tem parênteses APENAS se o próximo caractere for '('
+                if (remaining[fullMatch.length] === "(") {
+                    // Parse arguments with balanced parentheses
+                    let depth = 1;
+                    let i = fullMatch.length + 1;
+                    let inQuote = false;
+                    let quoteChar = "";
+
+                    while (i < remaining.length && depth > 0) {
+                        const char = remaining[i];
+                        if (
+                            (char === '"' || char === "'") &&
+                            (i === 0 || remaining[i - 1] !== "\\")
+                        ) {
+                            if (inQuote && char === quoteChar) {
+                                inQuote = false;
+                            } else if (!inQuote) {
+                                inQuote = true;
+                                quoteChar = char;
+                            }
+                        }
+
+                        if (!inQuote) {
+                            if (char === "(") depth++;
+                            else if (char === ")") depth--;
+                        }
+                        i++;
+                    }
+
+                    if (depth === 0) {
+                        argsStr = remaining.slice(fullMatch.length + 1, i - 1);
+                        argsEndIndex = i;
+                    }
+                }
+
+                if (name === "end") {
+                    //console.log('HANDLING END DIRECTIVE');
+                    this.handleEndDirective();
+                    this.advance(remaining.slice(0, argsEndIndex));
+                    continue;
+                }
+
+                const directiveDef = this.kire.getDirective(name as string);
+                //console.log('DIRECTIVE DEF:', { name, directiveDef });
+
+                // Check for sub-directive (parent logic)
+                let isSubDirective = false;
+                if (this.stack.length > 0) {
+                    const currentParent = this.stack[this.stack.length - 1];
+                    const parentDef = this.kire.getDirective(
+                        currentParent?.name as string,
+                    );
+
+                    //console.log('CHECKING SUB DIRECTIVE:', {
+                    //  parent: currentParent!.name,
+                    //  candidate: name,
+                    //  parentDef: parentDef
+                    //});
+
+                    if (parentDef?.parents) {
+                        const subDef = parentDef.parents.find((p) => p.name === name);
+                        //console.log('SUB DIRECTIVE RESULT:', { subDef });
+                        if (subDef) {
+                            //console.log('FOUND SUB DIRECTIVE! Processing:', name);
+                            const fullContent = remaining.slice(0, argsEndIndex);
+                            this.handleSubDirective(
+                                name!,
+                                argsStr,
+                                fullContent,
+                                currentParent!,
+                                subDef,
+                                this.getLoc(fullContent),
+                            );
+                            this.advance(fullContent);
+                            isSubDirective = true;
+                            continue;
+                        }
+                    }
+                }
+
+                // If not a registered directive and not a sub-directive, treat as text
+                if (!directiveDef && !isSubDirective) {
+                    //console.log('TREATING AS TEXT:', name);
+                    this.addNode({
+                        type: "text",
+                        content: fullMatch,
+                        start: this.cursor,
+                        end: this.cursor + fullMatch.length,
+                        loc: this.getLoc(fullMatch),
+                    });
+                    this.advance(fullMatch);
+                    continue;
+                }
+
+                const args = argsStr ? this.parseArgs(argsStr) : [];
+                const fullContent = remaining.slice(0, argsEndIndex);
+
+                const node: Node = {
+                    type: "directive",
+                    name: name,
+                    args: args,
+                    start: this.cursor,
+                    end: this.cursor + argsEndIndex,
+                    loc: this.getLoc(fullContent),
+                    children: [],
+                    related: [],
+                };
+
+                //console.log('ADDING DIRECTIVE NODE:', node);
+                this.addNode(node);
+
+                if (directiveDef?.children) {
+                    if (directiveDef.childrenRaw) {
+                        this.stack.push(node);
+
+                        const contentStart = this.cursor + argsEndIndex;
+                        const remainingTemplate = this.template.slice(contentStart);
+
+                        // Update cursor temporarily to calculate correct loc for raw content
+                        // We need to advance virtually to get correct start loc for content
+                        const directiveLoc = this.getLoc(fullContent);
+                        // Actually we can't easily use getLoc because it depends on this.line/column which haven't advanced yet.
+                        // We must advance after adding directive node but BEFORE processing raw content.
+                        // Wait, we addNode(directive) then advance(directive) then process content?
+                        // The current logic: addNode -> stack push -> then advance? No.
+                        
+                        // Current flow:
+                        // 1. addNode(directive)
+                        // 2. if childrenRaw:
+                        //    stack.push
+                        //    find end
+                        //    addNode(text)
+                        //    stack.pop
+                        //    advance(directive + text + end)
+                        
+                        // This makes `this.line` stale for the text node inside childrenRaw block.
+                        // We need to calculate text node loc relative to where directive ends.
+                        
+                        // Find closing @end with word boundary check
+                        const endMatch = remainingTemplate.match(/@end(?![a-zA-Z0-9_])/);
+
+                        if (endMatch) {
+                            const content = remainingTemplate.slice(0, endMatch.index);
+                            
+                            // Calculate loc for the inner content
+                            // Start is end of directive
+                            const startLoc = directiveLoc.end;
+                            // End is calculated from content
+                            const contentLines = content.split('\n');
+                            let endLine = startLoc.line;
+                            let endCol = startLoc.column;
+                            if (contentLines.length > 1) {
+                                endLine += contentLines.length - 1;
+                                endCol = (contentLines[contentLines.length - 1]?.length || 0) + 1;
+                            } else {
+                                endCol += content.length;
+                            }
+
+                            // Add text node
+                            this.addNode({
+                                type: "text",
+                                content: content,
+                                start: contentStart,
+                                end: contentStart + content.length,
+                                loc: { start: startLoc, end: { line: endLine, column: endCol } }
+                            });
+
+                            this.stack.pop(); // Close immediately
+                            this.advance(
+                                remaining.slice(0, argsEndIndex) + content + endMatch[0],
+                            );
+                            continue;
+                        } else {
+                            // No end tag found, consume rest
+                            const content = remainingTemplate;
+                            
+                            const startLoc = directiveLoc.end;
+                            // ... simple calc for rest ...
+                            // For robustness, let's just use empty loc or try best effort
+                            // Since we are consuming rest, end is EOF.
+                            
+                            this.addNode({
+                                type: "text",
+                                content: content,
+                                start: contentStart,
+                                end: this.template.length,
+                                // loc: ... (omitted for simplicity in error case)
+                            });
+                            this.stack.pop();
+                            this.advance(remaining.slice(0, argsEndIndex) + content);
+                            continue;
+                        }
+                    }
+                    //console.log('PUSHING TO STACK:', name);
+                    this.stack.push(node);
+                }
+
+                this.advance(remaining.slice(0, argsEndIndex));
+                continue;
+            }
+
+            // Text
+            const nextInterpolation = remaining.indexOf("{{");
+            const nextDirective = remaining.indexOf("@");
+
+            let nextIndex = -1;
+            if (nextInterpolation !== -1 && nextDirective !== -1) {
+                nextIndex = Math.min(nextInterpolation, nextDirective);
+            } else if (nextInterpolation !== -1) {
+                nextIndex = nextInterpolation;
+            } else if (nextDirective !== -1) {
+                nextIndex = nextDirective;
+            }
+
+            if (nextIndex === -1) {
+                this.addNode({
+                    type: "text",
+                    content: remaining,
+                    start: this.cursor,
+                    end: this.template.length,
+                    loc: this.getLoc(remaining),
+                });
+                this.advance(remaining);
+            } else {
+                if (nextIndex === 0) {
+                    const char = remaining[0]!;
+                    this.addNode({
+                        type: "text",
+                        content: char,
+                        start: this.cursor,
+                        end: this.cursor + 1,
+                        loc: this.getLoc(char),
+                    });
+                    this.advance(char);
+                } else {
+                    const text = remaining.slice(0, nextIndex);
+                    this.addNode({
+                        type: "text",
+                        content: text,
+                        start: this.cursor,
+                        end: this.cursor + text.length,
+                        loc: this.getLoc(text),
+                    });
+                    this.advance(text);
+                }
+            }
+        }
+
+        //console.log('FINAL RESULT:', JSON.stringify(this.rootChildren, null, 2));
+        return this.rootChildren;
+    }
+
+    private handleEndDirective() {
+        //console.log('HANDLE END - Stack before:', this.stack.map(s => s.name));
+        if (this.stack.length > 0) {
+            this.stack.pop();
+        }
+        //console.log('HANDLE END - Popped:', popped?.name);
+        //console.log('HANDLE END - Stack after:', this.stack.map(s => s.name));
+    }
+
+    private handleSubDirective(
+        name: string,
+        argsStr: string | undefined,
+        fullMatch: string,
+        parentNode: Node,
+        subDef: DirectiveDefinition,
+        loc: any,
+    ) {
+        const args = argsStr ? this.parseArgs(argsStr) : [];
+
+        const node: Node = {
+            type: "directive",
+            name: name,
+            args: args,
+            start: this.cursor,
+            end: this.cursor + fullMatch.length,
+            loc: loc,
+            children: [],
+            related: [],
+        };
+
+        //console.log('HANDLING SUB DIRECTIVE:', {
+        //  name,
+        //  parent: parentNode.name,
+        //  node,
+        //  parentRelated: parentNode.related
+        //});
+
+        if (!parentNode.related) parentNode.related = [];
+        parentNode.related.push(node);
+
+        if (subDef.children) {
+            //console.log('PUSHING SUB DIRECTIVE TO STACK:', name);
+            this.stack.push(node);
+        }
+    }
+
+    private getLoc(content: string) {
+        const start = { line: this.line, column: this.column };
+        const lines = content.split("\n");
+        let endLine = this.line;
+        let endColumn = this.column;
+
+        if (lines.length > 1) {
+            endLine += lines.length - 1;
+            endColumn = (lines[lines.length - 1]?.length || 0) + 1;
+        } else {
+            endColumn += content.length;
+        }
+
+        return {
+            start,
+            end: { line: endLine, column: endColumn },
+        };
+    }
+
+    private addNode(node: Node) {
+        if (this.stack.length > 0) {
+            const current = this.stack[this.stack.length - 1];
+            if (current && !current.children) current.children = [];
+            if (current?.children) {
+                //console.log('ADDING TO CHILDREN of', current.name, ':', node.type, node.name || node.content);
+                current.children.push(node);
+            }
+        } else {
+            //console.log('ADDING TO ROOT:', node.type, node.name || node.content);
+            this.rootChildren.push(node);
+        }
+    }
+
+    private advance(str: string) {
+        const lines = str.split("\n");
+        if (lines.length > 1) {
+            this.line += lines.length - 1;
+            this.column = (lines[lines.length - 1]?.length || 0) + 1;
+        } else {
+            this.column += str.length;
+        }
+        this.cursor += str.length;
+    }
+
+    private parseArgs(argsStr: string): any[] {
+        const args: any[] = [];
+        let current = "";
+        let inQuote = false;
+        let quoteChar = "";
+        let braceDepth = 0;
+        let bracketDepth = 0;
+        let parenDepth = 0;
+
+        for (let i = 0; i < argsStr.length; i++) {
+            const char = argsStr[i];
+
+            // Handle quotes
+            if (
+                (char === '"' || char === "'") &&
+                (i === 0 || argsStr[i - 1] !== "\\")
+            ) {
+                if (inQuote && char === quoteChar) {
+                    inQuote = false;
+                } else if (!inQuote) {
+                    inQuote = true;
+                    quoteChar = char;
+                }
+            }
+
+            if (!inQuote) {
+                if (char === "{") braceDepth++;
+                else if (char === "}") braceDepth--;
+                else if (char === "[") bracketDepth++;
+                else if (char === "]") bracketDepth--;
+                else if (char === "(") parenDepth++;
+                else if (char === ")") parenDepth--;
+            }
+
+            if (
+                char === "," &&
+                !inQuote &&
+                braceDepth === 0 &&
+                bracketDepth === 0 &&
+                parenDepth === 0
+            ) {
+                args.push(current.trim());
+                current = "";
+            } else {
+                current += char;
+            }
+        }
+        if (current) args.push(current.trim());
+
+        return args.map((arg) => {
+            if (
+                (arg.startsWith('"') && arg.endsWith('"')) ||
+                (arg.startsWith("'") && arg.endsWith("'"))
+            ) {
+                return arg.slice(1, -1);
+            }
+            if (arg === "true") return true;
+            if (arg === "false") return false;
+            if (!Number.isNaN(Number(arg))) return Number(arg);
+            return arg;
+        });
+    }
 }
 
 
@@ -221,7 +843,7 @@ export class Kire {
 		this.$ctx("~$pos", []);
 		this.$ctx(
 			"$require",
-			async (path: string) => {
+			async (path: string, locals: Record<string, any> = {}) => { // locals agora é um argumento de $require
 				// Use absolute path for caching key to avoid conflicts
 				const resolvedPath = resolvePath(
 					path,
@@ -235,6 +857,8 @@ export class Kire {
 				const hash = cached.get(`md5:${resolvedPath}`);
 				let content = "";
 
+				let compiledFn: Function | undefined;
+
 				if (!hash || !isProd) {
 					try {
 						content = await this.$resolver(resolvedPath);
@@ -242,32 +866,26 @@ export class Kire {
 						if (!e.message.includes("No resolver")) {
 							console.warn(`Failed to resolve path: ${resolvedPath}`, e);
 						}
-						return null;
+						return null; // Retorna null se não encontrar, para a diretiva lidar
 					}
 
 					if (!content) {
 						return null;
 					}
 
+					compiledFn = await this.compileFn(content, resolvedPath);
 					const ihash = md5(content);
-
-					if (!isProd && hash) {
-						if (ihash === hash) {
-							return cached.get(`js:${resolvedPath}`);
-						}
-						else {
-							cached.delete(`md5:${resolvedPath}`);
-							cached.delete(`js:${resolvedPath}`);
-						}
-					}
-
-					const compiled = await this.compileFn(content);
+					
 					cached.set(`md5:${resolvedPath}`, ihash);
-					cached.set(`js:${resolvedPath}`, compiled);
-					return compiled;
+					cached.set(`js:${resolvedPath}`, compiledFn); // Cache a função compilada
 				} else {
-					return cached.get(`js:${resolvedPath}`);
+					compiledFn = cached.get(`js:${resolvedPath}`);
 				}
+
+				if (!compiledFn) return null; // Retorna null se a função não foi compilada/cacheada
+
+				// Executa a função compilada com os locals e retorna o HTML
+				return this.run(compiledFn, locals);
 			}
 		);
 
@@ -347,7 +965,7 @@ export class Kire {
 			if (!handler) throw new Error("Handler is required for legacy element()")
 			this.$elements.add({
 				name: nameOrDef as string | RegExp,
-				void: options?.void,
+				void: options?.void ?? false, // Default to false if not provided
 				onCall: handler,
 			});
 		}
@@ -385,12 +1003,13 @@ export class Kire {
 		return compiler.compile(nodes);
 	}
 
-	public async compileFn(content: string): Promise<Function> {
+	public async compileFn(content: string, filename?: string): Promise<Function> {
 		const code = await this.compile(content);
 		try {
 			const AsyncFunction = Object.getPrototypeOf(async () => { }).constructor;
 
 			const mainFn = new AsyncFunction("$ctx", code);
+			(mainFn as any)._code = code;
 
 			// Return the separated functions
 			return mainFn;
@@ -404,7 +1023,7 @@ export class Kire {
 		template: string,
 		locals: Record<string, any> = {},
 	): Promise<string> {
-		const fn = await this.compileFn(template);
+		const fn = await this.compileFn(template, "template");
 		return this.run(fn, locals);
 	}
 
@@ -420,7 +1039,7 @@ export class Kire {
 		} else {
 			try {
 				const content = await this.$resolver(resolvedPath);
-				compiled = await this.compileFn(content);
+				compiled = await this.compileFn(content, resolvedPath);
 				if (this.production) {
 					this.$files.set(resolvedPath, compiled as any);
 				}
@@ -472,7 +1091,15 @@ export class Kire {
 			this['~res'] = parentRes + this['~res'];
 		};
 
-		const finalCtx = await mainFn(rctx);
+		let finalCtx;
+		try {
+			finalCtx = await mainFn(rctx);
+		} catch (e: any) {
+			if ((mainFn as any)._code) {
+				e.kireGeneratedCode = (mainFn as any)._code;
+			}
+			throw e;
+		}
 
 		// Execute ~$pre functions collected during execution
 		if (finalCtx['~$pre'] && finalCtx['~$pre'].length > 0) {
@@ -506,7 +1133,7 @@ export class Kire {
 				const regex = isVoid
 					? new RegExp(`<(${tagName})([^>]*)>`, "gi")
 					: new RegExp(
-						`<(${tagName})([^>]*)>([\s\S]*?)<\/\\1>`,
+						`<(${tagName})([^>]*)>([\\s\\S]*?)<\/\\1>`,
 						"gi",
 					);
 
@@ -595,15 +1222,9 @@ export default (kire: Kire) => {
 			const localsExpr = ctx.param("locals") || "{}";
 
 			ctx.raw(`await $ctx.$merge(async ($ctx) => {
-    const path = $ctx.resolve(${JSON.stringify(pathExpr)});
-    const locals = ${localsExpr};
-    const templateFn = await $ctx.require(path, $ctx, locals);
-    
-    if (templateFn) {
-        Object.assign($ctx, locals);
-        if(${JSON.stringify(kire.exposeLocals)}) $ctx[${JSON.stringify(kire.varLocals)}] = locals;
-        
-        await templateFn($ctx);
+    const html = await $ctx.$require(${JSON.stringify(pathExpr)}, ${localsExpr});
+    if (html !== null) { // $require pode retornar null se não encontrar
+        $ctx.res(html);
     }
 });`);
 		},
@@ -726,10 +1347,14 @@ export default (kire: Kire) => {
 		example: `@code\n  console.log('This runs during template compilation.');\n@end`,
 		onCall(ctx) {
 			if (ctx.children) {
+				let code = "";
 				for (const child of ctx.children) {
 					if (child.type === "text" && child.content) {
-						ctx.raw(child.content);
+						code += child.content;
 					}
+				}
+				if (code) {
+					ctx.raw(code);
 				}
 			}
 		},
@@ -820,23 +1445,7 @@ export default (kire: Kire) => {
 
 			// Run children to populate slots
 			ctx.raw(`  await $ctx.$merge(async ($ctx) => {`);
-			// Inject $slots into scope for @slot to access
-			// But wait, @slot uses $slots from closure scope if defined in `component` block.
-			// `const $slots = {}` is in the `await (async () => {` block.
-			// @slot runs inside `$ctx.$merge`.
-			// The closure scope is preserved.
-			// But we need to make sure `default` slot is captured correctly.
-			// Default slot is whatever is output by children (excluding what @slot captures/clears).
-			// @slot clears its output. So `~res` will contain only non-slot content.
-			
-			// We need to expose `$slots` to children if they need it? No, @slot uses it from parent scope.
-			// But wait, `slot` directive code `c.raw` will be emitted inside `component` body code.
-			// So `$slots` variable is available.
-			
-			// However, `component` used `$bodyCtx.slots = $slots`.
-			// If we remove `$bodyCtx`, we rely on closure variable `$slots`.
-			
-			ctx.raw(`    $ctx.slots = $slots;`); // Should we attach to ctx? Maybe for nested access?
+			ctx.raw(`    $ctx.slots = $slots;`); // Still expose slots to children if they need it
 			
 			if (ctx.children) await ctx.set(ctx.children);
 
@@ -844,29 +1453,16 @@ export default (kire: Kire) => {
 			ctx.raw(`    $ctx['~res'] = '';`); // Clear default content from parent stream
 			ctx.raw(`  });`);
 
-			// Now load the component template
-			ctx.raw(`  const path = $ctx.resolve(${JSON.stringify(pathExpr)});`);
-			ctx.raw(`  const locals = ${varsExpr};`);
-			ctx.raw(`  const templateFn = await $ctx.require(path, $ctx, locals);`);
-			ctx.raw(`  if (templateFn) {`);
+			// Now load the component template and render it
+			ctx.raw(`  const path = ${JSON.stringify(pathExpr)};`);
+			ctx.raw(`  const componentLocals = ${varsExpr};`);
 			
-			// Render component template
-			// We use $merge to capture output or just run it?
-			// Component output SHOULD be rendered to parent stream.
-			// But we need isolated scope for locals?
-			// "remover o const child = { ...this }".
-			// So we use global context + $merge (which handles res buffer).
-			// We assign locals to global context?
-			
-			ctx.raw(`    await $ctx.$merge(async ($ctx) => {`);
-			ctx.raw(`      Object.assign($ctx, locals);`);
-			ctx.raw(`      $ctx[${JSON.stringify(kire.varLocals)}] = locals;`);
-			ctx.raw(`      if(typeof locals === 'object' && locals !== null) locals.slots = $slots;`);
-			ctx.raw(`      $ctx.slots = $slots;`);
-			
-			ctx.raw(`      await templateFn($ctx);`);
-			ctx.raw(`    });`);
-			
+			ctx.raw(`  const finalLocals = { ...componentLocals };`);
+			ctx.raw(`  if (typeof finalLocals === 'object' && finalLocals !== null) finalLocals.slots = $slots;`); // Add slots to locals
+
+			ctx.raw(`  const html = await $ctx.$require(path, finalLocals);`);
+			ctx.raw(`  if (html !== null) {`);
+			ctx.raw(`    $ctx.res(html);`);
 			ctx.raw(`  }`);
 
 			ctx.raw(`})();`);
@@ -1009,144 +1605,6 @@ export const KireDirectives: KirePlugin = {
 	},
 };
 
-
-// --- From: core/src/compiler/index.ts ---
-import type { Kire } from "../kire";
-import type { KireContext, Node } from "../types";
-
-export class Compiler {
-	private preBuffer: string[] = [];
-	private resBuffer: string[] = [];
-	private posBuffer: string[] = [];
-	// Removed gPreBuffer and gPosBuffer
-
-	private usedDirectives: Set<string> = new Set();
-
-	constructor(private kire: Kire) {}
-
-	public async compile(nodes: Node[]): Promise<string> {
-		this.preBuffer = [];
-		this.resBuffer = [];
-		this.posBuffer = [];
-		// Removed gPreBuffer and gPosBuffer init
-		this.usedDirectives.clear();
-
-		// Compile the root nodes
-		await this.compileNodes(nodes);
-
-		// gPre and gPos are now collected at runtime via generated code
-		const pre = this.preBuffer.join("\n");
-		const res = this.resBuffer.join("\n");
-		const pos = this.posBuffer.join("\n");
-
-		// Main function body code
-		const code = `with($ctx) { \n${pre}\n${res}\n${pos}\nreturn $ctx;\n }`;
-
-		return code;
-	}
-
-	private async compileNodes(nodes: Node[]) {
-		let i = 0;
-		while (i < nodes.length) {
-			const node = nodes[i]!;
-			if (node.type === "text") {
-				if (node.content) {
-					this.resBuffer.push(
-						`$ctx['~res'] += ${JSON.stringify(node.content)};`,
-					);
-				}
-			} else if (node.type === "variable") {
-				if (node.content) {
-					// Simple interpolation
-					this.resBuffer.push(
-						`$ctx['~res'] += (${node.content});`,
-					);
-				}
-			} else if (node.type === "directive") {
-				await this.processDirective(node);
-			}
-			i++;
-		}
-	}
-
-	private async processDirective(node: Node) {
-		const name = node.name;
-		if (!name) return;
-
-		// Check if directive exists in Kire instance
-		const directive = this.kire.getDirective(name);
-
-		if (!directive) {
-			// Handle unknown directive
-			console.warn(`Directive @${name} not found.`);
-			return;
-		}
-
-		const ctx: KireContext = {
-			param: (key: string | number) => {
-				if (typeof key === "number") {
-					return node.args?.[key];
-				}
-				if (directive.params && node.args) {
-					const index = directive.params.findIndex(
-						(p) => p.split(":")[0] === key,
-					);
-					if (index !== -1) return node.args[index];
-				}
-				return undefined;
-			},
-			children: node.children,
-			parents: node.related, // 'parents' in user logic map to 'related' nodes from parser
-			set: async (nodes: Node[]) => {
-				if (!nodes) return;
-				await this.compileNodes(nodes);
-			},
-			render: async (content: string) => {
-				// This needs to return the object {code, gPre, gPos}
-				// But compile expects string for now.
-				return (await this.kire.compile(content)); 
-			},
-			resolve: (path: string) => {
-				return this.kire.resolvePath(path);
-			},
-			func: (code: string) => {
-				return `async function($ctx) { ${code} }`;
-			},
-			pre: (code: string) => {
-				this.preBuffer.push(code);
-			},
-			res: (content: string) => {
-				const escaped = content
-					.replace(/\\/g, "\\\\")
-					.replace(/`/g, "\\`")
-					.replace(/\${/g, "\\${ ");
-				this.resBuffer.push(`$ctx.res(${escaped}\n");`);
-			},
-			raw: (code: string) => {
-				this.resBuffer.push(code);
-			},
-			pos: (code: string) => {
-				this.posBuffer.push(code);
-			},
-			$pre: (code: string) => {
-				this.resBuffer.push(`$ctx['~$pre'].push(async ($ctx) => { with($ctx) { ${code} } });`);
-			},
-			$pos: (code: string) => {
-				this.resBuffer.push(`$ctx['~$pos'].push(async ($ctx) => { with($ctx) { ${code} } });`);
-			},
-			error: (msg: string) => {
-				throw new Error(`Error in directive @${name}: ${msg}`);
-			},
-		};
-
-		if (directive.once && !this.usedDirectives.has(name)) {
-			this.usedDirectives.add(name);
-			await directive.once(ctx);
-		}
-
-		await directive.onCall(ctx);
-	}
-}
 
 // --- From: core/src/utils/resolve.ts ---
 import { join } from "./path";
@@ -1509,406 +1967,6 @@ export function md5(string: string): string {
 	}
 	const temp = wordToHex(a) + wordToHex(b) + wordToHex(c) + wordToHex(d);
 	return temp.toLowerCase();
-}
-
-
-// --- From: core/src/parser/index.ts ---
-import type { Kire } from "../kire";
-import type { DirectiveDefinition, Node } from "../types";
-
-export class Parser {
-	private cursor = 0;
-	private stack: Node[] = [];
-	private rootChildren: Node[] = [];
-	public line = 1;
-	public column = 1;
-
-	constructor(
-		private template: string,
-		private kire: Kire,
-	) {}
-
-	public parse(): Node[] {
-		this.cursor = 0;
-		this.stack = [];
-		this.rootChildren = [];
-
-		while (this.cursor < this.template.length) {
-			const remaining = this.template.slice(this.cursor);
-			//console.log('PARSER:', {
-			//  cursor: this.cursor,
-			//  remaining: remaining.slice(0, 30),
-			//  stack: this.stack.map(s => s.name)
-			//});
-
-			// Check for interpolation {{ ... }}
-			const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
-			if (interpolationMatch) {
-				this.addNode({
-					type: "variable",
-					content: interpolationMatch[1]?.trim(),
-					start: this.cursor,
-					end: this.cursor + interpolationMatch[0].length,
-				});
-				this.advance(interpolationMatch[0]);
-				continue;
-			}
-
-			// Check for escaped directive @@
-			if (remaining.startsWith("@@")) {
-				this.addNode({
-					type: "text",
-					content: "@",
-					start: this.cursor,
-					end: this.cursor + 2,
-				});
-				this.advance("@@");
-				continue;
-			}
-
-			// Check for directive @name(...) or @name without parentheses
-			const directiveStartMatch = remaining.match(/^@(\w+)/);
-			if (directiveStartMatch) {
-				const [fullMatch, name] = directiveStartMatch;
-
-				//console.log('FOUND DIRECTIVE:', { name, fullMatch, stack: this.stack.map(s => s.name) });
-
-				// Check if it has arguments
-				let argsStr: string | undefined;
-				let argsEndIndex = fullMatch.length;
-
-				// Verifica se tem parênteses APENAS se o próximo caractere for '('
-				if (remaining[fullMatch.length] === "(") {
-					// Parse arguments with balanced parentheses
-					let depth = 1;
-					let i = fullMatch.length + 1;
-					let inQuote = false;
-					let quoteChar = "";
-
-					while (i < remaining.length && depth > 0) {
-						const char = remaining[i];
-						if (
-							(char === '"' || char === "'") &&
-							(i === 0 || remaining[i - 1] !== "\\")
-						) {
-							if (inQuote && char === quoteChar) {
-								inQuote = false;
-							} else if (!inQuote) {
-								inQuote = true;
-								quoteChar = char;
-							}
-						}
-
-						if (!inQuote) {
-							if (char === "(") depth++;
-							else if (char === ")") depth--;
-						}
-						i++;
-					}
-
-					if (depth === 0) {
-						argsStr = remaining.slice(fullMatch.length + 1, i - 1);
-						argsEndIndex = i;
-					}
-				}
-
-				if (name === "end") {
-					//console.log('HANDLING END DIRECTIVE');
-					this.handleEndDirective();
-					this.advance(remaining.slice(0, argsEndIndex));
-					continue;
-				}
-
-				const directiveDef = this.kire.getDirective(name as string);
-				//console.log('DIRECTIVE DEF:', { name, directiveDef });
-
-				// Check for sub-directive (parent logic)
-				let isSubDirective = false;
-				if (this.stack.length > 0) {
-					const currentParent = this.stack[this.stack.length - 1];
-					const parentDef = this.kire.getDirective(
-						currentParent?.name as string,
-					);
-
-					//console.log('CHECKING SUB DIRECTIVE:', {
-					//  parent: currentParent!.name,
-					//  candidate: name,
-					//  parentDef: parentDef
-					//});
-
-					if (parentDef?.parents) {
-						const subDef = parentDef.parents.find((p) => p.name === name);
-						//console.log('SUB DIRECTIVE RESULT:', { subDef });
-						if (subDef) {
-							//console.log('FOUND SUB DIRECTIVE! Processing:', name);
-							this.handleSubDirective(
-								name!,
-								argsStr,
-								remaining.slice(0, argsEndIndex),
-								currentParent!,
-								subDef,
-							);
-							this.advance(remaining.slice(0, argsEndIndex));
-							isSubDirective = true;
-							continue;
-						}
-					}
-				}
-
-				// If not a registered directive and not a sub-directive, treat as text
-				if (!directiveDef && !isSubDirective) {
-					//console.log('TREATING AS TEXT:', name);
-					this.addNode({
-						type: "text",
-						content: fullMatch,
-						start: this.cursor,
-						end: this.cursor + fullMatch.length,
-					});
-					this.advance(fullMatch);
-					continue;
-				}
-
-				const args = argsStr ? this.parseArgs(argsStr) : [];
-
-				const node: Node = {
-					type: "directive",
-					name: name,
-					args: args,
-					start: this.cursor,
-					end: this.cursor + argsEndIndex,
-					children: [],
-					related: [],
-				};
-
-				//console.log('ADDING DIRECTIVE NODE:', node);
-				this.addNode(node);
-
-				if (directiveDef?.children) {
-					if (directiveDef.childrenRaw) {
-						this.stack.push(node);
-
-						const contentStart = this.cursor + argsEndIndex;
-						const remainingTemplate = this.template.slice(contentStart);
-
-						// Find closing @end with word boundary check
-						const endMatch = remainingTemplate.match(/@end(?![a-zA-Z0-9_])/);
-
-						if (endMatch) {
-							const content = remainingTemplate.slice(0, endMatch.index);
-
-							// Add text node
-							this.addNode({
-								type: "text",
-								content: content,
-								start: contentStart,
-								end: contentStart + content.length,
-							});
-
-							this.stack.pop(); // Close immediately
-							this.advance(
-								remaining.slice(0, argsEndIndex) + content + endMatch[0],
-							);
-							continue;
-						} else {
-							// No end tag found, consume rest
-							const content = remainingTemplate;
-							this.addNode({
-								type: "text",
-								content: content,
-								start: contentStart,
-								end: this.template.length,
-							});
-							this.stack.pop();
-							this.advance(remaining.slice(0, argsEndIndex) + content);
-							continue;
-						}
-					}
-					//console.log('PUSHING TO STACK:', name);
-					this.stack.push(node);
-				}
-
-				this.advance(remaining.slice(0, argsEndIndex));
-				continue;
-			}
-
-			// Text
-			const nextInterpolation = remaining.indexOf("{{");
-			const nextDirective = remaining.indexOf("@");
-
-			let nextIndex = -1;
-			if (nextInterpolation !== -1 && nextDirective !== -1) {
-				nextIndex = Math.min(nextInterpolation, nextDirective);
-			} else if (nextInterpolation !== -1) {
-				nextIndex = nextInterpolation;
-			} else if (nextDirective !== -1) {
-				nextIndex = nextDirective;
-			}
-
-			if (nextIndex === -1) {
-				this.addNode({
-					type: "text",
-					content: remaining,
-					start: this.cursor,
-					end: this.template.length,
-				});
-				this.advance(remaining);
-			} else {
-				if (nextIndex === 0) {
-					this.addNode({
-						type: "text",
-						content: remaining[0],
-						start: this.cursor,
-						end: this.cursor + 1,
-					});
-					this.advance(remaining[0]!);
-				} else {
-					const text = remaining.slice(0, nextIndex);
-					this.addNode({
-						type: "text",
-						content: text,
-						start: this.cursor,
-						end: this.cursor + text.length,
-					});
-					this.advance(text);
-				}
-			}
-		}
-
-		//console.log('FINAL RESULT:', JSON.stringify(this.rootChildren, null, 2));
-		return this.rootChildren;
-	}
-
-	private handleEndDirective() {
-		//console.log('HANDLE END - Stack before:', this.stack.map(s => s.name));
-		if (this.stack.length > 0) {
-			this.stack.pop();
-		}
-		//console.log('HANDLE END - Popped:', popped?.name);
-		//console.log('HANDLE END - Stack after:', this.stack.map(s => s.name));
-	}
-
-	private handleSubDirective(
-		name: string,
-		argsStr: string | undefined,
-		fullMatch: string,
-		parentNode: Node,
-		subDef: DirectiveDefinition,
-	) {
-		const args = argsStr ? this.parseArgs(argsStr) : [];
-
-		const node: Node = {
-			type: "directive",
-			name: name,
-			args: args,
-			start: this.cursor,
-			end: this.cursor + fullMatch.length,
-			children: [],
-			related: [],
-		};
-
-		//console.log('HANDLING SUB DIRECTIVE:', {
-		//  name,
-		//  parent: parentNode.name,
-		//  node,
-		//  parentRelated: parentNode.related
-		//});
-
-		if (!parentNode.related) parentNode.related = [];
-		parentNode.related.push(node);
-
-		if (subDef.children) {
-			//console.log('PUSHING SUB DIRECTIVE TO STACK:', name);
-			this.stack.push(node);
-		}
-	}
-
-	private addNode(node: Node) {
-		if (this.stack.length > 0) {
-			const current = this.stack[this.stack.length - 1];
-			if (current && !current.children) current.children = [];
-			if (current?.children) {
-				//console.log('ADDING TO CHILDREN of', current.name, ':', node.type, node.name || node.content);
-				current.children.push(node);
-			}
-		} else {
-			//console.log('ADDING TO ROOT:', node.type, node.name || node.content);
-			this.rootChildren.push(node);
-		}
-	}
-
-	private advance(str: string) {
-		const lines = str.split("\n");
-		if (lines.length > 1) {
-			this.line += lines.length - 1;
-			this.column = (lines[lines.length - 1]?.length || 0) + 1;
-		} else {
-			this.column += str.length;
-		}
-		this.cursor += str.length;
-	}
-
-	private parseArgs(argsStr: string): any[] {
-		const args: any[] = [];
-		let current = "";
-		let inQuote = false;
-		let quoteChar = "";
-		let braceDepth = 0;
-		let bracketDepth = 0;
-		let parenDepth = 0;
-
-		for (let i = 0; i < argsStr.length; i++) {
-			const char = argsStr[i];
-
-			// Handle quotes
-			if (
-				(char === '"' || char === "'") &&
-				(i === 0 || argsStr[i - 1] !== "\\")
-			) {
-				if (inQuote && char === quoteChar) {
-					inQuote = false;
-				} else if (!inQuote) {
-					inQuote = true;
-					quoteChar = char;
-				}
-			}
-
-			if (!inQuote) {
-				if (char === "{") braceDepth++;
-				else if (char === "}") braceDepth--;
-				else if (char === "[") bracketDepth++;
-				else if (char === "]") bracketDepth--;
-				else if (char === "(") parenDepth++;
-				else if (char === ")") parenDepth--;
-			}
-
-			if (
-				char === "," &&
-				!inQuote &&
-				braceDepth === 0 &&
-				bracketDepth === 0 &&
-				parenDepth === 0
-			) {
-				args.push(current.trim());
-				current = "";
-			} else {
-				current += char;
-			}
-		}
-		if (current) args.push(current.trim());
-
-		return args.map((arg) => {
-			if (
-				(arg.startsWith('"') && arg.endsWith('"')) ||
-				(arg.startsWith("'") && arg.endsWith("'"))
-			) {
-				return arg.slice(1, -1);
-			}
-			if (arg === "true") return true;
-			if (arg === "false") return false;
-			if (!Number.isNaN(Number(arg))) return Number(arg);
-			return arg;
-		});
-	}
 }
 
 

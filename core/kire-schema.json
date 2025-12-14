@@ -2,7 +2,7 @@
     "package": "kire",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/drylian/kire.git"
+        "url": "git+https://github.com/drysius/kire.git"
     },
     "version": "0.1.0",
     "directives": [
@@ -226,7 +226,7 @@
     ],
     "elements": [],
     "globals": {
-        "defines": {},
-        "stacks": {}
+        "~$pre": [],
+        "~$pos": []
     }
 }

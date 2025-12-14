@@ -15,7 +15,7 @@
 	"type": "module",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/drylian/kire.git"
+		"url": "git+https://github.com/drysius/kire.git"
 	},
 	"keywords": [
 		"kire",
@@ -23,7 +23,7 @@
 		"reactive",
 		"frontend"
 	],
-	"author": "Drylian",
+	"author": "drysius",
 	"license": "MIT",
 	"scripts": {
 		"build": "bun run build.ts",

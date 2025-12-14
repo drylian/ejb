@@ -34,6 +34,8 @@ export const KireMarkdown: KirePlugin<MarkdownOptions> = {
 		kire.$ctx("renderMarkdown", async (source: string) => {
 			if (!source) return "";
 
+			const cache = kire.cached<string>("@kirejs/markdown");
+
 			// Check cache first (key is the source string/path)
 			if (cache.has(source)) {
 				return cache.get(source)!;

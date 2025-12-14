@@ -113,10 +113,14 @@ export default (kire: Kire) => {
 		example: `@code\n  console.log('This runs during template compilation.');\n@end`,
 		onCall(ctx) {
 			if (ctx.children) {
+				let code = "";
 				for (const child of ctx.children) {
 					if (child.type === "text" && child.content) {
-						ctx.raw(child.content);
+						code += child.content;
 					}
+				}
+				if (code) {
+					ctx.raw(code);
 				}
 			}
 		},

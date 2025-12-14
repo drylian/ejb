@@ -14,15 +14,9 @@ export default (kire: Kire) => {
 			const localsExpr = ctx.param("locals") || "{}";
 
 			ctx.raw(`await $ctx.$merge(async ($ctx) => {
-    const path = $ctx.$resolve(${JSON.stringify(pathExpr)});
-    const locals = ${localsExpr};
-    const templateFn = await $ctx.$require(path, $ctx, locals);
-    
-    if (templateFn) {
-        Object.assign($ctx, locals);
-        if(${JSON.stringify(kire.$expose_locals)}) $ctx[${JSON.stringify(kire.$var_locals)}] = locals;
-        
-        await templateFn($ctx);
+    const html = await $ctx.$require(${JSON.stringify(pathExpr)}, ${localsExpr});
+    if (html !== null) { // $require pode retornar null se não encontrar
+        $ctx.res(html);
     }
 });`);
 		},

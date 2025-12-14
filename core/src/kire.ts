@@ -77,7 +77,7 @@ export class Kire {
 		this.$ctx("~$pos", []);
 		this.$ctx(
 			"$require",
-			async (path: string) => {
+			async (path: string, locals: Record<string, any> = {}) => { // locals agora é um argumento de $require
 				// Use absolute path for caching key to avoid conflicts
 				const resolvedPath = resolvePath(
 					path,
@@ -91,6 +91,8 @@ export class Kire {
 				const hash = cached.get(`md5:${resolvedPath}`);
 				let content = "";
 
+				let compiledFn: Function | undefined;
+
 				if (!hash || !isProd) {
 					try {
 						content = await this.$resolver(resolvedPath);
@@ -98,32 +100,26 @@ export class Kire {
 						if (!e.message.includes("No resolver")) {
 							console.warn(`Failed to resolve path: ${resolvedPath}`, e);
 						}
-						return null;
+						return null; // Retorna null se não encontrar, para a diretiva lidar
 					}
 
 					if (!content) {
 						return null;
 					}
 
+					compiledFn = await this.compileFn(content, resolvedPath);
 					const ihash = md5(content);
-
-					if (!isProd && hash) {
-						if (ihash === hash) {
-							return cached.get(`js:${resolvedPath}`);
-						}
-						else {
-							cached.delete(`md5:${resolvedPath}`);
-							cached.delete(`js:${resolvedPath}`);
-						}
-					}
-
-					const compiled = await this.compileFn(content);
+					
 					cached.set(`md5:${resolvedPath}`, ihash);
-					cached.set(`js:${resolvedPath}`, compiled);
-					return compiled;
+					cached.set(`js:${resolvedPath}`, compiledFn); // Cache a função compilada
 				} else {
-					return cached.get(`js:${resolvedPath}`);
+					compiledFn = cached.get(`js:${resolvedPath}`);
 				}
+
+				if (!compiledFn) return null; // Retorna null se a função não foi compilada/cacheada
+
+				// Executa a função compilada com os locals e retorna o HTML
+				return this.run(compiledFn, locals);
 			}
 		);
 
@@ -203,7 +199,7 @@ export class Kire {
 			if (!handler) throw new Error("Handler is required for legacy element()")
 			this.$elements.add({
 				name: nameOrDef as string | RegExp,
-				void: options?.void,
+				void: options?.void ?? false, // Default to false if not provided
 				onCall: handler,
 			});
 		}
@@ -241,12 +237,13 @@ export class Kire {
 		return compiler.compile(nodes);
 	}
 
-	public async compileFn(content: string): Promise<Function> {
+	public async compileFn(content: string, filename?: string): Promise<Function> {
 		const code = await this.compile(content);
 		try {
 			const AsyncFunction = Object.getPrototypeOf(async () => { }).constructor;
 
 			const mainFn = new AsyncFunction("$ctx", code);
+			(mainFn as any)._code = code;
 
 			// Return the separated functions
 			return mainFn;
@@ -260,7 +257,7 @@ export class Kire {
 		template: string,
 		locals: Record<string, any> = {},
 	): Promise<string> {
-		const fn = await this.compileFn(template);
+		const fn = await this.compileFn(template, "template");
 		return this.run(fn, locals);
 	}
 
@@ -276,7 +273,7 @@ export class Kire {
 		} else {
 			try {
 				const content = await this.$resolver(resolvedPath);
-				compiled = await this.compileFn(content);
+				compiled = await this.compileFn(content, resolvedPath);
 				if (this.production) {
 					this.$files.set(resolvedPath, compiled as any);
 				}
@@ -328,7 +325,15 @@ export class Kire {
 			this['~res'] = parentRes + this['~res'];
 		};
 
-		const finalCtx = await mainFn(rctx);
+		let finalCtx;
+		try {
+			finalCtx = await mainFn(rctx);
+		} catch (e: any) {
+			if ((mainFn as any)._code) {
+				e.kireGeneratedCode = (mainFn as any)._code;
+			}
+			throw e;
+		}
 
 		// Execute ~$pre functions collected during execution
 		if (finalCtx['~$pre'] && finalCtx['~$pre'].length > 0) {

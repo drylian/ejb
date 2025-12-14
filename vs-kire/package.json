@@ -4,7 +4,7 @@
     "description": "Language support for the Kire templating engine.",
     "version": "0.0.1",
     "type": "module",
-    "publisher": "drylian",
+    "publisher": "drysius",
     "engines": {
         "vscode": "^1.104.0"
     },

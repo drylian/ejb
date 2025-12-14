@@ -1,0 +1,133 @@
+@include('layouts/_main.kire', { title: (packageName || 'Package') + ' | Kire' })
+
+@define('content')
+    @code
+        const item = $ctx.packages.find(p => p.package === packageName || p.package === '@kirejs/' + packageName);
+    @end
+
+    @if(item)
+        <div class="space-y-8">
+            <div class="border-b border-base-300 pb-6">
+                <div class="flex items-center gap-4 mb-2">
+                    <h1 class="text-4xl font-bold m-0">{{ item.package }}</h1>
+                    @if(item.version)
+                        <span class="badge badge-primary badge-lg">{{ item.version }}</span>
+                    @end
+                </div>
+                <p class="text-xl opacity-75">{{ item.description || 'Official Kire package.' }}</p>
+                
+                @if(item.repository && item.repository.url)
+                    <div class="mt-4">
+                         <a href="{{ item.repository.url.replace('git+', '') }}" target="_blank" class="btn btn-sm btn-outline gap-2">
+                            <iconify icon="mdi:github" class="text-lg" />
+                            Repository
+                        </a>
+                    </div>
+                @end
+            </div>
+
+            <!-- Directives Section -->
+            @if(item.directives && item.directives.length > 0)
+                <div>
+                    <h3 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                        <iconify icon="mdi:function-variant" class="text-primary" /> 
+                        Directives
+                    </h3>
+                    <div class="join join-vertical w-full bg-base-100 border border-base-300 rounded-box shadow-sm">
+                        @for(dir of item.directives)
+                            <div class="collapse collapse-arrow join-item border-b border-base-300 last:border-none">
+                                <input type="radio" name="directives-{{ item.package }}" /> 
+                                <div class="collapse-title text-lg font-medium flex flex-wrap items-center gap-2 py-4">
+                                    <code class="text-primary font-bold bg-primary/10 px-2 py-0.5 rounded">@{{ dir.name }}</code>
+                                    @if(dir.params && dir.params.length > 0)
+                                        <span class="badge badge-sm badge-ghost font-mono opacity-70 hidden sm:inline-flex">
+                                            {{ dir.params.join(', ') }}
+                                        </span>
+                                    @end
+                                    @if(dir.type)
+                                        <span class="badge badge-sm badge-{{ dir.type == 'js' ? 'warning' : (dir.type == 'css' ? 'info' : 'success') }} badge-outline ml-auto">
+                                            {{ dir.type.toUpperCase() }}
+                                        </span>
+                                    @end
+                                </div>
+                                <div class="collapse-content bg-base-100">
+                                    <div class="pt-2 pb-4 space-y-4">
+                                        @if(dir.params && dir.params.length > 0)
+                                            <div class="sm:hidden">
+                                                <span class="text-xs font-bold opacity-50 uppercase block mb-1">Params</span>
+                                                <code class="text-xs bg-base-200 px-1 rounded">{{ dir.params.join(', ') }}</code>
+                                            </div>
+                                        @end
+                                        
+                                        <p class="opacity-90 text-base-content/80">{{ dir.description }}</p>
+                                        
+                                        @if(dir.example)
+                                            <div class="mockup-code text-sm bg-base-300 text-base-content shadow-inner">
+                                                <pre><code>{{ dir.example }}</code></pre>
+                                            </div>
+                                        @end
+
+                                        @if(dir.parents && dir.parents.length > 0)
+                                            <div class="bg-base-200/50 rounded-lg p-4 mt-4">
+                                                <span class="text-xs font-bold uppercase opacity-50 tracking-wider block mb-2">Related / Sub-directives</span>
+                                                <div class="space-y-3">
+                                                    @for(sub of dir.parents)
+                                                        <div class="pl-3 border-l-2 border-secondary">
+                                                            <div class="font-mono font-bold text-secondary flex items-center gap-2">
+                                                                @{{ sub.name }} 
+                                                                <span class="opacity-50 font-normal text-xs">{{ sub.params ? '(' + sub.params.join(', ') + ')' : '' }}</span>
+                                                            </div>
+                                                            <div class="opacity-75 text-sm mt-0.5">{{ sub.description }}</div>
+                                                        </div>
+                                                    @end
+                                                </div>
+                                            </div>
+                                        @end
+                                    </div>
+                                </div>
+                            </div>
+                        @end
+                    </div>
+                </div>
+            @end
+
+            <!-- Elements Section -->
+            @if(item.elements && item.elements.length > 0)
+                <div>
+                    <h3 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                        <iconify icon="mdi:code-tags" class="text-secondary" /> 
+                        Elements
+                    </h3>
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                        @for(el of item.elements)
+                            <div class="card bg-base-100 shadow-sm border border-base-200 hover:border-secondary/30 transition-colors">
+                                <div class="card-body">
+                                    <div class="flex items-center gap-3 mb-2">
+                                        <h4 class="card-title font-mono text-secondary text-xl">&lt;{{ el.name }}>;</h4>
+                                        @if(el.void)
+                                            <div class="badge badge-xs badge-outline opacity-50 tooltip" data-tip="Void element (no closing tag), e.g., <{{ el.name }}/>">void</div>
+                                        @end
+                                    </div>
+                                    <p class="opacity-80 mb-4">{{ el.description }}</p>
+                                    @if(el.example)
+                                        <div class="mockup-code text-xs bg-base-300 text-base-content w-full">
+                                            <pre><code>{{ el.example }}</code></pre>
+                                        </div>
+                                    @end
+                                </div>
+                            </div>
+                        @end
+                    </div>
+                </div>
+            @end
+        </div>
+    @else
+        <div class="alert alert-error">
+            <iconify icon="mdi:alert" class="text-2xl" />
+            <div>
+                <h3 class="font-bold">Package not found</h3>
+                <div class="text-sm">Could not find package data for "{{ pkgName }}".</div>
+            </div>
+        </div>
+    @end
+@end

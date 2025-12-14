@@ -4,7 +4,6 @@ import KireAssets from "@kirejs/assets";
 import KireTailwind from "@kirejs/tailwind";
 import KireMarkdown from "@kirejs/markdown";
 import KireIconify from "@kirejs/iconify";
-import KireAnalytical from "@kirejs/analytical";
 import { readFile } from "fs/promises";
 import { resolve, join } from "path";
 
@@ -55,7 +54,6 @@ console.log(`Loaded ${schemas.length} schemas.`);
 const kire = new Kire({
   root: resolve(docsRoot, "src"),
   plugins: [
-    //KireAnalytical,
     KireMarkdown,
     KireIconify,
     [KireTailwind, {}],
@@ -74,8 +72,6 @@ const kire = new Kire({
 // Inject schemas into global context
 kire.$ctx("packages", schemas);
 
-console.log(await kire.view('pages/packages.kire'))
-process.exit(0);
 if (process.argv.includes("--dev")) {
   console.log("Starting dev server...");
   await KireSsg.dev({ port: 3000 });

@@ -16,7 +16,7 @@
 	"type": "module",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/drylian/kire.git"
+		"url": "git+https://github.com/drysius/kire.git"
 	},
 	"keywords": [
 		"backend",
@@ -26,12 +26,12 @@
 		"kire",
 		"typescript"
 	],
-	"author": "Drylian",
+	"author": "drysius",
 	"license": "MIT",
 	"bugs": {
-		"url": "https://github.com/drylian/kire/issues"
+		"url": "https://github.com/drysius/kire/issues"
 	},
-	"homepage": "https://github.com/drylian/kire#readme",
+	"homepage": "https://github.com/drysius/kire#readme",
 	"scripts": {
 		"build": "bun run ../../build.ts",
 		"test": "bun test",

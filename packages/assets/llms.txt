@@ -46,7 +46,7 @@ export const KireAssets: KirePlugin<KireAssetsOptions> = {
 		const prefix = opts?.prefix || "_kire";
 		const domain = opts?.domain || "";
 		const injectionTag = "kire-assets-injection-point";
-		const cache = kire.cached<KireAsset>("@kirejs/assets");
+		// Do not cache the cache reference here, as it may be cleared by kire.cacheClear()
 
 		// 1. Register handlers for script and style tags to capture inline content
 		// Important: Register these BEFORE the injection tag handler so they run first
@@ -66,15 +66,15 @@ export const KireAssets: KirePlugin<KireAssetsOptions> = {
 					.digest("hex")
 					.slice(0, 8);
 
+				// Get fresh cache reference
+				const cache = kire.cached<KireAsset>("@kirejs/assets");
+
 				// Store in global cache
 				if (!cache.has(hash)) {
 					cache.set(hash, { hash, content, type: "css" });
 				}
 
 				// Add to request context
-				// We need to access the shared request context.
-				// ctx is a clone, but if _assets was initialized on the parent context as an object,
-				// the reference is shared.
 				if (ctx._assets) {
 					ctx._assets.styles.push(hash);
 					// Remove the original tag
@@ -109,6 +109,8 @@ export const KireAssets: KirePlugin<KireAssetsOptions> = {
 				) {
 					type = "mjs";
 				}
+
+				const cache = kire.cached<KireAsset>("@kirejs/assets");
 
 				if (!cache.has(hash)) {
 					cache.set(hash, { hash, content, type });
@@ -148,6 +150,7 @@ export const KireAssets: KirePlugin<KireAssetsOptions> = {
 
 				let output = "";
 				const baseUrl = domain ? `${domain}/${prefix}` : `/${prefix}`;
+				const cache = kire.cached<KireAsset>("@kirejs/assets");
 
 				// Generate links for styles
 				// Use Set to avoid duplicates if any

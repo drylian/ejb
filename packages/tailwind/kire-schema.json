@@ -2,7 +2,7 @@
     "package": "@kirejs/tailwind",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/drylian/kire.git"
+        "url": "git+https://github.com/drysius/kire.git"
     },
     "version": "0.1.0",
     "directives": [
@@ -13,8 +13,8 @@
             ],
             "children": true,
             "childrenRaw": true,
-            "description": "Processes CSS content within the block using Tailwind CSS v4.",
-            "example": "@tailwind\n  @theme { ... } \n@end"
+            "description": "Processes CSS content within the block using Tailwind CSS.",
+            "example": "@tailwind\n  @tailwind base;\n  @tailwind components;\n  @tailwind utilities;\n@end"
         }
     ],
     "elements": [
@@ -24,5 +24,8 @@
             "example": "<tailwind>@tailwind base; @tailwind components; @tailwind utilities;</tailwind>"
         }
     ],
-    "globals": {}
+    "globals": {
+        "~$pre": [],
+        "~$pos": []
+    }
 }
