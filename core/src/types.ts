@@ -1,13 +1,6 @@
 import type { Kire } from "./kire";
 
-export interface KireCache<T = any> {
-	get(key: string): T | undefined;
-	set(key: string, value: T): void;
-	has(key: string): boolean;
-	delete(key: string): boolean;
-	clear(): void;
-	entries(): IterableIterator<[string, T]>;
-}
+export type KireCache<T = any> = Map<string, T>;
 
 export interface KireConfig {
 	globals?: Record<string, any>;

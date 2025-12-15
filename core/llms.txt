@@ -47,10 +47,15 @@ export class Compiler {
                 }
             } else if (node.type === "variable") {
                 if (node.content) {
-                    // Simple interpolation
-                    this.resBuffer.push(
-                        `$ctx['~res'] += (${node.content});`,
-                    );
+                    if (node.raw) {
+                        this.resBuffer.push(
+                            `$ctx['~res'] += (${node.content});`,
+                        );
+                    } else {
+                        this.resBuffer.push(
+                            `$ctx['~res'] += $ctx.$escape(${node.content});`,
+                        );
+                    }
                 }
             } else if (node.type === "directive") {
                 await this.processDirective(node);
@@ -141,14 +146,7 @@ export class Compiler {
 // --- From: core/src/types.ts ---
 import type { Kire } from "./kire";
 
-export interface KireCache<T = any> {
-	get(key: string): T | undefined;
-	set(key: string, value: T): void;
-	has(key: string): boolean;
-	delete(key: string): boolean;
-	clear(): void;
-	entries(): IterableIterator<[string, T]>;
-}
+export type KireCache<T = any> = Map<string, T>;
 
 export interface KireConfig {
 	globals?: Record<string, any>;
@@ -285,12 +283,13 @@ export interface Node {
 	};
 	children?: Node[]; // Inner content
 	related?: Node[]; // For 'parents' (elseif, etc)
+	raw?: boolean;
 }
 
 
 // --- From: core/src/parser.ts ---
-import type { Kire } from "../kire";
-import type { DirectiveDefinition, Node } from "../types";
+import type { Kire } from "./kire";
+import type { DirectiveDefinition, Node } from "./types";
 
 export class Parser {
     private cursor = 0;
@@ -317,6 +316,22 @@ export class Parser {
             //  stack: this.stack.map(s => s.name)
             //});
 
+            // Check for raw interpolation {{{ ... }}}
+            const rawInterpolationMatch = remaining.match(/^\{\{\{([\s\S]*?)\}\}\}/);
+            if (rawInterpolationMatch) {
+                const content = rawInterpolationMatch[0];
+                this.addNode({
+                    type: "variable",
+                    content: rawInterpolationMatch[1]?.trim(),
+                    raw: true,
+                    start: this.cursor,
+                    end: this.cursor + content.length,
+                    loc: this.getLoc(content),
+                });
+                this.advance(content);
+                continue;
+            }
+
             // Check for interpolation {{ ... }}
             const interpolationMatch = remaining.match(/^\{\{([\s\S]*?)\}\}/);
             if (interpolationMatch) {
@@ -324,6 +339,7 @@ export class Parser {
                 this.addNode({
                     type: "variable",
                     content: interpolationMatch[1]?.trim(),
+                    raw: false,
                     start: this.cursor,
                     end: this.cursor + content.length,
                     loc: this.getLoc(content),
@@ -531,11 +547,6 @@ export class Parser {
                         } else {
                             // No end tag found, consume rest
                             const content = remainingTemplate;
-                            
-                            const startLoc = directiveLoc.end;
-                            // ... simple calc for rest ...
-                            // For robustness, let's just use empty loc or try best effort
-                            // Since we are consuming rest, end is EOF.
                             
                             this.addNode({
                                 type: "text",
@@ -779,7 +790,6 @@ import type {
 	KirePlugin,
 	KireSchematic,
 } from "./types";
-import { md5 } from "./utils/md5";
 import { resolvePath } from "./utils/resolve";
 
 export class Kire {
@@ -792,7 +802,7 @@ export class Kire {
 	public $resolver: (filename: string) => Promise<string>;
 	public $readdir?: (pattern: string) => Promise<string[]>;
 	public alias: Record<string, string>;
-	public extension: string;
+	extension: string;
 	public $files: Map<string, Function> = new Map();
 	public $parser: IParserConstructor;
 	public $compiler: ICompilerConstructor;
@@ -810,14 +820,7 @@ export class Kire {
 			this.$cache.set(namespace, new Map());
 		}
 		const store = this.$cache.get(namespace)!;
-		return {
-			get: (key: string) => store.get(key),
-			set: (key: string, value: T) => store.set(key, value),
-			has: (key: string) => store.has(key),
-			delete: (key: string) => store.delete(key),
-			clear: () => store.clear(),
-			entries: () => store.entries(),
-		};
+		return store;
 	}
 
 	constructor(options: KireOptions = {}) {
@@ -836,58 +839,6 @@ export class Kire {
 
 		this.$parser = options.engine?.parser ?? Parser;
 		this.$compiler = options.engine?.compiler ?? Compiler;
-
-		// Register internal helpers
-		this.$ctx("$md5", md5);
-		this.$ctx("~$pre", []);
-		this.$ctx("~$pos", []);
-		this.$ctx(
-			"$require",
-			async (path: string, locals: Record<string, any> = {}) => { // locals agora é um argumento de $require
-				// Use absolute path for caching key to avoid conflicts
-				const resolvedPath = resolvePath(
-					path,
-					this.root,
-					this.alias,
-					this.extension,
-				);
-
-				const cached = this.cached("@kirejs/core");
-				const isProd = this.production;
-				const hash = cached.get(`md5:${resolvedPath}`);
-				let content = "";
-
-				let compiledFn: Function | undefined;
-
-				if (!hash || !isProd) {
-					try {
-						content = await this.$resolver(resolvedPath);
-					} catch (e: any) {
-						if (!e.message.includes("No resolver")) {
-							console.warn(`Failed to resolve path: ${resolvedPath}`, e);
-						}
-						return null; // Retorna null se não encontrar, para a diretiva lidar
-					}
-
-					if (!content) {
-						return null;
-					}
-
-					compiledFn = await this.compileFn(content, resolvedPath);
-					const ihash = md5(content);
-					
-					cached.set(`md5:${resolvedPath}`, ihash);
-					cached.set(`js:${resolvedPath}`, compiledFn); // Cache a função compilada
-				} else {
-					compiledFn = cached.get(`js:${resolvedPath}`);
-				}
-
-				if (!compiledFn) return null; // Retorna null se a função não foi compilada/cacheada
-
-				// Executa a função compilada com os locals e retorna o HTML
-				return this.run(compiledFn, locals);
-			}
-		);
 
 		// Collect plugins to load
 		const pluginsToLoad: Array<{ p: KirePlugin<any>; o?: any }> = [];
@@ -1003,8 +954,9 @@ export class Kire {
 		return compiler.compile(nodes);
 	}
 
-	public async compileFn(content: string, filename?: string): Promise<Function> {
+	public async compileFn(content: string): Promise<Function> {
 		const code = await this.compile(content);
+		console.log(code)
 		try {
 			const AsyncFunction = Object.getPrototypeOf(async () => { }).constructor;
 
@@ -1023,7 +975,7 @@ export class Kire {
 		template: string,
 		locals: Record<string, any> = {},
 	): Promise<string> {
-		const fn = await this.compileFn(template, "template");
+		const fn = await this.compileFn(template);
 		return this.run(fn, locals);
 	}
 
@@ -1039,7 +991,7 @@ export class Kire {
 		} else {
 			try {
 				const content = await this.$resolver(resolvedPath);
-				compiled = await this.compileFn(content, resolvedPath);
+				compiled = await this.compileFn(content);
 				if (this.production) {
 					this.$files.set(resolvedPath, compiled as any);
 				}
@@ -1059,7 +1011,7 @@ export class Kire {
 		return resolvePath(filepath, this.root, this.alias, this.extension, currentFile);
 	}
 
-	private async run(mainFn: Function, locals: Record<string, any>): Promise<string> {
+	public async run(mainFn: Function, locals: Record<string, any>) {
 		const rctx: any = {};
 		for (const [k, v] of this.$globals) {
 			rctx[k] = v;
@@ -1109,7 +1061,7 @@ export class Kire {
 		}
 
 		let resultHtml = finalCtx['~res'];
-		
+
 		// Execute ~$pos functions (deferred logic)
 		if (finalCtx['~$pos'] && finalCtx['~$pos'].length > 0) {
 			for (const posFn of finalCtx['~$pos']) {
@@ -1588,16 +1540,73 @@ kire.directive({
 
 // --- From: core/src/directives/index.ts ---
 import type { KirePlugin } from "../types";
+import { md5 } from "../utils/md5";
+import { resolvePath } from "../utils/resolve";
 import componentDirectives from "./component";
 import importDirectives from "./import";
 import defineDirectives from "./layout";
 import nativeDirectives from "./natives";
 
 export const KireDirectives: KirePlugin = {
-	name: "kire",
+	name: "@kirejs/core",
 	sort: 100,
 	options: {},
 	load(kire) {
+		// Register internal helpers
+		// add md5 function
+		kire.$ctx("$md5", md5);
+		kire.$ctx("$escape", escapeHtml);
+		
+		kire.$ctx(
+			"$require",
+			async (path: string, locals: Record<string, any> = {}) => {
+				// Use absolute path for caching key to avoid conflicts
+				const resolvedPath = resolvePath(
+					path,
+					kire.root,
+					kire.alias,
+					kire.extension,
+				);
+
+				const cached = kire.cached("@kirejs/core");
+				const isProd = kire.production;
+				const cachedHash = cached.get(`md5:${resolvedPath}`);
+				let compiledFn: Function | undefined = cached.get(`js:${resolvedPath}`);
+				let content = "";
+
+				if (!cachedHash || !compiledFn || !isProd) {
+					try {
+						content = await kire.$resolver(resolvedPath);
+					} catch (e: any) {
+						if (!e.message.includes("No resolver")) {
+							console.warn(`Failed to resolve path: ${resolvedPath}`, e);
+						}
+						return null; // Retorna null se não encontrar, para a diretiva lidar
+					}
+
+					if (!content) {
+						return null;
+					}
+
+					const newHash = md5(content);
+
+					if (cachedHash === newHash && compiledFn) {
+						// Optimization: Content hasn't changed, reuse cached function
+					} else {
+						compiledFn = await kire.compileFn(content, resolvedPath);
+						cached.set(`md5:${resolvedPath}`, newHash);
+						cached.set(`js:${resolvedPath}`, compiledFn); // Cache a função compilada
+					}
+				}
+
+				if (!compiledFn) return null; // Retorna null se a função não foi compilada/cacheada
+
+				// Executa a função compilada com os locals e retorna o HTML
+				// We need to cast kire to any or make run public to access it from here since it was private
+				return (kire as any).run(compiledFn, locals);
+			}
+		);
+
 		defineDirectives(kire);
 		nativeDirectives(kire);
 		importDirectives(kire);
@@ -1605,6 +1614,15 @@ export const KireDirectives: KirePlugin = {
 	},
 };
 
+function escapeHtml(unsafe: any): string {
+	if (unsafe === null || unsafe === undefined) return "";
+	return String(unsafe)
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#039;");
+}
 
 // --- From: core/src/utils/resolve.ts ---
 import { join } from "./path";
@@ -1815,7 +1833,7 @@ export function md5(string: string): string {
 	}
 
 	function convertToWordArray(string: string): number[] {
-		let lWordCount;
+		let lWordCount:number;
 		const lMessageLength = string.length;
 		const lNumberOfWords_temp1 = lMessageLength + 8;
 		const lNumberOfWords_temp2 =

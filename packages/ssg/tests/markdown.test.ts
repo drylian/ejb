@@ -36,7 +36,7 @@ describe("KireSsg Build", () => {
             <nav>Docs Nav</nav>
             <main>
                 @mdslots('docs/*.md', 'docs')
-                {{ docs[currentPath] }}
+                {{{ docs[currentPath] }}}
             </main>
         </body>
         </html>
@@ -67,7 +67,7 @@ describe("KireSsg Build", () => {
         const blogLayout = `
         <article>
             @mdslots('blog/**/*.md')
-            {{ $mdslot[currentPath] }}
+            {{{ $mdslot[currentPath] }}}
         </article>
         `;
         await writeFile(join(srcDir, "blog_gen.kire"), blogLayout);

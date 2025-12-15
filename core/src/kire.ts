@@ -13,7 +13,6 @@ import type {
 	KirePlugin,
 	KireSchematic,
 } from "./types";
-import { md5 } from "./utils/md5";
 import { resolvePath } from "./utils/resolve";
 
 export class Kire {
@@ -44,14 +43,7 @@ export class Kire {
 			this.$cache.set(namespace, new Map());
 		}
 		const store = this.$cache.get(namespace)!;
-		return {
-			get: (key: string) => store.get(key),
-			set: (key: string, value: T) => store.set(key, value),
-			has: (key: string) => store.has(key),
-			delete: (key: string) => store.delete(key),
-			clear: () => store.clear(),
-			entries: () => store.entries(),
-		};
+		return store;
 	}
 
 	constructor(options: KireOptions = {}) {
@@ -70,60 +62,6 @@ export class Kire {
 
 		this.$parser = options.engine?.parser ?? Parser;
 		this.$compiler = options.engine?.compiler ?? Compiler;
-
-		// Register internal helpers
-		this.$ctx("$md5", md5);
-		this.$ctx("$escape", escapeHtml);
-		this.$ctx("~$pre", []);
-		this.$ctx("~$pos", []);
-		this.$ctx(
-			"$require",
-			async (path: string, locals: Record<string, any> = {}) => { // locals agora é um argumento de $require
-				// Use absolute path for caching key to avoid conflicts
-				const resolvedPath = resolvePath(
-					path,
-					this.root,
-					this.alias,
-					this.extension,
-				);
-
-				const cached = this.cached("@kirejs/core");
-				const isProd = this.production;
-				const cachedHash = cached.get(`md5:${resolvedPath}`);
-				let compiledFn: Function | undefined = cached.get(`js:${resolvedPath}`);
-				let content = "";
-
-				if (!cachedHash || !compiledFn || !isProd) {
-					try {
-						content = await this.$resolver(resolvedPath);
-					} catch (e: any) {
-						if (!e.message.includes("No resolver")) {
-							console.warn(`Failed to resolve path: ${resolvedPath}`, e);
-						}
-						return null; // Retorna null se não encontrar, para a diretiva lidar
-					}
-
-					if (!content) {
-						return null;
-					}
-
-					const newHash = md5(content);
-
-					if (cachedHash === newHash && compiledFn) {
-						// Optimization: Content hasn't changed, reuse cached function
-					} else {
-						compiledFn = await this.compileFn(content, resolvedPath);
-						cached.set(`md5:${resolvedPath}`, newHash);
-						cached.set(`js:${resolvedPath}`, compiledFn); // Cache a função compilada
-					}
-				}
-
-				if (!compiledFn) return null; // Retorna null se a função não foi compilada/cacheada
-
-				// Executa a função compilada com os locals e retorna o HTML
-				return this.run(compiledFn, locals);
-			}
-		);
 
 		// Collect plugins to load
 		const pluginsToLoad: Array<{ p: KirePlugin<any>; o?: any }> = [];
@@ -239,8 +177,9 @@ export class Kire {
 		return compiler.compile(nodes);
 	}
 
-	public async compileFn(content: string, filename?: string): Promise<Function> {
+	public async compileFn(content: string): Promise<Function> {
 		const code = await this.compile(content);
+		console.log(code)
 		try {
 			const AsyncFunction = Object.getPrototypeOf(async () => { }).constructor;
 
@@ -259,7 +198,7 @@ export class Kire {
 		template: string,
 		locals: Record<string, any> = {},
 	): Promise<string> {
-		const fn = await this.compileFn(template, "template");
+		const fn = await this.compileFn(template);
 		return this.run(fn, locals);
 	}
 
@@ -275,7 +214,7 @@ export class Kire {
 		} else {
 			try {
 				const content = await this.$resolver(resolvedPath);
-				compiled = await this.compileFn(content, resolvedPath);
+				compiled = await this.compileFn(content);
 				if (this.production) {
 					this.$files.set(resolvedPath, compiled as any);
 				}
@@ -295,7 +234,7 @@ export class Kire {
 		return resolvePath(filepath, this.root, this.alias, this.extension, currentFile);
 	}
 
-	private async run(mainFn: Function, locals: Record<string, any>): Promise<string> {
+	public async run(mainFn: Function, locals: Record<string, any>) {
 		const rctx: any = {};
 		for (const [k, v] of this.$globals) {
 			rctx[k] = v;
@@ -345,7 +284,7 @@ export class Kire {
 		}
 
 		let resultHtml = finalCtx['~res'];
-		
+
 		// Execute ~$pos functions (deferred logic)
 		if (finalCtx['~$pos'] && finalCtx['~$pos'].length > 0) {
 			for (const posFn of finalCtx['~$pos']) {
@@ -432,14 +371,4 @@ export class Kire {
 
 		return resultHtml;
 	}
-}
-
-function escapeHtml(unsafe: any): string {
-	if (unsafe === null || unsafe === undefined) return "";
-	return String(unsafe)
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#039;");
 }
