@@ -126,6 +126,34 @@ export default (kire: Kire) => {
 		},
 	});
 
+	// Register case and default globally/independently so they are not treated as chained parents of switch
+	kire.directive({
+		name: "case",
+		params: ["val:string"],
+		children: true,
+		type: "js",
+		description: "A case clause for a @switch statement.",
+		example: `@case('A')\n  <p>Value is A</p>\n@end`,
+		async onCall(c) {
+			c.raw(`case ${JSON.stringify(c.param("val"))}: {`);
+			if (c.children) await c.set(c.children);
+			c.raw(`break; }`);
+		},
+	});
+
+	kire.directive({
+		name: "default",
+		children: true,
+		type: "js",
+		description: "The default clause for a @switch statement.",
+		example: `@default\n  <p>Value is something else</p>\n@end`,
+		async onCall(c) {
+			c.raw(`default: {`);
+			if (c.children) await c.set(c.children);
+			c.raw(`}`);
+		},
+	});
+
 	kire.directive({
 		name: "switch",
 		params: ["expr:string"],
@@ -134,36 +162,13 @@ export default (kire: Kire) => {
 		description:
 			"Provides a control flow statement similar to a JavaScript switch block.",
 		example: `@switch(value)\n  @case(1) ... @end\n  @default ... @end\n@end`,
-		parents: [
-			{
-				name: "case",
-				params: ["val:string"],
-				children: true,
-				type: "js",
-				description: "A case clause for a @switch statement.",
-				example: `@case('A')\n  <p>Value is A</p>\n@end`,
-				async onCall(c) {
-					c.raw(`case ${JSON.stringify(c.param("val"))}: {`);
-					if (c.children) await c.set(c.children);
-					c.raw(`break; }`);
-				},
-			},
-			{
-				name: "default",
-				children: true,
-				type: "js",
-				description: "The default clause for a @switch statement.",
-				example: `@default\n  <p>Value is something else</p>\n@end`,
-				async onCall(c) {
-					c.raw(`default: {`);
-					if (c.children) await c.set(c.children);
-					c.raw(`}`);
-				},
-			},
-		],
 		async onCall(compiler) {
 			compiler.raw(`switch (${compiler.param("expr")}) {`);
-			if (compiler.parents) await compiler.set(compiler.parents);
+			if (compiler.children) {
+				// Filter only case/default nodes to avoid invalid JS (text nodes in switch block)
+				const cases = compiler.children.filter(n => n.name === 'case' || n.name === 'default');
+				await compiler.set(cases);
+			}
 			compiler.raw(`}`);
 		},
 	});

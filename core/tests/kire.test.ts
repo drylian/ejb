@@ -56,49 +56,17 @@ test("Kire - Pre/Pos Buffers", async () => {
 });
 
 test("Kire - Nested Directives (If/ElseIf/Else)", async () => {
+
 	const kire = new Kire();
 
-	kire.directive({
-		name: "if",
-		params: ["cond:string"],
-		children: true, // allow @end interaction
-		parents: [
-			{
-				name: "elseif",
-				params: ["cond:string"],
-				children: true,
-				onCall(ctx) {
-					ctx.raw(`} else if (${ctx.param("cond")}) {`);
-					ctx.set(ctx.children ?? []);
-				},
-			},
-			{
-				name: "else",
-				children: true,
-				onCall(ctx) {
-					ctx.raw(`} else {`);
-					if (ctx.children) ctx.set(ctx.children);
-				},
-			},
-		],
-		onCall(ctx) {
-			const cond = ctx.param("cond");
-			ctx.raw(`if (${cond}) {`);
-			if (ctx.children) ctx.set(ctx.children);
-			if (ctx.parents) ctx.set(ctx.parents);
-			ctx.raw("}");
-		},
-	});
-
-	const tpl1 = "@if(true)A@else B@end";
+	const tpl1 = "@if(true)A@elseB@end";
 	const result1 = await kire.render(tpl1);
 	expect(result1).toBe("A");
-
-	const tpl2 = "@if(false)A@else B@end";
+	const tpl2 = "@if(false)A@elseB@end";
 	const result2 = await kire.render(tpl2);
-	expect(result2).toBe(" B");
+	expect(result2).toBe("B");
 
-	const tpl3 = "@if(false)A@elseif(true)C@else B@end";
+	const tpl3 = "@if(false)A@elseif(true)C@elseB@end";
 	const result3 = await kire.render(tpl3);
 	expect(result3).toBe("C");
 });

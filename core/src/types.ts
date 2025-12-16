@@ -347,8 +347,9 @@ export interface DirectiveDefinition {
 	params?: string[]; 
 	/**
 	 * Whether this directive accepts a block ending with @end.
+	 * If "auto", the parser checks for a matching @end tag to decide.
 	 */
-	children?: boolean; 
+	children?: boolean | "auto"; 
 	/**
 	 * Should the children be treated as raw text instead of parsed nodes?
 	 */

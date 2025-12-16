@@ -32,7 +32,7 @@ export default (kire: Kire) => {
 	kire.directive({
 		name: "defined",
 		params: ["name:string"],
-		children: true,
+		children: "auto",
 		type: "html",
 		description: "Renders defined content or fallback.",
 		example: `@defined('header')\n  Conteúdo não encontrado\n@end`,

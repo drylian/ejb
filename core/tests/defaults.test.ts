@@ -10,7 +10,7 @@ test("Kire - Default Directives: define/defined", async () => {
             <h1>Header Content</h1>
         @end
         <div>
-            @defined('header')@end
+            @defined('header')
         </div>
     `;
 

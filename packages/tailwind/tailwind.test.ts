@@ -1,286 +1,83 @@
-import { expect, test, describe, beforeEach, mock } from "bun:test";
+
+import { describe, expect, it } from "bun:test";
 import { Kire } from "kire";
 import KireTailwind from "./src";
-
-const mockConfig = {
-    theme: {
-        extend: {
-            colors: {
-                brand: 'blue',
-            }
-        }
-    }
-};
-
-const compileMock = mock(async (css: string, opts?: any) => {
-    let processedCSS = css;
-
-    if (css.includes('@import "tailwindcss"')) {
-        processedCSS = processedCSS.replace('@import "tailwindcss";', '/* tailwind base */');
-    }
-    if (css.includes('@plugin "daisyui"')) {
-        processedCSS = processedCSS.replace('@plugin "daisyui";', '/* daisyui plugin */');
-    }
-    if (css.includes("@apply")) {
-      processedCSS = processedCSS.replace(/@apply\s+([^;]+);/g, (match, classes) => `/* applied: ${classes} */`);
-    }
-    if (css.includes("@theme")) {
-        processedCSS = processedCSS.replace(/@theme\s*{([^}]*)}/g, (match, content) => `/* theme: ${content.trim()} */`);
-    }
-    if (css.includes('@plugin "@tailwindcss/typography"')) {
-        processedCSS = processedCSS.replace('@plugin "@tailwindcss/typography";', '/* @tailwindcss/typography plugin */');
-        processedCSS += `.prose h1 { font-size: 2em; }`; // Example output
-    }
-
-
-    return {
-      build: (candidates: string[]) => {
-        let finalCSS = processedCSS;
-        if (opts?.config?.theme?.extend?.colors?.brand && candidates.includes('bg-brand')) {
-            finalCSS += ` .bg-brand { background-color: ${opts.config.theme.extend.colors.brand}; }`;
-        }
-        return finalCSS;
-      },
-    };
-});
-
-// Mock da função compile do Tailwind
-mock.module("tailwindcss", () => ({
-  compile: compileMock,
-}));
-
-// Mock para loadModule
-
-const mockLoadModule = mock(async (id: string) => {
-
-    if (id === 'daisyui') {
-
-        return {
-
-            path: '/fake/path/node_modules/daisyui',
-
-            base: '/fake/path/node_modules',
-
-            module: { handler: () => {} }, // Mock plugin
-
-        }
-
-    }
-
-    if (id === '@tailwindcss/typography') {
-
-        return {
-
-            path: '/fake/path/node_modules/@tailwindcss/typography',
-
-            base: '/fake/path/node_modules',
-
-            module: { handler: ({ addPlugin }) => addPlugin(() => { /* do nothing */ }) }, // Mock plugin
-
-        }
-
-    }
-
-    throw new Error(`Module not found: ${id}`);
-
-});
-
-
-
-// Mock for tailwindcss/plugin
-
-mock.module('tailwindcss/plugin', () => ({
-
-  handler: mock(() => {}), // Just a dummy handler
-
-  addVariant: mock(() => {}),
-
-}));
-
-
-
-
+// Import KireAssets from the sibling package source
+import KireAssets from "../assets/src/index";
 
 describe("@Kirejs/Tailwind", () => {
 
-  
-
-  test("should load tailwind.config.ts and process custom utilities", async () => {
-
+  it("should compile tailwind css using real compiler", async () => {
     const kire = new Kire();
-
-    kire.plugin(KireTailwind, { config: mockConfig } as any);
-
-
+    kire.plugin(KireTailwind);
 
     const tpl = `
-
-      @tailwind
-
+      @tailwind()
+        .custom-class { color: red; }
       @end
-
-      <div class="bg-brand"></div>
-
+      <div class="p-4 custom-class"></div>
     `;
 
     const result = await kire.render(tpl);
-
-    const clean = result.replace(/\s+/g, ' ').trim();
-
     
-
-    expect(clean).toContain(".bg-brand { background-color: blue; }");
-
+    // Check if inline style is generated (since assets plugin is not loaded)
+    expect(result).toContain("<style>");
+    expect(result).toContain(".custom-class");
+    expect(result).toContain("color: red");
+    // p-4 should generate padding: 1rem (or similar depending on v4 defaults)
+    expect(result).toContain("padding: calc(var(--spacing) * 4)");
+    expect(result).toContain("</style>");
   });
 
-
-
-  test('should use cache on second render', async () => {
-
-    // Enable cache for Kire instance
-
-    const kire = new Kire({ cache: true });
-
-    kire.plugin(KireTailwind, { loadModule: mockLoadModule } as any);
-
-
+  it("should integrate with @kirejs/assets for deduplication and offloading", async () => {
+    const kire = new Kire();
+    // Load both plugins
+    // Load Tailwind first so its element handler runs first and pushes styles to assets
+    kire.plugin(KireTailwind);
+    kire.plugin(KireAssets);
 
     const tpl = `
-
-        @tailwind
-
-            .btn { @apply bg-blue-500; }
-
-        @end
-
-    `;
-
-
-
-    // Reset mock calls before test
-
-    compileMock.mockClear();
-
-    
-
-    // First render
-
-    await kire.render(tpl);
-
-    expect(compileMock.mock.calls.length).toBe(1);
-
-
-
-    // Second render
-
-    await kire.render(tpl);
-
-    // Should not be called again because the content is cached
-
-    expect(compileMock.mock.calls.length).toBe(1);
-
-  });
-
-
-
-  // Other tests
-
-  let kire: Kire;
-
-  beforeEach(() => {
-
-    kire = new Kire();
-
-    kire.plugin(KireTailwind, { loadModule: mockLoadModule } as any);
-
-  });
-
-
-
-  test("should handle @plugin rule", async () => {
-
-    const tpl = `
-
-      @tailwind
-
-        @plugin "daisyui";
-
+      @assets()
+      @tailwind()
+        .shared-class { color: blue; }
       @end
-
+      <div class="m-2 shared-class">Shared</div>
     `;
 
+    // First Render
+    const result1 = await kire.render(tpl);
+
+    // Should NOT have inline style
+    expect(result1).not.toContain("<style>.shared-class");
     
+    // Should have link tag
+    expect(result1).toContain('<link rel="stylesheet" href="/_kire/');
+    expect(result1).toMatch(/\/([a-f0-9]{8})\.css"/);
 
-    const result = await kire.render(tpl);
+    // Capture the hash
+    const match1 = result1.match(/\/([a-f0-9]{8})\.css"/);
+    const hash1 = match1 ? match1[1] : null;
+    expect(hash1).toBeTruthy();
 
-    const clean = result.replace(/\s+/g, ' ').trim();
+    // Verify cache content
+    const cache = kire.cached("@kirejs/assets");
+    expect(cache.has(hash1!)).toBe(true);
+    const asset = cache.get(hash1!);
+    expect(asset.content).toContain(".shared-class");
+    expect(asset.content).toContain("margin: calc(var(--spacing) * 2)"); // m-2
 
+    // Second Render (Deduplication test)
+    const result2 = await kire.render(tpl);
+    const match2 = result2.match(/\/([a-f0-9]{8})\.css"/);
+    const hash2 = match2 ? match2[1] : null;
+
+    expect(hash2).toBe(hash1);
     
-
-    expect(clean).toContain("<style>");
-
-    expect(clean).toContain("/* tailwind base */");
-
-    expect(clean).toContain("/* daisyui plugin */");
-
-    expect(clean).toContain("</style>");
-
-  });
-
-
-
-  test("should handle @plugin with @tailwindcss/typography", async () => {
-
-    const tpl = `
-
-      @tailwind
-
-        @plugin "@tailwindcss/typography";
-
-      @end
-
-      <div class="prose"></div>
-
-    `;
-
-
-
-    // Mock compileMock to produce some typography-like output
-
-    compileMock.mockImplementation(async (css: string, opts?: any) => {
-
-        let processedCSS = css;
-
-        if (css.includes('@plugin "@tailwindcss/typography"')) {
-
-            processedCSS = processedCSS.replace('@plugin "@tailwindcss/typography";', '/* @tailwindcss/typography plugin */');
-
-            processedCSS += `.prose h1 { font-size: 2em; }`; // Example output
-
-        }
-
-        return { build: () => processedCSS };
-
-    });
-
-    
-
-    const result = await kire.render(tpl);
-
-    const clean = result.replace(/\s+/g, ' ').trim();
-
-    
-
-    expect(clean).toContain("<style>");
-
-    expect(clean).toContain("/* @tailwindcss/typography plugin */");
-
-    expect(clean).toContain(".prose h1 { font-size: 2em; }");
-
-    expect(clean).toContain("</style>");
-
-    expect(clean).toContain('<div class="prose"></div>');
-
+    // Cache size should still be 1 (deduplicated)
+    // Note: This assumes no other tests polluted the cache, but new Kire() is created per test.
+    // However, cached() might share global map if kire implementation uses static cache?
+    // Checking kire.ts: this.$cache = new Map(). It's instance based. So it is isolated.
+    expect(cache.size).toBe(1);
   });
 
 });

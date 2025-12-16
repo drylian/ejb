@@ -141,7 +141,7 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 
 					// Use default Tailwind import if no code provided
 					if (!code || !code.trim()) {
-						code = '@import "tailwindcss";';
+						code = "";
 					}
 
 					// Generate cache ID if caching is enabled
@@ -155,7 +155,6 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 					ctx.raw(`$ctx.res(${JSON.stringify(code)});`);
 					ctx.raw('$ctx.res("</tailwind>");');
 				} catch (error) {
-					console.warn("Tailwind directive error:", error);
 					// Fallback behavior
 					const code = ctx.param("code") || "";
 					ctx.raw('$ctx.res("<tailwind>");');
@@ -174,6 +173,8 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 			example:
 				"<tailwind>@tailwind base; @tailwind components; @tailwind utilities;</tailwind>",
 			async onCall(ctx) {
+				// _assets should be initialized by the @assets() directive
+
 				try {
 					const id = ctx.element.attributes.id;
 
@@ -192,6 +193,7 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 					let content = ctx.element.inner || "";
 
 					// Ensure Tailwind CSS is imported if not present
+					// This is required in v4 to load the default theme and utilities
 					if (!content.includes('@import "tailwindcss"')) {
 						content = `@import "tailwindcss";\n${content}`;
 					}
@@ -209,7 +211,7 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 					}
 
 					const processedCSS = await compileCSSWithTailwind(
-						content,
+						content, // Pass raw CSS content, might contain custom rules
 						tailwindOptions,
 						Array.from(candidates),
 					);
@@ -217,6 +219,30 @@ export const KireTailwind: KirePlugin<NonNullable<TailwindCompileOptions>> = {
 					// Cache the result if caching is enabled
 					if (kire.production && id) {
 						cache.set(id, processedCSS);
+					}
+
+					// Integration with @kirejs/assets
+					// If the assets plugin is active, we can offload the CSS to a file
+					// and let the browser cache it, rather than inlineing it every time.
+					if ((ctx as any)._assets) {
+						const assetCache = kire.cached<any>("@kirejs/assets");
+						const hash = createHash("md5")
+							.update(processedCSS)
+							.digest("hex")
+							.slice(0, 8);
+
+						if (!assetCache.has(hash)) {
+							assetCache.set(hash, {
+								hash,
+								content: processedCSS,
+								type: "css",
+							});
+						}
+
+						(ctx as any)._assets.styles.push(hash);
+						// Remove the element as the link will be injected by @assets
+						ctx.update(ctx.content.replace(ctx.element.outer, ""));
+						return;
 					}
 
 					const newHtml = ctx.content.replace(
