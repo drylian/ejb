@@ -179,7 +179,7 @@ export class Kire {
 
 	public async compileFn(content: string): Promise<Function> {
 		const code = await this.compile(content);
-		console.log(code)
+		//console.log(code)
 		try {
 			const AsyncFunction = Object.getPrototypeOf(async () => { }).constructor;
 
@@ -259,15 +259,25 @@ export class Kire {
 			return this.resolvePath(path);
 		};
 
-		rctx.$merge = async function (this: any, func: Function) {
-			const parentRes = this['~res'];
-			this['~res'] = "";
-			await func(this);
-			this['~res'] = parentRes + this['~res'];
+		rctx.$merge = async (func: Function) => {
+			const parentRes = rctx['~res'];
+			rctx['~res'] = "";
+			await func(rctx);
+			rctx['~res'] = parentRes + rctx['~res'];
 		};
 
-		let finalCtx;
+		// Execute onInit for all directives
+		if (this.$directives.size > 0) {
+			for (const directive of this.$directives.values()) {
+				if (directive.onInit) {
+					await directive.onInit(rctx);
+				}
+			}
+		}
+
+		let finalCtx: any;
 		try {
+			//console.log(mainFn.toString())
 			finalCtx = await mainFn(rctx);
 		} catch (e: any) {
 			if ((mainFn as any)._code) {
@@ -275,11 +285,12 @@ export class Kire {
 			}
 			throw e;
 		}
+		finalCtx.$typed = (key:string) => finalCtx[key];
 
 		// Execute ~$pre functions collected during execution
 		if (finalCtx['~$pre'] && finalCtx['~$pre'].length > 0) {
 			for (const preFn of finalCtx['~$pre']) {
-				await preFn(rctx);
+				await preFn(finalCtx);
 			}
 		}
 
@@ -288,7 +299,7 @@ export class Kire {
 		// Execute ~$pos functions (deferred logic)
 		if (finalCtx['~$pos'] && finalCtx['~$pos'].length > 0) {
 			for (const posFn of finalCtx['~$pos']) {
-				await posFn(rctx);
+				await posFn(finalCtx);
 			}
 			resultHtml = finalCtx['~res'];
 		}
@@ -308,12 +319,12 @@ export class Kire {
 				const regex = isVoid
 					? new RegExp(`<(${tagName})([^>]*)>`, "gi")
 					: new RegExp(
-						`<(${tagName})([^>]*)>([\\s\\S]*?)<\/\\1>`,
+						`<(${tagName})([^>]*)>([\\s\\S]*?)<\\/\\1>`,
 						"gi",
 					);
 
 				const matches = [];
-				let match;
+				let match:RegExpExecArray | null;
 				while ((match = regex.exec(resultHtml)) !== null) {
 					matches.push({
 						full: match[0],
@@ -331,12 +342,12 @@ export class Kire {
 
 					const attributes: Record<string, string> = {};
 					const attrRegex = /(\w+)="([^"]*)"/g;
-					let attrMatch;
+					let attrMatch:RegExpExecArray | null;
 					while ((attrMatch = attrRegex.exec(m.attrs!)) !== null) {
 						attributes[attrMatch[1]!] = attrMatch[2]!;
 					}
 
-					const elCtx: any = Object.create(rctx);
+					const elCtx: any = Object.create(finalCtx);
 					elCtx.content = resultHtml;
 					elCtx.element = {
 						tagName: m.tagName,
@@ -349,6 +360,10 @@ export class Kire {
 						elCtx.content = newContent;
 					};
 					elCtx.replace = (replacement: string) => {
+						resultHtml = resultHtml.replace(m.full, replacement);
+						elCtx.content = resultHtml;
+					};
+					elCtx.replaceElement = (replacement: string) => {
 						resultHtml = resultHtml.replace(m.full, replacement);
 						elCtx.content = resultHtml;
 					};

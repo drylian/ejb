@@ -9,13 +9,13 @@ export default (kire: Kire) => {
 		description:
 			"Includes and renders a template from a given path, optionally passing local variables.",
 		example: `@include('partials/card')`,
-		onCall(ctx) {
-			const pathExpr = ctx.param("path");
-			const localsExpr = ctx.param("locals") || "{}";
+		onCall(compiler) {
+			const pathExpr = compiler.param("path");
+			const localsExpr = compiler.param("locals") || "{}";
 
-			ctx.raw(`await $ctx.$merge(async ($ctx) => {
+			compiler.raw(`await $ctx.$merge(async ($ctx) => {
     const html = await $ctx.$require(${JSON.stringify(pathExpr)}, ${localsExpr});
-    if (html !== null) { // $require pode retornar null se não encontrar
+    if (html !== null) {
         $ctx.res(html);
     }
 });`);

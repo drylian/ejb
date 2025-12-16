@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Kire, KireContext } from "../src/index";
+import { Kire, CompilerContext } from "../src/index";
 
 test("Kire - HTML Base Template", async () => {
 	const kire = new Kire({
@@ -39,23 +39,23 @@ test("Kire - HTML Base Template", async () => {
 				name: "slot",
 				children: true,
 				params: ["reference?:string"],
-				onCall(ctx) {
-					const reference = ctx.param("reference") ?? "";
-					ctx.raw("");
+				onCall(compiler) {
+					const reference = compiler.param("reference") ?? "";
+					compiler.raw("");
 				},
 			},
 		],
-		async onCall(ctx) {
-			const layoutPath = ctx.param("path");
-			const resolved = ctx.resolve(layoutPath);
+		async onCall(compiler) {
+			const layoutPath = compiler.param("path");
+			const resolved = compiler.resolve(layoutPath);
 			const content = await kire.$resolver(resolved);
 			const layout = `$ctx.$layouts[\`${layoutPath}\`]`;
-			ctx.pre(`${layout} = ${ctx.func(await ctx.render(content))};`);
+			compiler.pre(`${layout} = ${compiler.func(await compiler.render(content))};`);
 
-			if (ctx.children) ctx.set(ctx.children);
+			if (compiler.children) compiler.set(compiler.children);
 
-			ctx.raw(`
-                    ${ctx.children ? `})();` : ""}
+			compiler.raw(`
+                    ${compiler.children ? `})();` : ""}
                     $ctx.res = originalRes;
                     return inner;
                 })($ctx);
@@ -95,13 +95,13 @@ test("Kire - HTML Base Template", async () => {
 		name: "for",
 		params: ["expr:string"],
 		children: true,
-		onCall(ctx) {
-			const expr = ctx.param("expr"); // "item in user.items"
+		onCall(compiler) {
+			const expr = compiler.param("expr"); // "item in user.items"
 			const [itemVar, , listVar] = expr.split(" ");
 
-			ctx.raw(`for (const ${itemVar} of ${listVar}) {`);
-			if (ctx.children) ctx.set(ctx.children);
-			ctx.raw(`}`);
+			compiler.raw(`for (const ${itemVar} of ${listVar}) {`);
+			if (compiler.children) compiler.set(compiler.children);
+			compiler.raw(`}`);
 		},
 	});
 
@@ -119,11 +119,11 @@ test("Kire - HTML Base Template", async () => {
 				},
 			},
 		],
-		onCall(ctx) {
-			ctx.raw(`if (${ctx.param("cond")}) {`);
-			if (ctx.children) ctx.set(ctx.children);
-			if (ctx.parents) ctx.set(ctx.parents);
-			ctx.raw("}");
+		onCall(compiler) {
+			compiler.raw(`if (${compiler.param("cond")}) {`);
+			if (compiler.children) compiler.set(compiler.children);
+			if (compiler.parents) compiler.set(compiler.parents);
+			compiler.raw("}");
 		},
 	});
 

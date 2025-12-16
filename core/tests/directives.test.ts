@@ -110,13 +110,13 @@ describe("Kire Layout Directives", () => {
 	});
 
 	it("@defined before @define", async () => {
-		const tpl = `Before @defined('footer') After @define('footer')<footer>Foot</footer>@end`;
+		const tpl = `Before @defined('footer')@end After @define('footer')<footer>Foot</footer>@end`;
 		const html = await kire.render(tpl);
 		expect(html).toBe("Before <footer>Foot</footer> After ");
 	});
 
 	it("multiple @defined for the same name", async () => {
-		const tpl = `@defined('item')@defined('item')@define('item')Item@end`;
+		const tpl = `@defined('item')@end@defined('item')@end@define('item')Item@end`;
 		const html = await kire.render(tpl);
 		expect(html).toBe("ItemItem");
 	});

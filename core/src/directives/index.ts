@@ -15,7 +15,6 @@ export const KireDirectives: KirePlugin = {
 		// add md5 function
 		kire.$ctx("$md5", md5);
 		kire.$ctx("$escape", escapeHtml);
-		
 		kire.$ctx(
 			"$require",
 			async (path: string, locals: Record<string, any> = {}) => {
@@ -52,7 +51,7 @@ export const KireDirectives: KirePlugin = {
 					if (cachedHash === newHash && compiledFn) {
 						// Optimization: Content hasn't changed, reuse cached function
 					} else {
-						compiledFn = await kire.compileFn(content, resolvedPath);
+						compiledFn = await kire.compileFn(content);
 						cached.set(`md5:${resolvedPath}`, newHash);
 						cached.set(`js:${resolvedPath}`, compiledFn); // Cache a função compilada
 					}

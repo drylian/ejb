@@ -18,9 +18,9 @@ export default (kire: Kire) => {
 				description:
 					"Renders a block of content if the preceding @if/@elseif is false and the current expression is true.",
 				example: `@elseif(user.isAdmin)\n  Admin access granted.\n@end`,
-				async onCall(c) {
-					c.raw(`} else if (${c.param("cond")}) {`);
-					if (c.children) await c.set(c.children);
+				async onCall(compiler) {
+					compiler.raw(`} else if (${compiler.param("cond")}) {`);
+					if (compiler.children) await compiler.set(compiler.children);
 				},
 			},
 			{
@@ -30,9 +30,9 @@ export default (kire: Kire) => {
 				type: "js",
 				description: "Alias for @elseif.",
 				example: `@elif(user.isAdmin)\n  Admin access granted.\n@end`,
-				async onCall(c) {
-					c.raw(`} else if (${c.param("cond")}) {`);
-					if (c.children) await c.set(c.children);
+				async onCall(compiler) {
+					compiler.raw(`} else if (${compiler.param("cond")}) {`);
+					if (compiler.children) await compiler.set(compiler.children);
 				},
 			},
 			{
@@ -42,17 +42,17 @@ export default (kire: Kire) => {
 				description:
 					"Renders a block of content if the preceding @if/@elseif expressions are all false.",
 				example: `@else\n  Please log in.\n@end`,
-				async onCall(c) {
-					c.raw(`} else {`);
-					if (c.children) await c.set(c.children);
+				async onCall(compiler) {
+					compiler.raw(`} else {`);
+					if (compiler.children) await compiler.set(compiler.children);
 				},
 			},
 		],
-		async onCall(ctx) {
-			ctx.raw(`if (${ctx.param("cond")}) {`);
-			if (ctx.children) await ctx.set(ctx.children);
-			if (ctx.parents) await ctx.set(ctx.parents);
-			ctx.raw("}");
+		async onCall(compiler) {
+			compiler.raw(`if (${compiler.param("cond")}) {`);
+			if (compiler.children) await compiler.set(compiler.children);
+			if (compiler.parents) await compiler.set(compiler.parents);
+			compiler.raw("}");
 		},
 	});
 
@@ -64,20 +64,20 @@ export default (kire: Kire) => {
 		description:
 			"Iterates over an array or object, similar to a JavaScript for...of loop.",
 		example: `@for(user of users)\n  <p>{{ user.name }}</p>\n@end`,
-		async onCall(ctx) {
-			const expr = ctx.param("expr");
+		async onCall(compiler) {
+			const expr = compiler.param("expr");
 			if (expr.includes(" in ")) {
 				const [lhs, rhs] = expr.split(" in ");
-				ctx.raw(`for (const ${lhs.trim()} in ${rhs.trim()}) {`);
+				compiler.raw(`for (const ${lhs.trim()} in ${rhs.trim()}) {`);
 			} else if (expr.includes(" of ")) {
 				const [lhs, rhs] = expr.split(" of ");
-				ctx.raw(`for (const ${lhs.trim()} of ${rhs.trim()}) {`);
+				compiler.raw(`for (const ${lhs.trim()} of ${rhs.trim()}) {`);
 			} else {
-				ctx.raw(`for (${expr}) {`);
+				compiler.raw(`for (${expr}) {`);
 			}
 
-			if (ctx.children) await ctx.set(ctx.children);
-			ctx.raw(`}`);
+			if (compiler.children) await compiler.set(compiler.children);
+			compiler.raw(`}`);
 		},
 	});
 
@@ -88,8 +88,8 @@ export default (kire: Kire) => {
 		description:
 			"Declares a block-scoped constant, similar to JavaScript `const`.",
 		example: `@const(myVar = 'hello world')`,
-		onCall(ctx) {
-			ctx.raw(`const ${ctx.param("expr")};`);
+		onCall(compiler) {
+			compiler.raw(`const ${compiler.param("expr")};`);
 		},
 	});
 
@@ -100,8 +100,8 @@ export default (kire: Kire) => {
 		description:
 			"Declares a block-scoped local variable, similar to JavaScript `let`.",
 		example: `@let(counter = 0)`,
-		onCall(ctx) {
-			ctx.raw(`let ${ctx.param("expr")};`);
+		onCall(compiler) {
+			compiler.raw(`let ${compiler.param("expr")};`);
 		},
 	});
 
@@ -111,16 +111,16 @@ export default (kire: Kire) => {
 		type: "js",
 		description: "Executes a block of raw JavaScript code on the server.",
 		example: `@code\n  console.log('This runs during template compilation.');\n@end`,
-		onCall(ctx) {
-			if (ctx.children) {
+		onCall(compiler) {
+			if (compiler.children) {
 				let code = "";
-				for (const child of ctx.children) {
+				for (const child of compiler.children) {
 					if (child.type === "text" && child.content) {
 						code += child.content;
 					}
 				}
 				if (code) {
-					ctx.raw(code);
+					compiler.raw(code);
 				}
 			}
 		},
@@ -161,10 +161,10 @@ export default (kire: Kire) => {
 				},
 			},
 		],
-		async onCall(ctx) {
-			ctx.raw(`switch (${ctx.param("expr")}) {`);
-			if (ctx.parents) await ctx.set(ctx.parents);
-			ctx.raw(`}`);
+		async onCall(compiler) {
+			compiler.raw(`switch (${compiler.param("expr")}) {`);
+			if (compiler.parents) await compiler.set(compiler.parents);
+			compiler.raw(`}`);
 		},
 	});
 };

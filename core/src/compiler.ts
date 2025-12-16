@@ -1,5 +1,5 @@
 import type { Kire } from "./kire";
-import type { KireContext, Node } from "./types";
+import type { CompilerContext, Node } from "./types";
 
 export class Compiler {
     private preBuffer: string[] = [];
@@ -74,7 +74,9 @@ export class Compiler {
             return;
         }
 
-        const ctx: KireContext = {
+        const self = this;
+        const compiler: CompilerContext = {
+            kire:this.kire,
             param: (key: string | number) => {
                 if (typeof key === "number") {
                     return node.args?.[key];
@@ -129,13 +131,11 @@ export class Compiler {
             error: (msg: string) => {
                 throw new Error(`Error in directive @${name}: ${msg}`);
             },
+            get '~res'() { return self.resBuffer.join('\n'); },
+            get '~pre'() { return self.preBuffer; },
+            get '~pos'() { return self.posBuffer; },
         };
 
-        if (directive.once && !this.usedDirectives.has(name)) {
-            this.usedDirectives.add(name);
-            await directive.once(ctx);
-        }
-
-        await directive.onCall(ctx);
+        await directive.onCall(compiler);
     }
 }

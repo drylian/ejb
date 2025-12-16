@@ -1,1 +1,1 @@
-@include('layouts/_package.kire', { packageName: '@kirejs/core' })
+@include('layouts/_package.kire', { packageName: 'kire' })

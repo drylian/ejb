@@ -9,7 +9,6 @@
       @plugin "daisyui";
       @plugin "@tailwindcss/typography";
     @end
-    <debug-panel />
 </head>
 <body class="min-h-screen bg-base-100 text-base-content">
     <div class="drawer lg:drawer-open">
@@ -51,7 +50,7 @@
                     <!-- Título da página -->
                     <header class="mb-8 border-b border-base-200 pb-4">
                         <p class="text-xs uppercase tracking-wide text-base-content/70 mb-1">
-                            Documentação Kire
+                            Documentação Kire A
                         </p>
                         <h1 class="text-3xl md:text-4xl font-bold tracking-tight">
                             {{ title || 'Kire Documentation' }}
@@ -61,6 +60,8 @@
                     <!-- Conteúdo tipografado -->
                     <article class="prose max-w-none lg:prose-lg prose-headings:scroll-mt-28">
                         @defined('content')
+                        testando
+                        @end
                     </article>
                 </div>
             </main>

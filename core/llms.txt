@@ -2,7 +2,7 @@
 
 // --- From: core/src/compiler.ts ---
 import type { Kire } from "./kire";
-import type { KireContext, Node } from "./types";
+import type { CompilerContext, Node } from "./types";
 
 export class Compiler {
     private preBuffer: string[] = [];
@@ -77,7 +77,9 @@ export class Compiler {
             return;
         }
 
-        const ctx: KireContext = {
+        const self = this;
+        const compiler: CompilerContext = {
+            kire:this.kire,
             param: (key: string | number) => {
                 if (typeof key === "number") {
                     return node.args?.[key];
@@ -132,14 +134,12 @@ export class Compiler {
             error: (msg: string) => {
                 throw new Error(`Error in directive @${name}: ${msg}`);
             },
+            get '~res'() { return self.resBuffer.join('\n'); },
+            get '~pre'() { return self.preBuffer; },
+            get '~pos'() { return self.posBuffer; },
         };
 
-        if (directive.once && !this.usedDirectives.has(name)) {
-            this.usedDirectives.add(name);
-            await directive.once(ctx);
-        }
-
-        await directive.onCall(ctx);
+        await directive.onCall(compiler);
     }
 }
 
@@ -163,57 +163,300 @@ export interface ICompiler {
 }
 export type ICompilerConstructor = new (kire: Kire) => ICompiler;
 
+/**
+ * Options for configuring the Kire instance.
+ */
 export interface KireOptions {
+	/**
+	 * The root directory for resolving file paths. Defaults to "./".
+	 */
 	root?: string;
+	/**
+	 * Whether to run in production mode (enables caching). Defaults to true.
+	 */
 	production?: boolean;
+	/**
+	 * Custom file resolver function.
+	 */
 	resolver?: (filename: string) => Promise<string>;
+	/**
+	 * Path aliases for imports (e.g., { "~/": "./src/" }).
+	 */
 	alias?: Record<string, string>;
+	/**
+	 * Default file extension for templates. Defaults to "kire".
+	 */
 	extension?: string;
+	/**
+	 * Whether to load default directives. Defaults to true.
+	 */
 	directives?: boolean;
+	/**
+	 * List of plugins to load.
+	 */
 	plugins?: (KirePlugin | [KirePlugin, any])[];
+	/**
+	 * Custom engine components.
+	 */
 	engine?: {
 		parser?: IParserConstructor;
 		compiler?: ICompilerConstructor;
 	};
+	/**
+	 * Name of the variable exposing locals in the template. Defaults to "it".
+	 */
 	varLocals?: string;
+	/**
+	 * Whether to expose locals as a specific variable (defined by varLocals).
+	 */
 	exposeLocals?: boolean;
 }
 
+/**
+ * The runtime context object ($ctx) used during template execution.
+ */
 export interface KireContext {
-	param(name: string | number): any;
-	render(content: string): Promise<string>; // Returns compiled function string
-	func(code: string): string; // Wraps code in a function definition
+	/**
+	 * The accumulated string buffer for the local scope's output.
+	 */
+	'~res': string;
 	
-	// Local function scope
+	/**
+	 * A global buffer for code or functions to be executed *before* the main entry point's rendering logic.
+	 */
+	'~$pre': Function[];
+	
+	/**
+	 * A global buffer for code or functions to be executed *after* the main entry point's rendering logic.
+	 */
+	'~$pos': Function[];
+
+	/**
+	 * Appends content to the current output buffer (~res).
+	 * @param str The content to append.
+	 */
+	res(str: string): void;
+
+	/**
+	 * Returns the current output buffer content.
+	 */
+	$res(): string;
+
+	/**
+	 * Resolves a file path relative to the project root and aliases.
+	 */
+	$resolve(path: string): string;
+
+	/**
+	 * Creates a new isolation scope for capturing output (e.g. for slots or defines).
+	 * @param func The function to execute within the merged scope.
+	 */
+	$merge(func: (ctx: KireContext) => Promise<void>): Promise<void>;
+
+	/**
+	 * Imports and renders another .kire template.
+	 */
+	$require?(path: string, locals?: Record<string, any>): Promise<string | null>;
+
+	/**
+	 * Helper for MD5 hashing.
+	 */
+	$md5?(str: string): string;
+
+	/**
+	 * Helper for HTML escaping.
+	 */
+	$escape?(unsafe: any): string;
+
+	/**
+	 * Arbitrary locals and globals.
+	 */
+	[key: string]: any;
+}
+
+/**
+ * The context object passed to directives during compilation.
+ * Renamed from KireContext to CompilerContext to avoid confusion with the runtime context.
+ */
+export interface CompilerContext {
+	/**
+	 * Kire instance
+	 */
+	kire:Kire;
+	/**
+	 * Retrieves a parameter passed to the directive.
+	 * @param name The name or index of the parameter.
+	 */
+	param(name: string | number): any;
+	
+	/**
+	 * Compiles a string of Kire template content.
+	 * @param content The template string to compile.
+	 * @returns The compiled function code as a string.
+	 */
+	render(content: string): Promise<string>;
+
+	/**
+	 * Wraps the provided code in an async function definition.
+	 * @param code The function body.
+	 */
+	func(code: string): string;
+	
+	// --- Local Function Scope ---
+
+	/**
+	 * Pushes code to be executed *before* the local rendering result accumulation begins.
+	 * Useful for variable declarations or setup logic.
+	 */
 	pre(code: string): void;
+
+	/**
+	 * Appends code that adds content to the local result buffer (~res).
+	 * @param content The raw content to append.
+	 */
 	res(content: string): void;
+
+	/**
+	 * Pushes raw code directly into the main execution flow of the compiled function.
+	 * @param code The JavaScript code to inject.
+	 */
 	raw(code: string): void;
+
+	/**
+	 * Pushes code to be executed *after* the local rendering result accumulation ends.
+	 * Useful for post-processing the result (replacements) or cleanup.
+	 */
 	pos(code: string): void;
 	
-	// Global scope (Main file)
+	// --- Global Scope (Main File) ---
+
+	/**
+	 * Pushes code to the global pre-processing stack (~$pre).
+	 * These functions run before the main entry point's rendering logic.
+	 */
 	$pre(code: string): void;
+
+	/**
+	 * Pushes code to the global post-processing stack (~$pos).
+	 * These functions run after the main entry point's rendering logic has finished.
+	 */
 	$pos(code: string): void;
 
+	/**
+	 * Throws a compilation error with a specific message.
+	 */
 	error(message: string): void;
+
+	/**
+	 * Resolves a file path relative to the project root and aliases.
+	 */
 	resolve(path: string): string;
 
-	// For nested directives
+	// --- Compiler State Inspection ---
+	// These properties allow checking the current state of the compilation buffers.
+
+	/**
+	 * The current content of the local result buffer code.
+	 */
+	'~res'?: string;
+
+	/**
+	 * The current content of the local pre-processing buffer code.
+	 */
+	'~pre'?: string[]; // Changed to string[] because it's a buffer of code lines in the compiler
+
+	/**
+	 * The current content of the local post-processing buffer code.
+	 */
+	'~pos'?: string[]; // Changed to string[] because it's a buffer of code lines in the compiler
+
+	/**
+	 * The current content of the global pre-processing buffer code.
+	 */
+	'~$pre'?: string[];
+
+	/**
+	 * The current content of the global post-processing buffer code.
+	 */
+	'~$pos'?: string[];
+
+	// --- Nesting & Structure ---
+
+	/**
+	 * The children nodes of the current directive (for block directives).
+	 */
 	children?: Node[];
-	parents?: Node[]; // The instances of sub-directives (e.g., elseif blocks)
+
+	/**
+	 * Related nodes, such as chained directives (e.g., elseif, else).
+	 */
+	parents?: Node[]; 
+
+	/**
+	 * Compiles and processes a set of nodes, appending their logic to the current flow.
+	 */
 	set(nodes: Node[]): Promise<void>;
 }
 
-export interface KireElementContext {
-	content: string; // The global HTML content (mutable/readable state representation)
+/**
+ * Context provided to element handlers (middleware) for manipulating HTML output.
+ */
+export interface KireElementContext extends KireContext {
+	/**
+	 * The current global HTML content string. This is mutable and represents the state of the document.
+	 */
+	content: string;
+	
+	/**
+	 * Typed $ctx context use key of $ctx context with you type
+	 * @param key 
+	 */
+	$typed<T>(key:string): T;
+
+	/**
+	 * Details about the specific HTML element being processed.
+	 */
 	element: {
+		/**
+		 * The tag name of the element (e.g., "div", "custom-tag").
+		 */
 		tagName: string;
+		/**
+		 * A map of the element's attributes.
+		 */
 		attributes: Record<string, string>;
+		/**
+		 * The inner HTML content of the element.
+		 */
 		inner: string;
+		/**
+		 * The full outer HTML of the element (including tags).
+		 */
 		outer: string;
 	};
-	// Method to update the global content
+
+	/**
+	 * Updates the entire global HTML content.
+	 * @param newContent The new HTML content string.
+	 */
 	update(newContent: string): void;
+
+	/**
+	 * Replaces the current element's outer HTML in the global content.
+	 * @param replacement The string to replace the element with.
+	 */
 	replace(replacement: string): void;
+
+	/**
+	 * Replaces the current element's outer HTML in the global content.
+	 * @param replacement The string to replace the element with.
+	 */
+	replaceElement(replacement: string): void;
+
+	/**
+	 * Replaces the current element's inner HTML in the global content.
+	 * @param replacement The string to replace the inner content with.
+	 */
 	replaceContent(replacement: string): void;
 }
 
@@ -222,6 +465,9 @@ export type KireElementHandler = (
 ) => Promise<void> | void;
 
 export interface KireElementOptions {
+	/**
+	 * Whether the element is a void element (self-closing, no closing tag).
+	 */
 	void?: boolean;
 }
 
@@ -233,16 +479,44 @@ export interface ElementDefinition {
 	onCall: KireElementHandler;
 }
 
+/**
+ * Definition of a custom directive.
+ */
 export interface DirectiveDefinition {
+	/**
+	 * The name of the directive (used as @name).
+	 */
 	name: string;
-	params?: string[]; // e.g. ['filepath:string']
-	children?: boolean; // Does this directive accept a block ending with @end?
-	childrenRaw?: boolean; // Should the children be treated as raw text?
-	parents?: DirectiveDefinition[]; // Sub-directives like elseif/else
-	onCall: (ctx: KireContext) => void | Promise<void>;
-	once?: (ctx: KireContext) => void | Promise<void>;
+	/**
+	 * Parameter definitions (e.g., ['filepath:string']).
+	 */
+	params?: string[]; 
+	/**
+	 * Whether this directive accepts a block ending with @end.
+	 */
+	children?: boolean; 
+	/**
+	 * Should the children be treated as raw text instead of parsed nodes?
+	 */
+	childrenRaw?: boolean; 
+	/**
+	 * Sub-directives associated with this one (e.g., elseif, else for @if).
+	 */
+	parents?: DirectiveDefinition[]; 
+	/**
+	 * Function called when the directive is encountered during compilation.
+	 */
+	onCall: (compiler: CompilerContext) => void | Promise<void>;
+	/**
+	 * Function called once per compilation when the directive is first used.
+	 */
+	onInit?: (ctx: KireContext) => void | Promise<void>;
+	
 	description?: string;
 	example?: string;
+	/**
+	 * The type of logic this directive handles (css, js, or html structure).
+	 */
 	type?: "css" | "js" | "html";
 }
 
@@ -956,7 +1230,7 @@ export class Kire {
 
 	public async compileFn(content: string): Promise<Function> {
 		const code = await this.compile(content);
-		console.log(code)
+		//console.log(code)
 		try {
 			const AsyncFunction = Object.getPrototypeOf(async () => { }).constructor;
 
@@ -1036,15 +1310,25 @@ export class Kire {
 			return this.resolvePath(path);
 		};
 
-		rctx.$merge = async function (this: any, func: Function) {
-			const parentRes = this['~res'];
-			this['~res'] = "";
-			await func(this);
-			this['~res'] = parentRes + this['~res'];
+		rctx.$merge = async (func: Function) => {
+			const parentRes = rctx['~res'];
+			rctx['~res'] = "";
+			await func(rctx);
+			rctx['~res'] = parentRes + rctx['~res'];
 		};
 
-		let finalCtx;
+		// Execute onInit for all directives
+		if (this.$directives.size > 0) {
+			for (const directive of this.$directives.values()) {
+				if (directive.onInit) {
+					await directive.onInit(rctx);
+				}
+			}
+		}
+
+		let finalCtx: any;
 		try {
+			//console.log(mainFn.toString())
 			finalCtx = await mainFn(rctx);
 		} catch (e: any) {
 			if ((mainFn as any)._code) {
@@ -1052,11 +1336,12 @@ export class Kire {
 			}
 			throw e;
 		}
+		finalCtx.$typed = (key:string) => finalCtx[key];
 
 		// Execute ~$pre functions collected during execution
 		if (finalCtx['~$pre'] && finalCtx['~$pre'].length > 0) {
 			for (const preFn of finalCtx['~$pre']) {
-				await preFn(rctx);
+				await preFn(finalCtx);
 			}
 		}
 
@@ -1065,7 +1350,7 @@ export class Kire {
 		// Execute ~$pos functions (deferred logic)
 		if (finalCtx['~$pos'] && finalCtx['~$pos'].length > 0) {
 			for (const posFn of finalCtx['~$pos']) {
-				await posFn(rctx);
+				await posFn(finalCtx);
 			}
 			resultHtml = finalCtx['~res'];
 		}
@@ -1085,12 +1370,12 @@ export class Kire {
 				const regex = isVoid
 					? new RegExp(`<(${tagName})([^>]*)>`, "gi")
 					: new RegExp(
-						`<(${tagName})([^>]*)>([\\s\\S]*?)<\/\\1>`,
+						`<(${tagName})([^>]*)>([\\s\\S]*?)<\\/\\1>`,
 						"gi",
 					);
 
 				const matches = [];
-				let match;
+				let match:RegExpExecArray | null;
 				while ((match = regex.exec(resultHtml)) !== null) {
 					matches.push({
 						full: match[0],
@@ -1108,12 +1393,12 @@ export class Kire {
 
 					const attributes: Record<string, string> = {};
 					const attrRegex = /(\w+)="([^"]*)"/g;
-					let attrMatch;
+					let attrMatch:RegExpExecArray | null;
 					while ((attrMatch = attrRegex.exec(m.attrs!)) !== null) {
 						attributes[attrMatch[1]!] = attrMatch[2]!;
 					}
 
-					const elCtx: any = Object.create(rctx);
+					const elCtx: any = Object.create(finalCtx);
 					elCtx.content = resultHtml;
 					elCtx.element = {
 						tagName: m.tagName,
@@ -1126,6 +1411,10 @@ export class Kire {
 						elCtx.content = newContent;
 					};
 					elCtx.replace = (replacement: string) => {
+						resultHtml = resultHtml.replace(m.full, replacement);
+						elCtx.content = resultHtml;
+					};
+					elCtx.replaceElement = (replacement: string) => {
 						resultHtml = resultHtml.replace(m.full, replacement);
 						elCtx.content = resultHtml;
 					};
@@ -1169,13 +1458,13 @@ export default (kire: Kire) => {
 		description:
 			"Includes and renders a template from a given path, optionally passing local variables.",
 		example: `@include('partials/card')`,
-		onCall(ctx) {
-			const pathExpr = ctx.param("path");
-			const localsExpr = ctx.param("locals") || "{}";
+		onCall(compiler) {
+			const pathExpr = compiler.param("path");
+			const localsExpr = compiler.param("locals") || "{}";
 
-			ctx.raw(`await $ctx.$merge(async ($ctx) => {
+			compiler.raw(`await $ctx.$merge(async ($ctx) => {
     const html = await $ctx.$require(${JSON.stringify(pathExpr)}, ${localsExpr});
-    if (html !== null) { // $require pode retornar null se não encontrar
+    if (html !== null) {
         $ctx.res(html);
     }
 });`);
@@ -1204,9 +1493,9 @@ export default (kire: Kire) => {
 				description:
 					"Renders a block of content if the preceding @if/@elseif is false and the current expression is true.",
 				example: `@elseif(user.isAdmin)\n  Admin access granted.\n@end`,
-				async onCall(c) {
-					c.raw(`} else if (${c.param("cond")}) {`);
-					if (c.children) await c.set(c.children);
+				async onCall(compiler) {
+					compiler.raw(`} else if (${compiler.param("cond")}) {`);
+					if (compiler.children) await compiler.set(compiler.children);
 				},
 			},
 			{
@@ -1216,9 +1505,9 @@ export default (kire: Kire) => {
 				type: "js",
 				description: "Alias for @elseif.",
 				example: `@elif(user.isAdmin)\n  Admin access granted.\n@end`,
-				async onCall(c) {
-					c.raw(`} else if (${c.param("cond")}) {`);
-					if (c.children) await c.set(c.children);
+				async onCall(compiler) {
+					compiler.raw(`} else if (${compiler.param("cond")}) {`);
+					if (compiler.children) await compiler.set(compiler.children);
 				},
 			},
 			{
@@ -1228,17 +1517,17 @@ export default (kire: Kire) => {
 				description:
 					"Renders a block of content if the preceding @if/@elseif expressions are all false.",
 				example: `@else\n  Please log in.\n@end`,
-				async onCall(c) {
-					c.raw(`} else {`);
-					if (c.children) await c.set(c.children);
+				async onCall(compiler) {
+					compiler.raw(`} else {`);
+					if (compiler.children) await compiler.set(compiler.children);
 				},
 			},
 		],
-		async onCall(ctx) {
-			ctx.raw(`if (${ctx.param("cond")}) {`);
-			if (ctx.children) await ctx.set(ctx.children);
-			if (ctx.parents) await ctx.set(ctx.parents);
-			ctx.raw("}");
+		async onCall(compiler) {
+			compiler.raw(`if (${compiler.param("cond")}) {`);
+			if (compiler.children) await compiler.set(compiler.children);
+			if (compiler.parents) await compiler.set(compiler.parents);
+			compiler.raw("}");
 		},
 	});
 
@@ -1250,20 +1539,20 @@ export default (kire: Kire) => {
 		description:
 			"Iterates over an array or object, similar to a JavaScript for...of loop.",
 		example: `@for(user of users)\n  <p>{{ user.name }}</p>\n@end`,
-		async onCall(ctx) {
-			const expr = ctx.param("expr");
+		async onCall(compiler) {
+			const expr = compiler.param("expr");
 			if (expr.includes(" in ")) {
 				const [lhs, rhs] = expr.split(" in ");
-				ctx.raw(`for (const ${lhs.trim()} in ${rhs.trim()}) {`);
+				compiler.raw(`for (const ${lhs.trim()} in ${rhs.trim()}) {`);
 			} else if (expr.includes(" of ")) {
 				const [lhs, rhs] = expr.split(" of ");
-				ctx.raw(`for (const ${lhs.trim()} of ${rhs.trim()}) {`);
+				compiler.raw(`for (const ${lhs.trim()} of ${rhs.trim()}) {`);
 			} else {
-				ctx.raw(`for (${expr}) {`);
+				compiler.raw(`for (${expr}) {`);
 			}
 
-			if (ctx.children) await ctx.set(ctx.children);
-			ctx.raw(`}`);
+			if (compiler.children) await compiler.set(compiler.children);
+			compiler.raw(`}`);
 		},
 	});
 
@@ -1274,8 +1563,8 @@ export default (kire: Kire) => {
 		description:
 			"Declares a block-scoped constant, similar to JavaScript `const`.",
 		example: `@const(myVar = 'hello world')`,
-		onCall(ctx) {
-			ctx.raw(`const ${ctx.param("expr")};`);
+		onCall(compiler) {
+			compiler.raw(`const ${compiler.param("expr")};`);
 		},
 	});
 
@@ -1286,8 +1575,8 @@ export default (kire: Kire) => {
 		description:
 			"Declares a block-scoped local variable, similar to JavaScript `let`.",
 		example: `@let(counter = 0)`,
-		onCall(ctx) {
-			ctx.raw(`let ${ctx.param("expr")};`);
+		onCall(compiler) {
+			compiler.raw(`let ${compiler.param("expr")};`);
 		},
 	});
 
@@ -1297,16 +1586,16 @@ export default (kire: Kire) => {
 		type: "js",
 		description: "Executes a block of raw JavaScript code on the server.",
 		example: `@code\n  console.log('This runs during template compilation.');\n@end`,
-		onCall(ctx) {
-			if (ctx.children) {
+		onCall(compiler) {
+			if (compiler.children) {
 				let code = "";
-				for (const child of ctx.children) {
+				for (const child of compiler.children) {
 					if (child.type === "text" && child.content) {
 						code += child.content;
 					}
 				}
 				if (code) {
-					ctx.raw(code);
+					compiler.raw(code);
 				}
 			}
 		},
@@ -1347,10 +1636,10 @@ export default (kire: Kire) => {
 				},
 			},
 		],
-		async onCall(ctx) {
-			ctx.raw(`switch (${ctx.param("expr")}) {`);
-			if (ctx.parents) await ctx.set(ctx.parents);
-			ctx.raw(`}`);
+		async onCall(compiler) {
+			compiler.raw(`switch (${compiler.param("expr")}) {`);
+			if (compiler.parents) await compiler.set(compiler.parents);
+			compiler.raw(`}`);
 		},
 	});
 };
@@ -1370,13 +1659,13 @@ export default (kire: Kire) => {
 		type: "html",
 		description: "Defines a named content slot within a component.",
 		example: `@slot('header')\n  <h1>This is the header</h1>\n@end`,
-		onCall(c) {
-			const name = c.param("name");
-			c.raw(`await $ctx.$merge(async ($ctx) => {`);
-			if (c.children) c.set(c.children);
-			c.raw(`  $slots[${JSON.stringify(name)}] = $ctx['~res'];`);
-			c.raw(`  $ctx['~res'] = '';`);
-			c.raw(`});`);
+		onCall(compiler) {
+			const name = compiler.param("name");
+			compiler.raw(`await $ctx.$merge(async ($ctx) => {`);
+			if (compiler.children) compiler.set(compiler.children);
+			compiler.raw(`  $slots[${JSON.stringify(name)}] = $ctx['~res'];`);
+			compiler.raw(`  $ctx['~res'] = '';`);
+			compiler.raw(`});`);
 		},
 	});
 
@@ -1388,98 +1677,93 @@ export default (kire: Kire) => {
 		description:
 			"Loads a template as a reusable component, allowing content to be passed into named slots.",
 		example: `@component('card', { title: 'My Card' })\n  @slot('header')\n    <h1>Card Header</h1>\n  @end\n  <p>Default content.</p>\n@end`,
-		async onCall(ctx) {
-			const pathExpr = ctx.param("path");
-			const varsExpr = ctx.param("variables") || "{}";
+		async onCall(compiler) {
+			const pathExpr = compiler.param("path");
+			const varsExpr = compiler.param("variables") || "{}";
 
-			ctx.raw(`await (async () => {`);
-			ctx.raw(`  const $slots = {};`);
+			compiler.raw(`await (async () => {`);
+			compiler.raw(`  const $slots = {};`);
 
 			// Run children to populate slots
-			ctx.raw(`  await $ctx.$merge(async ($ctx) => {`);
-			ctx.raw(`    $ctx.slots = $slots;`); // Still expose slots to children if they need it
+			compiler.raw(`  await $ctx.$merge(async ($ctx) => {`);
+			compiler.raw(`    $ctx.slots = $slots;`); // Still expose slots to children if they need it
 			
-			if (ctx.children) await ctx.set(ctx.children);
+			if (compiler.children) await compiler.set(compiler.children);
 
-			ctx.raw(`    if (!$slots.default) $slots.default = $ctx['~res'];`);
-			ctx.raw(`    $ctx['~res'] = '';`); // Clear default content from parent stream
-			ctx.raw(`  });`);
+			compiler.raw(`    if (!$slots.default) $slots.default = $ctx['~res'];`);
+			compiler.raw(`    $ctx['~res'] = '';`); // Clear default content from parent stream
+			compiler.raw(`  });`);
 
 			// Now load the component template and render it
-			ctx.raw(`  const path = ${JSON.stringify(pathExpr)};`);
-			ctx.raw(`  const componentLocals = ${varsExpr};`);
+			compiler.raw(`  const path = ${JSON.stringify(pathExpr)};`);
+			compiler.raw(`  const componentLocals = ${varsExpr};`);
 			
-			ctx.raw(`  const finalLocals = { ...componentLocals };`);
-			ctx.raw(`  if (typeof finalLocals === 'object' && finalLocals !== null) finalLocals.slots = $slots;`); // Add slots to locals
+			compiler.raw(`  const finalLocals = { ...componentLocals };`);
+			compiler.raw(`  if (typeof finalLocals === 'object' && finalLocals !== null) finalLocals.slots = $slots;`); // Add slots to locals
 
-			ctx.raw(`  const html = await $ctx.$require(path, finalLocals);`);
-			ctx.raw(`  if (html !== null) {`);
-			ctx.raw(`    $ctx.res(html);`);
-			ctx.raw(`  }`);
+			compiler.raw(`  const html = await $ctx.$require(path, finalLocals);`);
+			compiler.raw(`  if (html !== null) {`);
+			compiler.raw(`    $ctx.res(html);`);
+			compiler.raw(`  }`);
 
-			ctx.raw(`})();`);
+			compiler.raw(`})();`);
 		},
 	});
 };
 
 // --- From: core/src/directives/layout.ts ---
 import type { Kire } from "../kire";
-import type { KireContext } from "../types";
 
 export default (kire: Kire) => {
-	// Initialize global defines object via runtime checks, not kire.$ctx
-	
-kire.directive({
+	kire.directive({
 		name: "define",
 		params: ["name:string"],
 		children: true,
 		type: "html",
-		description:
-			"Defines a named, reusable section of content that can be rendered elsewhere.",
+		description: "Defines a named, reusable section of content.",
 		example: `@define('header')\n  <h1>My Website</h1>\n@end`,
 		async onCall(ctx) {
 			const name = ctx.param("name");
 
-			ctx.raw(`if(!$ctx['~defines']) $ctx['~defines'] = {};`);
-			ctx.raw(`await $ctx.$merge(async ($ctx) => {`);
-
-			if (ctx.children) await ctx.set(ctx.children);
-
-			ctx.raw(`  $ctx['~defines'][${JSON.stringify(name)}] = $ctx['~res'];`);
-			ctx.raw(`  $ctx['~res'] = '';`);
-			ctx.raw(`});`);
+			if (ctx.children) {
+				ctx.raw(`await $ctx.$merge(async ($ctx) => {`);
+				await ctx.set(ctx.children);
+				ctx.raw(`  $ctx['~defines'][${JSON.stringify(name)}] = $ctx['~res'];`);
+				ctx.raw(`  $ctx['~res'] = '';`);
+				ctx.raw(`});`);
+			}
 		},
 	});
+
+	kire.element('kire:defined', (ctx) => {
+		const defines = ctx.$typed<Record<string, string>>('~defines');
+		console.log(ctx['~defines'])
+		const def = ctx.element.inner;
+		const id = ctx.element.attributes.id!;
+		ctx.replaceElement(defines[id] ?? def ?? "");
+	}, { void:true })
 
 	kire.directive({
 		name: "defined",
 		params: ["name:string"],
+		children: true,
 		type: "html",
-		description: "Renders a content section previously created with @define.",
-		example: `@defined('header')`,
-		onCall(ctx) {
+		description: "Renders defined content or fallback.",
+		example: `@defined('header')\n  Conteúdo não encontrado\n@end`,
+		onInit(ctx) {
+			ctx["~defines"] = ctx["~defines"] || {};
+		},
+		async onCall(ctx) {
 			const name = ctx.param("name");
 
-			ctx.raw(
-				`$ctx.res("<!-- KIRE:defined(" + ${JSON.stringify(name)} + ") -->");`
-			);
+			if (ctx.children?.length) {
+				ctx.res(`<kire:defined id=${JSON.stringify(name)}>`);
+				await ctx.set(ctx.children);
+				ctx.res(`</kire:defined>`);
+			} else {
+				ctx.res(`<kire:defined id=${JSON.stringify(name)}/>`);
+			}
 		},
-		once(ctx) {
-			ctx.$pre(`if(!$ctx['~defines']) $ctx['~defines'] = {};`);
-			ctx.$pos(`
-                // Post-process defined placeholders
-                if ($ctx['~defines']) {
-                    for (const key in $ctx['~defines']) {
-                        const placeholder = "<!-- KIRE:defined(" + key + ") -->";
-                        if ($ctx['~res'].includes(placeholder)) {
-                             $ctx['~res'] = $ctx['~res'].split(placeholder).join($ctx['~defines'][key]);
-                        }
-                    }
-                    // Cleanup unmatched placeholders?
-                    $ctx['~res'] = $ctx['~res'].replace(/<!-- KIRE:defined\\(.*?\\) -->/g, '');
-                }
-            `);
-		}
 	});
 
 	kire.directive({
@@ -1489,26 +1773,29 @@ kire.directive({
 		description:
 			"Creates a placeholder where content pushed to a named stack will be rendered.",
 		example: `<html>\n<head>\n  @stack('scripts')\n</head>\n</html>`,
-		onCall(ctx) {
-			const name = ctx.param("name");
-			ctx.raw(
+		children: true,
+		onCall(compiler) {
+			const name = compiler.param("name");
+			compiler.raw(
 				`$ctx.res("<!-- KIRE:stack(" + ${JSON.stringify(name)} + ") -->");`
 			);
 		},
-		once(ctx) {
-			ctx.$pre(`if(!$ctx['~stacks']) $ctx['~stacks'] = {};`);
-			ctx.$pos(`
-                if ($ctx['~stacks']) {
-                    for (const key in $ctx['~stacks']) {
-                         const placeholder = "<!-- KIRE:stack(" + key + ") -->";
-                         if ($ctx['~res'].includes(placeholder)) {
-                              const content = $ctx['~stacks'][key].join('\\n');
-                              $ctx['~res'] = $ctx['~res'].split(placeholder).join(content);
-                         }
-                    }
-                    $ctx['~res'] = $ctx['~res'].replace(/<!-- KIRE:stack\\(.*?\\) -->/g, '');
-                }
-             `);
+		onInit(ctx) {
+			ctx['~stacks'] = ctx['~stacks'] || {};
+			
+			ctx['~$pos'].push(async (c: any) => {
+				const ctx = c as any;
+				if (ctx['~stacks']) {
+					for (const key in ctx['~stacks']) {
+						const placeholder = "<!-- KIRE:stack(" + key + ") -->";
+						if (ctx['~res'].includes(placeholder)) {
+							const content = ctx['~stacks'][key].join('\\n');
+							ctx['~res'] = ctx['~res'].split(placeholder).join(content);
+						}
+					}
+					ctx['~res'] = ctx['~res'].replace(/<!-- KIRE:stack\(.*?\) -->/g, '');
+				}
+			});
 		}
 	});
 
@@ -1519,21 +1806,21 @@ kire.directive({
 		type: "html",
 		description: "Pushes a block of content onto a named stack.",
 		example: `@push('scripts')\n  <script src="app.js"></script>\n@end`,
-		async onCall(ctx: KireContext) {
-			const name = ctx.param("name");
-			ctx.raw(`if(!$ctx['~stacks']) $ctx['~stacks'] = {};`);
-			ctx.raw(
+		async onCall(compiler) {
+			const name = compiler.param("name");
+			compiler.raw(`if(!$ctx['~stacks']) $ctx['~stacks'] = {};`);
+			compiler.raw(
 				`if (!$ctx['~stacks'][${JSON.stringify(name)}]) $ctx['~stacks'][${JSON.stringify(name)}] = [];`
 			);
-			ctx.raw(
+			compiler.raw(
 				`await $ctx.$merge(async ($ctx) => {`
 			);
 
-			if (ctx.children) await ctx.set(ctx.children);
+			if (compiler.children) await compiler.set(compiler.children);
 
-			ctx.raw(`  $ctx['~stacks'][${JSON.stringify(name)}].push($ctx['~res']);`);
-			ctx.raw(`  $ctx['~res'] = '';`);
-			ctx.raw(`});`);
+			compiler.raw(`  $ctx['~stacks'][${JSON.stringify(name)}].push($ctx['~res']);`);
+			compiler.raw(`  $ctx['~res'] = '';`);
+			compiler.raw(`});`);
 		},
 	});
 };
@@ -1556,7 +1843,6 @@ export const KireDirectives: KirePlugin = {
 		// add md5 function
 		kire.$ctx("$md5", md5);
 		kire.$ctx("$escape", escapeHtml);
-		
 		kire.$ctx(
 			"$require",
 			async (path: string, locals: Record<string, any> = {}) => {
@@ -1593,7 +1879,7 @@ export const KireDirectives: KirePlugin = {
 					if (cachedHash === newHash && compiledFn) {
 						// Optimization: Content hasn't changed, reuse cached function
 					} else {
-						compiledFn = await kire.compileFn(content, resolvedPath);
+						compiledFn = await kire.compileFn(content);
 						cached.set(`md5:${resolvedPath}`, newHash);
 						cached.set(`js:${resolvedPath}`, compiledFn); // Cache a função compilada
 					}

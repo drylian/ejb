@@ -1,60 +1,55 @@
 import type { Kire } from "../kire";
-import type { KireContext } from "../types";
 
 export default (kire: Kire) => {
-	// Initialize global defines object via runtime checks, not kire.$ctx
-	
-kire.directive({
+	kire.directive({
 		name: "define",
 		params: ["name:string"],
 		children: true,
 		type: "html",
-		description:
-			"Defines a named, reusable section of content that can be rendered elsewhere.",
+		description: "Defines a named, reusable section of content.",
 		example: `@define('header')\n  <h1>My Website</h1>\n@end`,
 		async onCall(ctx) {
 			const name = ctx.param("name");
 
-			ctx.raw(`if(!$ctx['~defines']) $ctx['~defines'] = {};`);
-			ctx.raw(`await $ctx.$merge(async ($ctx) => {`);
-
-			if (ctx.children) await ctx.set(ctx.children);
-
-			ctx.raw(`  $ctx['~defines'][${JSON.stringify(name)}] = $ctx['~res'];`);
-			ctx.raw(`  $ctx['~res'] = '';`);
-			ctx.raw(`});`);
+			if (ctx.children) {
+				ctx.raw(`await $ctx.$merge(async ($ctx) => {`);
+				await ctx.set(ctx.children);
+				ctx.raw(`  $ctx['~defines'][${JSON.stringify(name)}] = $ctx['~res'];`);
+				ctx.raw(`  $ctx['~res'] = '';`);
+				ctx.raw(`});`);
+			}
 		},
 	});
+
+	kire.element('kire:defined', (ctx) => {
+		const defines = ctx.$typed<Record<string, string>>('~defines');
+		console.log(ctx['~defines'])
+		const def = ctx.element.inner;
+		const id = ctx.element.attributes.id!;
+		ctx.replaceElement(defines[id] ?? def ?? "");
+	})
 
 	kire.directive({
 		name: "defined",
 		params: ["name:string"],
+		children: true,
 		type: "html",
-		description: "Renders a content section previously created with @define.",
-		example: `@defined('header')`,
-		onCall(ctx) {
+		description: "Renders defined content or fallback.",
+		example: `@defined('header')\n  Conteúdo não encontrado\n@end`,
+		onInit(ctx) {
+			ctx["~defines"] = ctx["~defines"] || {};
+		},
+		async onCall(ctx) {
 			const name = ctx.param("name");
 
-			ctx.raw(
-				`$ctx.res("<!-- KIRE:defined(" + ${JSON.stringify(name)} + ") -->");`
-			);
+			if (ctx.children?.length) {
+				ctx.res(`<kire:defined id=${JSON.stringify(name)}>`);
+				await ctx.set(ctx.children);
+				ctx.res(`</kire:defined>`);
+			} else {
+				ctx.res(`<kire:defined id=${JSON.stringify(name)}></kire:defined>`);
+			}
 		},
-		once(ctx) {
-			ctx.$pre(`if(!$ctx['~defines']) $ctx['~defines'] = {};`);
-			ctx.$pos(`
-                // Post-process defined placeholders
-                if ($ctx['~defines']) {
-                    for (const key in $ctx['~defines']) {
-                        const placeholder = "<!-- KIRE:defined(" + key + ") -->";
-                        if ($ctx['~res'].includes(placeholder)) {
-                             $ctx['~res'] = $ctx['~res'].split(placeholder).join($ctx['~defines'][key]);
-                        }
-                    }
-                    // Cleanup unmatched placeholders?
-                    $ctx['~res'] = $ctx['~res'].replace(/<!-- KIRE:defined\\(.*?\\) -->/g, '');
-                }
-            `);
-		}
 	});
 
 	kire.directive({
@@ -64,26 +59,29 @@ kire.directive({
 		description:
 			"Creates a placeholder where content pushed to a named stack will be rendered.",
 		example: `<html>\n<head>\n  @stack('scripts')\n</head>\n</html>`,
-		onCall(ctx) {
-			const name = ctx.param("name");
-			ctx.raw(
+		children: false,
+		onCall(compiler) {
+			const name = compiler.param("name");
+			compiler.raw(
 				`$ctx.res("<!-- KIRE:stack(" + ${JSON.stringify(name)} + ") -->");`
 			);
 		},
-		once(ctx) {
-			ctx.$pre(`if(!$ctx['~stacks']) $ctx['~stacks'] = {};`);
-			ctx.$pos(`
-                if ($ctx['~stacks']) {
-                    for (const key in $ctx['~stacks']) {
-                         const placeholder = "<!-- KIRE:stack(" + key + ") -->";
-                         if ($ctx['~res'].includes(placeholder)) {
-                              const content = $ctx['~stacks'][key].join('\\n');
-                              $ctx['~res'] = $ctx['~res'].split(placeholder).join(content);
-                         }
-                    }
-                    $ctx['~res'] = $ctx['~res'].replace(/<!-- KIRE:stack\\(.*?\\) -->/g, '');
-                }
-             `);
+		onInit(ctx) {
+			ctx['~stacks'] = ctx['~stacks'] || {};
+			
+			ctx['~$pos'].push(async (c: any) => {
+				const ctx = c as any;
+				if (ctx['~stacks']) {
+					for (const key in ctx['~stacks']) {
+						const placeholder = "<!-- KIRE:stack(" + key + ") -->";
+						if (ctx['~res'].includes(placeholder)) {
+							const content = ctx['~stacks'][key].join('\n');
+							ctx['~res'] = ctx['~res'].split(placeholder).join(content);
+						}
+					}
+					ctx['~res'] = ctx['~res'].replace(/<!-- KIRE:stack\(.*?\) -->/g, '');
+				}
+			});
 		}
 	});
 
@@ -94,21 +92,21 @@ kire.directive({
 		type: "html",
 		description: "Pushes a block of content onto a named stack.",
 		example: `@push('scripts')\n  <script src="app.js"></script>\n@end`,
-		async onCall(ctx: KireContext) {
-			const name = ctx.param("name");
-			ctx.raw(`if(!$ctx['~stacks']) $ctx['~stacks'] = {};`);
-			ctx.raw(
+		async onCall(compiler) {
+			const name = compiler.param("name");
+			compiler.raw(`if(!$ctx['~stacks']) $ctx['~stacks'] = {};`);
+			compiler.raw(
 				`if (!$ctx['~stacks'][${JSON.stringify(name)}]) $ctx['~stacks'][${JSON.stringify(name)}] = [];`
 			);
-			ctx.raw(
+			compiler.raw(
 				`await $ctx.$merge(async ($ctx) => {`
 			);
 
-			if (ctx.children) await ctx.set(ctx.children);
+			if (compiler.children) await compiler.set(compiler.children);
 
-			ctx.raw(`  $ctx['~stacks'][${JSON.stringify(name)}].push($ctx['~res']);`);
-			ctx.raw(`  $ctx['~res'] = '';`);
-			ctx.raw(`});`);
+			compiler.raw(`  $ctx['~stacks'][${JSON.stringify(name)}].push($ctx['~res']);`);
+			compiler.raw(`  $ctx['~res'] = '';`);
+			compiler.raw(`});`);
 		},
 	});
 };
