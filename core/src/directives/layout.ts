@@ -23,10 +23,10 @@ export default (kire: Kire) => {
 
 	kire.element('kire:defined', (ctx) => {
 		const defines = ctx.$typed<Record<string, string>>('~defines');
-		console.log(ctx['~defines'])
-		const def = ctx.element.inner;
 		const id = ctx.element.attributes.id!;
-		ctx.replaceElement(defines[id] ?? def ?? "");
+		if (defines[id] !== undefined) {
+			ctx.replaceElement(defines[id]);
+		}
 	})
 
 	kire.directive({
